@@ -23,11 +23,6 @@ set_preferences!(
     force = true
 )
 
-# Add specific branches of Gridap and GridapDistributed and GridapSolvers
-Pkg.add([PackageSpec(name="Gridap", rev="distributed_AD_transient"),
-         PackageSpec(name="GridapDistributed", rev="distributed_AD_transient"),
-         PackageSpec(url="https://github.com/Elmanyer/GridapSolvers.jl.git", rev="fix_num_fields")
-        ])
 Pkg.instantiate()
 
 # Execution in terminal
