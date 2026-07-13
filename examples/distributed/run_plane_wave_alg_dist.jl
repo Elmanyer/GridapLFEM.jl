@@ -25,7 +25,7 @@
 include(joinpath(@__DIR__, "_dist_common_alg.jl"))
 
 M        = genv_i("LFEM_M", 2)
-px, py   = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 2)
+px, py   = genv_i("LFEM_PX", 32), genv_i("LFEM_PY", 4)
 nx, ny   = genv_i("LFEM_NX", 2000), genv_i("LFEM_NY", 100)
 feord    = genv_i("LFEM_FE_ORDER", 2)
 Lx, Ly   = genv_f("LFEM_LX", 400.0), genv_f("LFEM_LY", 20.0)
@@ -36,7 +36,7 @@ x_wm     = genv_f("LFEM_XWM", 40.0)
 sponge   = genv_f("LFEM_SPONGE", 40.0)
 mumax    = genv_f("LFEM_MUMAX", 5.0)
 dt       = genv_f("LFEM_DT", 0.02)
-periods  = genv_f("LFEM_PERIODS", 50.0)
+periods  = genv_f("LFEM_PERIODS", 75.0)
 Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
 save_ev  = genv_i("LFEM_SAVE_EVERY", 20)
 outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "plane_wave_alg_dist_M$(M)"))

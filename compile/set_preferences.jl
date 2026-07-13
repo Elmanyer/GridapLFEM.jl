@@ -5,16 +5,17 @@ using Pkg
 #MPIPreferences.use_system_binary()
 
 ### DelftBlue
-mpi_lib_dir = "/apps/arch/2024r1/software/linux-rhel8-cascadelake/gcc-11.3.0/openmpi-4.1.6-w6w5qi5ljesbctyoojlfialbynqt25jb/lib/"
+#mpi_lib_dir = "/apps/arch/2024r1/software/linux-rhel8-cascadelake/gcc-11.3.0/openmpi-4.1.6-w6w5qi5ljesbctyoojlfialbynqt25jb/lib/"
 
 ### Snellius
-#mpi_lib_dir = "/sw/arch/RHEL9/EB_production/2024/software/OpenMPI/5.0.3-GCC-13.3.0/lib/"
+mpi_lib_dir = "/sw/arch/RHEL9/EB_production/2024/software/OpenMPI/5.0.3-GCC-13.3.0/lib/"
 
 # Manually set the keys to ensure Julia never looks at artifacts
 set_preferences!(
     MPIPreferences,
     "binary" => "system",
     "libmpi" => joinpath(mpi_lib_dir, "libmpi.so"),
+    "mpiexec" => "mpiexec",
     "abi" => "OpenMPI",
     "preloads" => [
         joinpath(mpi_lib_dir, "libmpi_mpifh.so"),
