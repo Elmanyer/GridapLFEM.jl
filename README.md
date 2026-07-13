@@ -6,7 +6,7 @@ Mech.* 999, A32). This is a from-scratch reimplementation of the model already v
 `../LFE-M_2D_solver/`, using a **stacked value-type layout** that turns every per-layer sum in the
 governing equations into a native Gridap tensor contraction instead of a Julia `for`-loop.
 
-Repository: `GridapLFEM.jl`. Module: `src/LFEModelAlg.jl` → `module LFEModelAlg`. Fully
+Repository: `GridapLFEM.jl`. Module: `src/GridapLFEM.jl` → `module GridapLFEM`. Fully
 self-contained (no dependency on the older per-layer solver, which remains the validated oracle
 it was checked against).
 
@@ -75,7 +75,7 @@ Every flag is validated against a hand-derived reference or the per-layer oracle
 ```
 GridapLFEM.jl/
 ├── src/                         # the solver package
-│   ├── LFEModelAlg.jl             module entry: deps, includes, exports
+│   ├── GridapLFEM.jl             module entry: deps, includes, exports
 │   ├── vertical_alg.jl            Stage 1: σ-mesh + vertical tensor set (M, Φ, 𝓜, 𝓖, A, K, P, …)
 │   ├── tensors_alg.jl             constant-tensor constructors + pointwise Operation helpers
 │   ├── horizontal_alg.jl          Stage 2: 2D mesh + stacked FE spaces (serial + distributed)
@@ -110,8 +110,8 @@ GridapLFEM.jl/
 ## Quick start
 
 ```julia
-include("GridapLFEM.jl/src/LFEModelAlg.jl")
-using .LFEModelAlg
+include("GridapLFEM.jl/src/GridapLFEM.jl")
+using .GridapLFEM
 
 # Sequential run: plane wave in a flume, linear regime
 diags, vert, prob = setup_and_run_alg(

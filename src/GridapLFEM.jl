@@ -1,5 +1,5 @@
 # ==============================================================
-#  LFEModelAlg.jl — Algebraic (loop-free) 2D LFE-M Wave Solver
+#  GridapLFEM.jl — Algebraic (loop-free) 2D LFE-M Wave Solver
 #
 #  Stacked-layout reimplementation of the LFE-M depth-integrated wave model
 #  (Yang & Liu 2024, JFM 999 A32), following main.tex §8 (corrected: includes
@@ -12,7 +12,7 @@
 #  loops and no MultiField decomposition beyond u[1],u[2],u[3].
 #
 #  Usage:
-#    include("GridapLFEM.jl/src/LFEModelAlg.jl"); using .LFEModelAlg
+#    include("GridapLFEM.jl/src/GridapLFEM.jl"); using .GridapLFEM
 #    diags, vert, prob = setup_and_run_alg(M=2, T_wave=1.6, A_wave=0.001)
 #
 #  Validated against the per-layer oracle solver (../LFE-M_2D_solver/):
@@ -20,7 +20,7 @@
 #  algebraic_solver_plan.md.
 # ==============================================================
 
-module LFEModelAlg
+module GridapLFEM
 
 using Gridap
 using Gridap.Algebra
@@ -101,4 +101,4 @@ export build_ode_solver_alg_distributed
 export run_time_loop_alg_dist
 export setup_and_run_alg_distributed
 
-end # module LFEModelAlg
+end # module GridapLFEM

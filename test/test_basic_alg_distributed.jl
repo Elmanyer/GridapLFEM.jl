@@ -14,8 +14,8 @@
 #        GridapLFEM.jl/test/test_basic_alg_distributed.jl
 # ==============================================================
 
-include(joinpath(@__DIR__, "..", "src", "LFEModelAlg.jl"))
-using .LFEModelAlg
+include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
+using .GridapLFEM
 using Printf
 
 # sequential references (same config via setup_and_run_alg, LU + Newton, 120 steps)

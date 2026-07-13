@@ -1,7 +1,7 @@
 # Distributed algebraic LFE-M example runs (cluster-ready)
 
 MPI-parallel wave-propagation cases for the **algebraic (stacked-layout) 2D LFE-M solver**
-(`GridapLFEM.jl/src/LFEModelAlg.jl`), all writing the **full field set** to VTK: surface elevation
+(`GridapLFEM.jl/src/GridapLFEM.jl`), all writing the **full field set** to VTK: surface elevation
 `eta`, per-σ-node horizontal velocity components `u<j>x`/`u<j>y`, and the reconstructed
 **vertical velocity** `w_s<σ>` and **total pressure** `p_s<σ>` at every vertical σ-node
 (`write_w`/`write_pressure` on by default).

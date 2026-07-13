@@ -12,10 +12,10 @@
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_conservation_alg.jl
 # ==============================================================
 
-if !isdefined(Main, :LFEModelAlg)
-    include(joinpath(@__DIR__, "..", "src", "LFEModelAlg.jl"))
+if !isdefined(Main, :GridapLFEM)
+    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
 end
-using .LFEModelAlg
+using .GridapLFEM
 using Gridap
 using Printf
 

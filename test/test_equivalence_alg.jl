@@ -1,7 +1,7 @@
 # ==============================================================
 #  test_equivalence_alg.jl — THE acceptance test (oracle equivalence)
 #
-#  Assembles the package residual `LFEModelAlg.residual_alg` AND the old
+#  Assembles the package residual `GridapLFEM.residual_alg` AND the old
 #  per-layer oracle `LFEModel2D.residual_lfem` on identical physical states
 #  and compares virtual works — no DOF-layout mapping:
 #    * identical analytic trial/u̇/test fields interpolated into BOTH layouts,
@@ -16,11 +16,11 @@
 if !isdefined(Main, :LFEModel2D)
     include(joinpath(@__DIR__, "..", "..", "LFE-M_2D_solver", "src", "LFEModel2D.jl"))
 end
-if !isdefined(Main, :LFEModelAlg)
-    include(joinpath(@__DIR__, "..", "src", "LFEModelAlg.jl"))
+if !isdefined(Main, :GridapLFEM)
+    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
 end
 using .LFEModel2D                      # oracle (unqualified: residual_lfem, LFEMProblemLFEM, …)
-import .LFEModelAlg as ALG             # package under test (qualified)
+import .GridapLFEM as ALG             # package under test (qualified)
 using Gridap
 using Gridap.ODEs
 using LinearAlgebra, Printf

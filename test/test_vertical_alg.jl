@@ -9,10 +9,10 @@
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_vertical_alg.jl
 # ==============================================================
 
-if !isdefined(Main, :LFEModelAlg)
-    include(joinpath(@__DIR__, "..", "src", "LFEModelAlg.jl"))
+if !isdefined(Main, :GridapLFEM)
+    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
 end
-using .LFEModelAlg
+using .GridapLFEM
 using LinearAlgebra, Printf
 
 println("=" ^ 60)

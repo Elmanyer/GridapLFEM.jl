@@ -1,6 +1,6 @@
 # ==============================================================
 #  _dist_common_alg.jl — shared config for the distributed example scripts
-#                        (algebraic solver, LFEModelAlg)
+#                        (algebraic solver, GridapLFEM)
 #
 #  All example scripts read their parameters from environment variables so the
 #  SAME script serves any M, any core count, any mesh size — ideal for a
@@ -35,8 +35,8 @@
 # ==============================================================
 
 const ROOT = normpath(joinpath(@__DIR__, "..", ".."))
-include(joinpath(ROOT, "src", "LFEModelAlg.jl"))
-using .LFEModelAlg
+include(joinpath(ROOT, "src", "GridapLFEM.jl"))
+using .GridapLFEM
 using Printf
 
 genv(k, d)   = get(ENV, k, string(d))
