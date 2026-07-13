@@ -107,6 +107,32 @@ GridapLFEM.jl/
 
 ---
 
+## Environment / activation
+
+`GridapLFEM.jl/` is **not a registered Julia package** (its `Project.toml` has no
+`name`/`uuid`/`version`) — loading it is always done by file-path `include(...)` +
+`using .GridapLFEM` (note the leading dot), never `using GridapLFEM` after `Pkg.add`. Two
+environments can supply the dependencies for that `include`:
+
+- **The parent repository's environment** (`../Project.toml`, i.e. `TS_2HDmodel/`) — this is what
+  every result in [Validation](#validation) was actually run against, and what the [Quick
+  start](#quick-start) / cluster examples below assume (`--project=.` from the repo root).
+- **This folder's own environment** (`GridapLFEM.jl/Project.toml` + `Manifest.toml`) — a
+  self-contained, standalone environment for running `GridapLFEM.jl` on its own
+  (`--project=GridapLFEM.jl` from one level up, or `--project=.` from inside this folder), pinned
+  to the **exact same** package versions as the parent (Gridap 0.19.11, GridapDistributed 0.4.13,
+  GridapSolvers 0.6.2, PartitionedArrays 0.3.5, MPI 0.20.26) so results are identical either way.
+  Useful for extracting/publishing this solver independently of the rest of the repository.
+
+Either way the loading code is the same:
+
+```julia
+include("src/GridapLFEM.jl")   # or "GridapLFEM.jl/src/GridapLFEM.jl" from one level up
+using .GridapLFEM
+```
+
+---
+
 ## Quick start
 
 ```julia
