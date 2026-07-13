@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#SBATCH --job-name="GridapLFEM"
+#SBATCH --partition=compute
+#SBATCH --time=24:00:00
+#SBATCH --ntasks-per-node=16
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=3900M
+#SBATCH --output=GridapLFEM.%j.out
+#SBATCH --error=GridapLFEM.%j.err
+
+source $HOME/GridapLFEM.jl/compile/load_modules_blue.sh
+
+mpiexecjl -n 16 julia --project=$HOME/GridapLFEM.jl run_plane_wave_alg_dist.jl

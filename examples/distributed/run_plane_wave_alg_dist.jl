@@ -25,7 +25,7 @@
 include(joinpath(@__DIR__, "_dist_common_alg.jl"))
 
 M        = genv_i("LFEM_M", 2)
-px, py   = genv_i("LFEM_PX", 2), genv_i("LFEM_PY", 1)
+px, py   = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 2)
 nx, ny   = genv_i("LFEM_NX", 2000), genv_i("LFEM_NY", 100)
 feord    = genv_i("LFEM_FE_ORDER", 2)
 Lx, Ly   = genv_f("LFEM_LX", 400.0), genv_f("LFEM_LY", 20.0)
