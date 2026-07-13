@@ -1,0 +1,58 @@
+# ==============================================================
+#  run_ring_wave_alg_dist.jl — DISTRIBUTED point-source ring waves (algebraic)
+#
+#  Gaussian POINT-source wavemaker at the basin centre → circular wavefronts,
+#  4-side sponge absorption. Full field set to VTK (η, u/v per σ-node, w_s*,
+#  p_s*). Validation targets: radial symmetry; A ∝ 1/√r cylindrical spreading.
+#
+#  LAUNCH (px·py MUST equal -n):
+#    LFEM_M=2 LFEM_PX=4 LFEM_PY=4 \
+#    ~/.julia/bin/mpiexecjl --project=. -n 16 julia --project=. \
+#        LFEM_2D/examples/distributed/run_ring_wave_alg_dist.jl
+#
+#  Case-specific env vars:
+#    LFEM_L        basin side length [m]      200
+#    LFEM_D        still-water depth [m]      3.5
+#    LFEM_TWAVE    wave period [s]            1.6
+#    LFEM_AWAVE    amplitude [m]              0.001
+#    LFEM_SPONGE   sponge width, all sides    20
+#    LFEM_MUMAX    sponge strength            10
+#    LFEM_PERIODS  run length in periods      20
+# ==============================================================
+
+include(joinpath(@__DIR__, "_dist_common_alg.jl"))
+
+M        = genv_i("LFEM_M", 2)
+px, py   = genv_i("LFEM_PX", 2), genv_i("LFEM_PY", 2)
+L        = genv_f("LFEM_L", 200.0)
+nx, ny   = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 200)
+feord    = genv_i("LFEM_FE_ORDER", 2)
+d        = genv_f("LFEM_D", 3.5)
+Twave    = genv_f("LFEM_TWAVE", 1.6)
+Awave    = genv_f("LFEM_AWAVE", 0.001)
+sponge   = genv_f("LFEM_SPONGE", 20.0)
+mumax    = genv_f("LFEM_MUMAX", 10.0)
+dt       = genv_f("LFEM_DT", 0.02)
+periods  = genv_f("LFEM_PERIODS", 20.0)
+Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
+save_ev  = genv_i("LFEM_SAVE_EVERY", 20)
+outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "ring_wave_alg_dist_M$(M)"))
+
+banner("RING WAVE (point source) — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
+
+diags, vert, prob = setup_and_run_alg_distributed(
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), fe_order=feord,
+    domain=(0.0,L,0.0,L), partition=(nx,ny),
+    d_val=d, T_wave=Twave, A_wave=Awave,
+    x_wm=L/2, y_wm=L/2,                                   # point source → ring waves
+    sponge_wL=sponge, sponge_wR=sponge, sponge_wB=sponge, sponge_wT=sponge, mu_max=mumax,
+    T_final=Tfinal, dt=dt,
+    linearised=lin_flag(), advection=adv_flag(),
+    P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
+    y_wall_bc=true, x_wall_bc=false,
+    output_dir=outdir, save_every=save_ev,
+    write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
+    print_dt=genv_f("LFEM_PRINT_DT", Twave))
+
+is_rank0() && @printf("ring_wave_alg_dist done: %d steps, %d snapshots to %s\n",
+                      length(diags), length(diags) ÷ max(save_ev,1), outdir)

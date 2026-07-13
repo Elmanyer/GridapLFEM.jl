@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VTKFile type="Collection" version="1.0" byte_order="LittleEndian" compressor="vtkZLibDataCompressor">
+  <Collection>
+    <DataSet timestep="0.2" part="0" file="sol_t_0_2000.vtu"/>
+    <DataSet timestep="0.39999999999999997" part="0" file="sol_t_0_4000.vtu"/>
+  </Collection>
+</VTKFile>

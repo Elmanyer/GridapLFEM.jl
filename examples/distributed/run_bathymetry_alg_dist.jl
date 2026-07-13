@@ -1,0 +1,76 @@
+# ==============================================================
+#  run_bathymetry_alg_dist.jl — DISTRIBUTED shoaling over a submerged bar
+#                               (variable bathymetry, algebraic solver)
+#
+#  Plane wave generated over depth d0 shoals onto a smooth (tanh-profile)
+#  submerged bar of height h_bar and returns to deep water; sponge layers at
+#  both x-ends. The variable bed activates the slope-pressure physics:
+#  LFEM_LINP=1 (default here) turns on the A/K linear slope-pressure package,
+#  and the bed slope also feeds the ∇h parts of the leading pressure when
+#  LFEM_PFULL=1 and the nonlinear comps 6–8 when LFEM_NLP68=1.
+#
+#  LAUNCH (px·py MUST equal -n):
+#    LFEM_M=2 LFEM_PX=8 LFEM_PY=1 \
+#    ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
+#        LFEM_2D/examples/distributed/run_bathymetry_alg_dist.jl
+#
+#  Case-specific env vars:
+#    LFEM_LX,LFEM_LY  domain size [m]        300 × 20
+#    LFEM_D0          offshore depth [m]     3.5
+#    LFEM_HBAR        bar height [m]         2.0
+#    LFEM_XBAR        bar centre x [m]       150
+#    LFEM_WBAR        bar half-width [m]     25
+#    LFEM_TWAVE       wave period [s]        2.5
+#    LFEM_AWAVE       amplitude [m]          0.001
+#    LFEM_XWM         wavemaker x [m]        40
+#    LFEM_SPONGE      sponge width [m]       35
+#    LFEM_PERIODS     run length in periods  40
+# ==============================================================
+
+include(joinpath(@__DIR__, "_dist_common_alg.jl"))
+
+M        = genv_i("LFEM_M", 2)
+px, py   = genv_i("LFEM_PX", 2), genv_i("LFEM_PY", 1)
+nx, ny   = genv_i("LFEM_NX", 1500), genv_i("LFEM_NY", 100)
+feord    = genv_i("LFEM_FE_ORDER", 2)
+Lx, Ly   = genv_f("LFEM_LX", 300.0), genv_f("LFEM_LY", 20.0)
+d0       = genv_f("LFEM_D0", 3.5)
+hbar     = genv_f("LFEM_HBAR", 2.0)
+xbar     = genv_f("LFEM_XBAR", 150.0)
+wbar     = genv_f("LFEM_WBAR", 25.0)
+Twave    = genv_f("LFEM_TWAVE", 2.5)
+Awave    = genv_f("LFEM_AWAVE", 0.001)
+x_wm     = genv_f("LFEM_XWM", 40.0)
+sponge   = genv_f("LFEM_SPONGE", 35.0)
+mumax    = genv_f("LFEM_MUMAX", 5.0)
+dt       = genv_f("LFEM_DT", 0.02)
+periods  = genv_f("LFEM_PERIODS", 40.0)
+Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
+save_ev  = genv_i("LFEM_SAVE_EVERY", 25)
+outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "bathymetry_alg_dist_M$(M)"))
+use_linp = genv_b("LFEM_LINP", 1)
+
+# smooth submerged bar: d(x) = d0 − (h_bar/2)·[tanh((x−x_L)/s) − tanh((x−x_R)/s)]
+# (difference → 2 on the bar top ⇒ d = d0 − h_bar there; analytic ⇒ exact ∇h, ∇²h)
+sramp   = wbar / 3.0
+d_func(x) = d0 - 0.5*hbar*(tanh((x[1]-(xbar-wbar))/sramp) - tanh((x[1]-(xbar+wbar))/sramp))
+
+banner("SHOALING OVER SUBMERGED BAR — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
+
+diags, vert, prob = setup_and_run_alg_distributed(
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), fe_order=feord,
+    domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
+    d_val=d0, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=nothing,
+    sponge_wL=sponge, sponge_wR=sponge, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
+    T_final=Tfinal, dt=dt,
+    d_func=d_func,                                   # ★ variable bathymetry
+    linearised=lin_flag(), advection=adv_flag(),
+    lin_pressure=use_linp,                           # ★ slope-pressure package on the bar
+    P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
+    y_wall_bc=true, x_wall_bc=false,
+    output_dir=outdir, save_every=save_ev,
+    write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
+    print_dt=genv_f("LFEM_PRINT_DT", Twave))
+
+is_rank0() && @printf("bathymetry_alg_dist done: %d steps, %d snapshots to %s\n",
+                      length(diags), length(diags) ÷ max(save_ev,1), outdir)
