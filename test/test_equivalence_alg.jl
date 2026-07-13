@@ -10,7 +10,7 @@
 #  Three flag configs × three test sets; requires rel < 1e-10.
 #
 #  Loads BOTH modules (oracle qualified) — heavier than the other tests.
-#  RUN:  julia --project=. LFEM_2D/test/test_equivalence_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_equivalence_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModel2D)

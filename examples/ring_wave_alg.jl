@@ -11,7 +11,7 @@
 #  DEFAULT = QUICK validation size (8 periods, 80×80 cells). Production:
 #    L=200, n_side=200, T_final=20*T_wave  → multi-hour.
 #
-#  RUN:  julia --project=. LFEM_2D/examples/ring_wave_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/examples/ring_wave_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)
@@ -94,4 +94,4 @@ gv_d  = [d.gauge_vals[end]   for d in diags if !isempty(d.gauge_vals)]
 n2 = length(gv_y) ÷ 2
 amp_y = maximum(abs.(gv_y[n2:end])); amp_d = maximum(abs.(gv_d[n2:end]))
 @printf("  symmetry at r=10:  +x %.6f  +y %.6f  diag %.6f\n", amps[2], amp_y, amp_d)
-println("\n  VTK output: LFEM_2D/output/ring_wave_alg/solution.pvd")
+println("\n  VTK output: GridapLFEM.jl/output/ring_wave_alg/solution.pvd")

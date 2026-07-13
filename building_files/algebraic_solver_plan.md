@@ -1,7 +1,7 @@
-# Algebraic solver package — port plan (`LFEM_2D/src` + tests + examples)
+# Algebraic solver package — port plan (`GridapLFEM.jl/src` + tests + examples)
 
 **Goal.** Turn the validated single-file algebraic residual (`algebraic_lfem2D.jl`, 16/16 vs the
-oracle) into a **self-contained solver package inside `LFEM_2D/`**, mirroring the module/test/example
+oracle) into a **self-contained solver package inside `GridapLFEM.jl/`**, mirroring the module/test/example
 structure of `../LFE-M_2D_solver/` but written entirely in the stacked algebraic style
 (`[η, 𝖴x, 𝖴y]`, constant `TensorValue`/`ThirdOrderTensorValue` vertical tensors, loop-free
 residual). The old solver is **not modified**; it remains the oracle.
@@ -13,7 +13,7 @@ residual). The old solver is **not modified**; it remains the oracle.
 ## 1. Package layout (mirror of the old solver)
 
 ```
-LFEM_2D/
+GridapLFEM.jl/
 ├── src/
 │   ├── LFEModelAlg.jl        # module entry: deps, Ex/Ey/E1_sig, includes, exports
 │   ├── vertical_alg.jl       # σ-mesh + FULL vertical tensor assembly (ports vertical_lfem2D.jl;
@@ -34,12 +34,12 @@ LFEM_2D/
     └── ring_wave_alg.jl      # point-source ring waves (quick 8-period default)
 ```
 
-`algebraic_lfem2D.jl` + `test_algebraic_lfem2D.jl` (repo root of `LFEM_2D/`) remain as the
+`algebraic_lfem2D.jl` + `test_algebraic_lfem2D.jl` (repo root of `GridapLFEM.jl/`) remain as the
 session-validated standalone prototype; the package supersedes them for all new work.
 
 ## 2. Port map — src modules
 
-| Old (`../LFE-M_2D_solver/src/`) | New (`LFEM_2D/src/`) | Adaptation |
+| Old (`../LFE-M_2D_solver/src/`) | New (`GridapLFEM.jl/src/`) | Adaptation |
 |---|---|---|
 | `vertical2D.jl :: build_vertical_model` | `vertical_alg.jl` | copied verbatim (σ-map mesh) |
 | `vertical_lfem2D.jl :: compute_antiderivative, assemble_vertical_tensors_lfem` | `vertical_alg.jl :: assemble_vertical_tensors_alg` | same math + quadrature; **adds `Pcal[i,k,j,c] = ∫Θ_kj[c] φᵢ_int dσ`** (already computed as the first Fubini piece of `Kcal` — stored instead of discarded); returns the same NamedTuple fields (`Mmat, Phi, Mcal, Gcal, A, K, P, Acal, Kcal, Pcal, B, …`) |

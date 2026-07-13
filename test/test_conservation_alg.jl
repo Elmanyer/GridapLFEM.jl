@@ -9,7 +9,7 @@
 #  Nonlinear advection ON (unlike the old solver, the plain Gridap path
 #  handles it — no owned V⊗H loop).
 #
-#  RUN:  julia --project=. LFEM_2D/test/test_conservation_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_conservation_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)

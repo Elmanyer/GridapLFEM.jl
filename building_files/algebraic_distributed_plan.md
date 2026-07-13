@@ -1,6 +1,6 @@
 # Distributed-memory port plan — serial/distributed algebraic LFE-M solver
 
-**Goal.** Bring the algebraic package (`LFEM_2D/src/LFEModelAlg.jl`) to full feature parity with
+**Goal.** Bring the algebraic package (`GridapLFEM.jl/src/LFEModelAlg.jl`) to full feature parity with
 the old solver (`../LFE-M_2D_solver/`) for **distributed-memory (MPI) execution**: partitioned
 mesh/assembly, scalable Newton–Krylov solve, distributed VTK output including the reconstructed
 w / total-pressure fields, cluster-ready example scripts. The old solver's distributed modules are
@@ -74,7 +74,7 @@ trian)` and `createvtk/createpvd` have distributed methods. Hence `residual_alg`
 ## 4. Deliverable file map
 
 ```
-LFEM_2D/
+GridapLFEM.jl/
 ├── src/
 │   ├── LFEModelAlg.jl            # + distributed deps, includes, exports        (D1)
 │   ├── horizontal_alg.jl         # + distributed eltype dispatch                (D1)

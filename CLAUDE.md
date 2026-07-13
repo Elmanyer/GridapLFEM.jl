@@ -1,4 +1,4 @@
-# CLAUDE.md — `LFEM_2D/` (LFE-M derivation & the algebraic-residual project)
+# CLAUDE.md — `GridapLFEM.jl/` (LFE-M derivation & the algebraic-residual project)
 
 **What this folder is.** The *mathematical* home of the 2D LFE-M model: the LaTeX derivation
 (`main.tex`), a Jupyter prototype (`test_2HDmodel.ipynb`), and a set of Markdown documents that

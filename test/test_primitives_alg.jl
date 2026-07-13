@@ -8,7 +8,7 @@
 #    * ∂x/∂y = e⋅∇f orientation on VectorValue{Nσ} FE fields,
 #    * outer product (a⊗b)[k,j] = a[k]b[j].
 #
-#  RUN:  julia --project=. LFEM_2D/test/test_primitives_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_primitives_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)

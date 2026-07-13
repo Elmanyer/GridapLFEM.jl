@@ -10,7 +10,7 @@
 #
 #  RUN:
 #    ~/.julia/bin/mpiexecjl --project=. -n 4 julia --project=. \
-#        LFEM_2D/test/test_nlpressure_alg_distributed.jl
+#        GridapLFEM.jl/test/test_nlpressure_alg_distributed.jl
 # ==============================================================
 
 include(joinpath(@__DIR__, "..", "src", "LFEModelAlg.jl"))

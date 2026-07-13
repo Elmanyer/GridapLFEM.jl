@@ -11,7 +11,7 @@
 #
 #  RUN (from the project root; system mpiexec fails with PMIx mismatch):
 #    ~/.julia/bin/mpiexecjl --project=. -n 4 julia --project=. \
-#        LFEM_2D/test/test_basic_alg_distributed.jl
+#        GridapLFEM.jl/test/test_basic_alg_distributed.jl
 # ==============================================================
 
 include(joinpath(@__DIR__, "..", "src", "LFEModelAlg.jl"))

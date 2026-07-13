@@ -12,7 +12,7 @@
 #  LAUNCH (px·py MUST equal -n):
 #    LFEM_M=2 LFEM_PX=8 LFEM_PY=1 \
 #    ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-#        LFEM_2D/examples/distributed/run_bathymetry_alg_dist.jl
+#        GridapLFEM.jl/examples/distributed/run_bathymetry_alg_dist.jl
 #
 #  Case-specific env vars:
 #    LFEM_LX,LFEM_LY  domain size [m]        300 × 20

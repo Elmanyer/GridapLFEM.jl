@@ -6,7 +6,7 @@
 #  term reproduces the linear dispersion end-to-end: kd = 3, gauges 2λ from
 #  the wavemaker separated λ/2, DFT phase at the forcing frequency.
 #
-#  RUN:  julia --project=. LFEM_2D/test/test_dispersion_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_dispersion_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)

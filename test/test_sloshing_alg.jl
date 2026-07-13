@@ -7,7 +7,7 @@
 #  k = π/L:  c² = g d · Φᵀ(M − (kd)²B)⁻¹Φ,  T = 2π/(kc). We measure the
 #  numerical period at the antinode gauge (DFT peak) and compare (<5%).
 #
-#  RUN:  julia --project=. LFEM_2D/test/test_sloshing_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_sloshing_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)

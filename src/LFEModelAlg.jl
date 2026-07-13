@@ -12,7 +12,7 @@
 #  loops and no MultiField decomposition beyond u[1],u[2],u[3].
 #
 #  Usage:
-#    include("LFEM_2D/src/LFEModelAlg.jl"); using .LFEModelAlg
+#    include("GridapLFEM.jl/src/LFEModelAlg.jl"); using .LFEModelAlg
 #    diags, vert, prob = setup_and_run_alg(M=2, T_wave=1.6, A_wave=0.001)
 #
 #  Validated against the per-layer oracle solver (../LFE-M_2D_solver/):

@@ -8,7 +8,7 @@
 #    linearised=false, advection=true → fully nonlinear target
 #  Checks: no NaN, bounded amplitude, wave generated.
 #
-#  RUN:  julia --project=. LFEM_2D/test/test_basic_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_basic_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)

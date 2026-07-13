@@ -12,7 +12,7 @@
 #  LAUNCH (px·py MUST equal -n):
 #    LFEM_M=2 LFEM_PX=4 LFEM_PY=4 \
 #    ~/.julia/bin/mpiexecjl --project=. -n 16 julia --project=. \
-#        LFEM_2D/examples/distributed/run_ic_hump_alg_dist.jl
+#        GridapLFEM.jl/examples/distributed/run_ic_hump_alg_dist.jl
 #
 #  Case-specific env vars:
 #    LFEM_L        basin side [m]           100

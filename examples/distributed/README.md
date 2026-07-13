@@ -1,7 +1,7 @@
 # Distributed algebraic LFE-M example runs (cluster-ready)
 
 MPI-parallel wave-propagation cases for the **algebraic (stacked-layout) 2D LFE-M solver**
-(`LFEM_2D/src/LFEModelAlg.jl`), all writing the **full field set** to VTK: surface elevation
+(`GridapLFEM.jl/src/LFEModelAlg.jl`), all writing the **full field set** to VTK: surface elevation
 `eta`, per-σ-node horizontal velocity components `u<j>x`/`u<j>y`, and the reconstructed
 **vertical velocity** `w_s<σ>` and **total pressure** `p_s<σ>` at every vertical σ-node
 (`write_w`/`write_pressure` on by default).
@@ -35,18 +35,18 @@ count `-n` MUST equal `LFEM_PX · LFEM_PY`**, and keep `LFEM_NX` divisible by `L
 # From the project root. Plane wave, M=2, 8 ranks (8×1 grid):
 LFEM_M=2 LFEM_PX=8 LFEM_PY=1 \
   ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-  LFEM_2D/examples/distributed/run_plane_wave_alg_dist.jl
+  GridapLFEM.jl/examples/distributed/run_plane_wave_alg_dist.jl
 
 # Ring wave at M=3, 16 ranks (4×4), bigger mesh:
 LFEM_M=3 LFEM_PX=4 LFEM_PY=4 LFEM_NX=400 LFEM_NY=400 \
   ~/.julia/bin/mpiexecjl --project=. -n 16 julia --project=. \
-  LFEM_2D/examples/distributed/run_ring_wave_alg_dist.jl
+  GridapLFEM.jl/examples/distributed/run_ring_wave_alg_dist.jl
 
 # Quick local smoke of the plumbing (2 ranks, tiny mesh, 1 period):
 LFEM_PX=2 LFEM_PY=1 LFEM_NX=60 LFEM_NY=4 LFEM_LX=60 LFEM_LY=4 \
 LFEM_PERIODS=1 LFEM_SAVE_EVERY=40 LFEM_XWM=12 LFEM_SPONGE=12 \
   ~/.julia/bin/mpiexecjl --project=. -n 2 julia --project=. \
-  LFEM_2D/examples/distributed/run_plane_wave_alg_dist.jl
+  GridapLFEM.jl/examples/distributed/run_plane_wave_alg_dist.jl
 ```
 
 > `MPI_Finalize` prints a benign OFI/WiFi-NIC error and exits 143 on the development machine —
@@ -71,15 +71,15 @@ export LFEM_NX=4000 LFEM_NY=200
 export LFEM_SAVE_EVERY=25
 export LFEM_OUTDIR=$SLURM_SUBMIT_DIR/output/plane_alg_M${LFEM_M}
 
-srun julia --project=. LFEM_2D/examples/distributed/run_plane_wave_alg_dist.jl
+srun julia --project=. GridapLFEM.jl/examples/distributed/run_plane_wave_alg_dist.jl
 # (or ~/.julia/bin/mpiexecjl --project=. -n $SLURM_NTASKS julia --project=. <script>)
 ```
 
 ## Validation against the old solver
 
 The sequential algebraic solver is oracle-equivalent to `LFE-M_2D_solver` at machine precision
-(`LFEM_2D/test/test_equivalence_alg.jl`); the distributed path is validated by
-`LFEM_2D/test/test_basic_alg_distributed.jl` (4 ranks, linear + fully nonlinear, sequential
+(`GridapLFEM.jl/test/test_equivalence_alg.jl`); the distributed path is validated by
+`GridapLFEM.jl/test/test_basic_alg_distributed.jl` (4 ranks, linear + fully nonlinear, sequential
 agreement within GMRES tolerance). For a cross-solver check at scale, run the old
 `run_plane_wave_dist.jl` and this `run_plane_wave_alg_dist.jl` with identical env settings and
 compare `eta` snapshots/gauge sections in ParaView (identical field naming).

@@ -11,7 +11,7 @@
 #          sloped bed + linear pressure).
 #
 #  Run from the repo root:
-#    julia --project=. LFEM_2D/test_algebraic_lfem2D.jl     (or via julia-mcp)
+#    julia --project=. GridapLFEM.jl/test_algebraic_lfem2D.jl     (or via julia-mcp)
 # ==============================================================
 
 if !isdefined(Main, :LFEModel2D)

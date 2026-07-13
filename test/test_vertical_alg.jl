@@ -6,7 +6,7 @@
 #    identities P[:,:,3] = −B and Kcal = Pcal − ∫σΘφᵢ, and the dispersion
 #    bridge vs Yang & Liu (2024) Table 1 applicable-kd values.
 #
-#  RUN:  julia --project=. LFEM_2D/test/test_vertical_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_vertical_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)

@@ -11,7 +11,7 @@
 #  validated configuration). Production run (old solver values):
 #    Lx=200, Ly=30, nx=400, ny=15, T_final=50*T_wave  → multi-hour.
 #
-#  RUN:  julia --project=. LFEM_2D/examples/plane_wave_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/examples/plane_wave_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)
@@ -82,4 +82,4 @@ for (i, gxy) in enumerate(gauges)
     amp = isempty(gv) ? 0.0 : maximum(abs.(gv[n2:end]))
     @printf("  gauge %d at x=%.1f m:  steady amplitude ≈ %.5f m\n", i, gxy[1], amp)
 end
-println("\n  VTK output: LFEM_2D/output/plane_wave_alg/solution.pvd")
+println("\n  VTK output: GridapLFEM.jl/output/plane_wave_alg/solution.pvd")

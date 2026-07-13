@@ -13,7 +13,7 @@
 #  G3  Dynamics: short run over a tanh submerged bar with ALL pressure flags
 #      on — bounded, no NaN.
 #
-#  RUN:  julia --project=. LFEM_2D/test/test_nlpressure_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_nlpressure_alg.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModelAlg)

@@ -1,4 +1,4 @@
-# LFEModelAlg — the algebraic LFE-M wave solver
+# GridapLFEM.jl — the algebraic LFE-M wave solver
 
 A loop-free, serial-and-distributed Gridap implementation of the **LFE-M** (Layer-averaged Finite
 Element Multilayer) depth-integrated, non-hydrostatic wave model of Yang & Liu (2024, *J. Fluid
@@ -6,8 +6,9 @@ Mech.* 999, A32). This is a from-scratch reimplementation of the model already v
 `../LFE-M_2D_solver/`, using a **stacked value-type layout** that turns every per-layer sum in the
 governing equations into a native Gridap tensor contraction instead of a Julia `for`-loop.
 
-Module: `src/LFEModelAlg.jl` → `module LFEModelAlg`. Fully self-contained (no dependency on the
-older per-layer solver, which remains the validated oracle it was checked against).
+Repository: `GridapLFEM.jl`. Module: `src/LFEModelAlg.jl` → `module LFEModelAlg`. Fully
+self-contained (no dependency on the older per-layer solver, which remains the validated oracle
+it was checked against).
 
 ---
 
@@ -72,7 +73,7 @@ Every flag is validated against a hand-derived reference or the per-layer oracle
 ## Repository layout
 
 ```
-LFEM_2D/
+GridapLFEM.jl/
 ├── src/                         # the solver package
 │   ├── LFEModelAlg.jl             module entry: deps, includes, exports
 │   ├── vertical_alg.jl            Stage 1: σ-mesh + vertical tensor set (M, Φ, 𝓜, 𝓖, A, K, P, …)
@@ -109,7 +110,7 @@ LFEM_2D/
 ## Quick start
 
 ```julia
-include("LFEM_2D/src/LFEModelAlg.jl")
+include("GridapLFEM.jl/src/LFEModelAlg.jl")
 using .LFEModelAlg
 
 # Sequential run: plane wave in a flume, linear regime
@@ -179,7 +180,7 @@ with GMRES+Jacobi+Newton).
 ## Validation
 
 All gates below are implemented as standalone Julia scripts in `test/`; run with
-`julia --project=. LFEM_2D/test/<name>.jl` (distributed ones via `mpiexecjl`, see file headers).
+`julia --project=. GridapLFEM.jl/test/<name>.jl` (distributed ones via `mpiexecjl`, see file headers).
 
 | Test | What it checks | Result |
 |---|---|---|
