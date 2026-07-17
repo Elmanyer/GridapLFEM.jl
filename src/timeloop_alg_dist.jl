@@ -131,7 +131,7 @@ function run_time_loop_alg_dist(ranks, op, solver, u0,
                              FEFunction(trial_space, prev_vals)
                     append!(fields, extra_field_cellfields_alg(u_n, u_prev, dt, recon, trian))
                 end
-                pvd[t_n] = createvtk(trian, fname; cellfields=fields)
+                pvd[t_n] = createvtk(trian, fname; cellfields=fields; append=false)
             end
 
             if recon !== nothing

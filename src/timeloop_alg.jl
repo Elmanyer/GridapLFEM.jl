@@ -121,7 +121,7 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
                              FEFunction(trial_space, prev_vals)
                     append!(fields, extra_field_cellfields_alg(u_n, u_prev, dt, recon, trian))
                 end
-                pvd[t_n] = createvtk(trian, fname; cellfields=fields)
+                pvd[t_n] = createvtk(trian, fname; cellfields=fields; append=false)
             end
 
             if recon !== nothing

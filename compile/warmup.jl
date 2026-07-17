@@ -1,54 +1,80 @@
 
-# Script executed in compile.jl to precompile the GridapSWE module and create a system image for faster loading in future runs. 
-# After precompiling the module, the created system image can be used to execute module functions with command:
-# julia --project=. -J TS_SWE_sysimage.so script_to_run.jl
-# or in parallel
-# mpiexecjl -n 6 julia --project=. -J TS_SWE_sysimage.so script_to_run.jl
+# ==============================================================
+#  warmup.jl — Small long-crested plane wave problem to compile julia module
+#
+#  Gaussian LINE-source wavemaker → plane waves down a long flume, absorbed by
+#  sponge layers at both x-ends. Writes η, per-node u/v components AND the
+#  reconstructed vertical velocity (w_s*) and total pressure (p_s*) fields.
+#  Runs the FULL nonlinear physics distributed (one Gridap path).
+#
+# ==============================================================
 
-using MPI
-if !MPI.Initialized()
-    MPI.Init()
+const ROOT = normpath(joinpath(@__DIR__, ".."))
+include(joinpath(ROOT, "src", "GridapLFEM.jl"))
+
+using .GridapLFEM
+using Printf
+
+println("=" ^ 60)
+println("  warmup.jl — small long-crested plane wave problem (LFE-2)")
+println("=" ^ 60)
+
+# ── Physical parameters ──────────────────────────────────────
+d_val  = 3.5
+T_wave = 1.6
+A_wave = 0.001
+g      = 9.81
+
+# ── Domain (quick default; production: 200×30 m, 400×15 cells) ─
+Lx, Ly = 1.0, 1.0
+nx, ny = 2, 2
+
+# ── Time stepping (quick default; production: 50 periods) ─────
+T_final = 0.1 * T_wave
+dt      = T_wave / 30
+
+# ── Sponge and wavemaker ──────────────────────────────────────
+x_wm      = 0.2
+sponge_wL = 0.2
+sponge_wR = 0.2
+mu_max    = 5.0
+
+# ── Wave gauges (y = Ly/2) ────────────────────────────────────
+gauges = [(x_wm + 2*4.0, Ly/2), (x_wm + 4*4.0, Ly/2), (x_wm + 8*4.0, Ly/2)]
+
+diags, vert, prob = setup_and_run_alg(
+    M           = 2,
+    c_bdy       = [0.0, 0.728, 1.0],
+    domain      = ((0.0, Lx), (0.0, Ly)),
+    partition   = (nx, ny),
+    fe_order    = 2,
+    d_val       = d_val,
+    g           = g,
+    T_wave      = T_wave,
+    A_wave      = A_wave,
+    x_wm        = x_wm,
+    y_wm        = nothing,          # line source → plane wave
+    sponge_wL   = sponge_wL,
+    sponge_wR   = sponge_wR,
+    sponge_wB   = 0.0,
+    sponge_wT   = 0.0,
+    mu_max      = mu_max,
+    T_final     = T_final,
+    dt          = dt,
+    linearised  = false,             # linear regime benchmark (A = 0.001)
+    advection   = true,
+    save_every  = 0,                # one VTK snapshot per period
+    output_dir  = joinpath(@__DIR__, "..", "output", "plane_wave_alg"),
+    gauges      = gauges,
+)
+
+# ── Post ──────────────────────────────────────────────────────
+emax = maximum(d.eta_max for d in diags)
+@printf("\n  max η over run = %.5f m  (A = %.4f m)\n", emax, A_wave)
+for (i, gxy) in enumerate(gauges)
+    gv = [d.gauge_vals[i] for d in diags if !isempty(d.gauge_vals)]
+    n2 = length(gv) ÷ 2
+    amp = isempty(gv) ? 0.0 : maximum(abs.(gv[n2:end]))
+    @printf("  gauge %d at x=%.1f m:  steady amplitude ≈ %.5f m\n", i, gxy[1], amp)
 end
-
-using GridapSWE
-
-println("GridapSWE --| Running warmup for the GridapSWE module...")
-
-dom_params = Dict(
-        :Lx => 0.001,           # Domain x-axis length
-        :Ly => 0.001,           # Domain y-axis length
-        :Nx => 4,               # Domain x-axis number of cells
-        :Ny => 4)               # Domain y-axis number of cells 
-        
-# Solver parameters
-solver_params_seq = Dict(
-        :dt => 0.001,             # Time step size
-        :t0 => 0.0,               # Initial time
-        :tF => 0.001,             # Final time
-        :tableau => :SDIRK_3_3)   # Butcher tableau for the time-stepping scheme (e.g., SDIRK_3_3 for a 3-stage, 3rd-order SDIRK method)
-
-solver_params_dis = Dict(
-        :dt => 0.001,             # Time step size
-        :t0 => 0.0,               # Initial time
-        :tF => 0.001,             # Final time
-        :tableau => :SDIRK_3_3,   # Butcher tableau for the time-stepping scheme (e.g., SDIRK_3_3 for a 3-stage, 3rd-order SDIRK method)
-        :ls_atol => 1e-8,         # Absolute tolerance for the linear solver
-        :ls_rtol => 1e-6,         # Relative tolerance for the linear solver
-        :ls_maxiter => 1000,      # Maximum number of iterations for the linear solver
-        :nls_atol => 1e-6,        # Absolute tolerance for the nonlinear solver
-        :nls_rtol => 1e-4,        # Relative tolerance for the nonlinear solver
-        :nls_maxiter => 1000)     # Maximum number of iterations for the nonlinear solver
-
-println("GridapSWE --|   -> Running sequential benchmark...")
-GridapSWE.run_sequential_benchmark(:sinusoidal, :CG, dom_params, solver_params_seq)
-GridapSWE.run_sequential_benchmark(:sinusoidal, :CG_SUPG, dom_params, solver_params_seq)
-GridapSWE.run_sequential_benchmark(:sinusoidal, :DG, dom_params, solver_params_seq)
-println("GridapSWE --|   Done!")
-
-println("GridapSWE --|   -> Running distributed benchmark...")
-GridapSWE.run_distributed_benchmark(:sinusoidal, :CG, dom_params, solver_params_dis, (1,1))
-GridapSWE.run_distributed_benchmark(:sinusoidal, :CG_SUPG, dom_params, solver_params_dis, (1,1))
-GridapSWE.run_distributed_benchmark(:sinusoidal, :DG, dom_params, solver_params_dis, (1,1))
-println("GridapSWE --|   Done!")
-
-println("GridapSWE --| Warmup completed for the GridapSWE module. The system image will now be created.")
+println("\n  Warmup done!")
