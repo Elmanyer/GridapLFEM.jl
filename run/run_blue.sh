@@ -11,4 +11,4 @@
 
 source $HOME/GridapLFEM.jl/compile/load_modules_blue.sh
 
-mpiexecjl -n 16 julia --project=$HOME/GridapLFEM.jl $HOME/GridapLFEM.jl/examples/distributed/run_plane_wave_alg_dist.jl
+mpiexecjl -n 16 julia --project=$HOME/GridapLFEM.jl $HOME/GridapLFEM.jl/examples/distributed/run_plane_wave_dist.jl

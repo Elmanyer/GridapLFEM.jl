@@ -1,5 +1,5 @@
 # ==============================================================
-#  reconstruct_alg.jl — w / total-pressure VTK fields (stacked layout)
+#  reconstruct.jl — w / total-pressure VTK fields (stacked layout)
 #
 #  Port of ../../LFE-M_2D_solver/src/reconstruct_fields_lfem2D.jl to the
 #  algebraic package. Turns the stacked solution (η, 𝖴x, 𝖴y) into extra 2D
@@ -22,17 +22,17 @@
 # ==============================================================
 
 "VTK-safe suffix for a σ-level, e.g. 0.728 → \"0_728\"."
-recon_level_str_alg(σ::Float64) = replace(@sprintf("%.3f", σ), "." => "_")
+recon_level_str(σ::Float64) = replace(@sprintf("%.3f", σ), "." => "_")
 
 """
-    build_field_recon_alg(vert, d_func, g; rho=1025.0, write_w=false, write_pressure=false)
+    build_field_recon(vert, d_func, g; rho=1025.0, write_w=false, write_pressure=false)
 
 Precompute the per-level constant contraction vectors from the vertical stage
-(`assemble_vertical_tensors_alg` NamedTuple). σ-levels = the N_dof vertical
+(`assemble_vertical_tensors` NamedTuple). σ-levels = the N_dof vertical
 Lagrange nodes (one per velocity mode). Returns `nothing` if both switches are
-off; else a NamedTuple consumed by `extra_field_cellfields_alg`.
+off; else a NamedTuple consumed by `extra_field_cellfields`.
 """
-function build_field_recon_alg(vert, d_func, g::Float64;
+function build_field_recon(vert, d_func, g::Float64;
                                rho::Float64 = 1025.0,
                                write_w::Bool = false,
                                write_pressure::Bool = false)
@@ -81,7 +81,7 @@ function build_field_recon_alg(vert, d_func, g::Float64;
         pt1 = VectorValue(1.0)
         Pi3 = zeros(Float64, L, N_dof)
         for j in 1:N_dof
-            xi_j = compute_antiderivative_alg(phi_int_fns[j], V2, U2, dS2)
+            xi_j = compute_antiderivative(phi_int_fns[j], V2, U2, dS2)
             xi1  = xi_j(pt1)
             for (ℓ, σ) in enumerate(levels)
                 Pi3[ℓ, j] = xi1 - xi_j(VectorValue(σ))
@@ -99,7 +99,7 @@ function build_field_recon_alg(vert, d_func, g::Float64;
 end
 
 """
-    extra_field_cellfields_alg(u_n, u_prev, dt, recon, trian) -> Vector{Pair{String,Any}}
+    extra_field_cellfields(u_n, u_prev, dt, recon, trian) -> Vector{Pair{String,Any}}
 
 Extra VTK cellfields (`w_s<σ>` and/or total pressure `p_s<σ>` per σ-level) from
 the current stacked solution `u_n = [η,𝖴x,𝖴y]`. `u_prev` (previous step, same
@@ -107,7 +107,7 @@ space) feeds the u̇ backward FD of the non-hydrostatic pressure; pass `nothing`
 on the first step to zero that contribution. Works on sequential and
 distributed triangulations alike.
 """
-function extra_field_cellfields_alg(u_n, u_prev, dt::Float64, recon, trian)
+function extra_field_cellfields(u_n, u_prev, dt::Float64, recon, trian)
     fields = Pair{String,Any}[]
     recon === nothing && return fields
 
@@ -132,7 +132,7 @@ function extra_field_cellfields_alg(u_n, u_prev, dt::Float64, recon, trian)
             wℓ = (-1.0)*alg_dot(recon.avec[ℓ], a) +
                         alg_dot(recon.bvec[ℓ], b) +
                  (-1.0)*alg_dot(recon.cvec[ℓ], S)
-            push!(fields, "w_s$(recon_level_str_alg(σ))" => wℓ)
+            push!(fields, "w_s$(recon_level_str(σ))" => wℓ)
         end
     end
 
@@ -147,7 +147,7 @@ function extra_field_cellfields_alg(u_n, u_prev, dt::Float64, recon, trian)
             if have_dot
                 pℓ = pℓ + (-recon.rho) * (d2 * alg_dot(recon.pivec[ℓ], DUdot))
             end
-            push!(fields, "p_s$(recon_level_str_alg(σ))" => pℓ)
+            push!(fields, "p_s$(recon_level_str(σ))" => pℓ)
         end
     end
 

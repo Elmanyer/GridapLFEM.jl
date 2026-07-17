@@ -1,10 +1,10 @@
 # ==============================================================
-#  problem_alg.jl — AlgebraicLFEM problem + loop-free residual + hand Jacobians
+#  problem.jl — LFEMProblem problem + loop-free residual + hand Jacobians
 #
 #  Implements the corrected main.tex §8 global residual (INCLUDING the
 #  leading-pressure/dispersion term R_P) in the stacked layout. Terms match
 #  the oracle `residual_lfem` (../../LFE-M_2D_solver/src/problem_lfem2D.jl)
-#  flag by flag; validated to machine precision (test_equivalence_alg.jl).
+#  flag by flag; validated to machine precision (test_equivalence.jl).
 #
 #  Sign/form conventions (load-bearing):
 #    * gravity: oracle IBP energy form  −∫(g/2)(H²−d²)(𝚽⋅DW)  — the (H²−d²)
@@ -18,14 +18,14 @@
 # ==============================================================
 
 """
-    AlgebraicLFEM
+    LFEMProblem
 
 Coefficient bundle for the stacked algebraic residual. All vertical tensors
 are constant `TensorValue`/`ThirdOrderTensorValue` (index order `[i,k,j]` =
-[test layer, u_k layer, u_j layer] — matches `assemble_vertical_tensors_alg`
+[test layer, u_k layer, u_j layer] — matches `assemble_vertical_tensors`
 storage directly, no remap).
 """
-struct AlgebraicLFEM{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
+struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
     g            :: Float64
     d_func       :: Function          # still-water depth d(x,y)
     Nσ           :: Int
@@ -54,12 +54,12 @@ struct AlgebraicLFEM{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
 end
 
 """
-    build_problem_alg(vert; g, d_func, flags..., mu_sponge, wm_src) → AlgebraicLFEM
+    build_problem(vert; g, d_func, flags..., mu_sponge, wm_src) → LFEMProblem
 
-Reshape the `assemble_vertical_tensors_alg` NamedTuple into constant Gridap
+Reshape the `assemble_vertical_tensors` NamedTuple into constant Gridap
 tensors and bundle the runtime flags.
 """
-function build_problem_alg(vert;
+function build_problem(vert;
         g            :: Float64  = 9.81,
         d_func       :: Function = (x -> 3.5),
         linearised   :: Bool     = false,
@@ -81,19 +81,19 @@ function build_problem_alg(vert;
     A3 = ntuple(c -> alg_to_tensor3(vert.Acal[:, :, :, c]), 8)
     K3 = ntuple(c -> alg_to_tensor3(vert.Kcal[:, :, :, c]), 8)
     P3 = ntuple(c -> alg_to_tensor3(vert.Pcal[:, :, :, c]), 8)
-    return AlgebraicLFEM(g, d_func, vert.N_dof, Φ, Mv, Bv, P, Av, Kv, M3, G3,
+    return LFEMProblem(g, d_func, vert.N_dof, Φ, Mv, Bv, P, Av, Kv, M3, G3,
                          A3, K3, P3, linearised, advection, lin_pressure,
                          P_full, nl_pressure68, nl_pressure_full,
                          Ref{Any}(nothing), mu_sponge, wm_src)
 end
 
 """
-    residual_alg(t, u, v, prob, trian, dO)
+    global_residual(t, u, v, prob, trian, dO)
 
 Single scalar Gridap residual, stacked layout. `u` is a TransientCellField
 (`∂t(u)` available); `u[1]=η`, `u[2]=𝖴x`, `u[3]=𝖴y`. No per-layer loops.
 """
-function residual_alg(t::Real, u, v, prob::AlgebraicLFEM, trian, dO)
+function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
     ut = ∂t(u)
     η,  Ux,  Uy  = u[1], u[2], u[3]
     ηt, Uxt, Uyt = ut[1], ut[2], ut[3]
@@ -170,7 +170,7 @@ function residual_alg(t::Real, u, v, prob::AlgebraicLFEM, trian, dO)
                             + dhy*(Wy ⋅ LA) + dHy*(Wy ⋅ LK) ) ) * dO
     end
 
-    # ---- nonlinear pressure (nlpressure_alg.jl) ---------------------------------
+    # ---- nonlinear pressure (nlpressure.jl) ---------------------------------
     #  nl_pressure68:   native first-order set c∈{3,6,7,8}, all three blocks
     #                   (𝓐/𝓚 slope halves + 𝓟 leading part).
     #  nl_pressure_full: + c∈{1,2,4,5}: 𝓐 half via EXACT IBP onto the test;
@@ -205,7 +205,7 @@ end
 # ----------------------------------------------------------
 
 "∂R/∂u̇ — effective mass operator (acceleration + R_P dispersion)."
-function jacobian_u_t_alg(t::Real, u, dut, v, prob::AlgebraicLFEM, trian, dO)
+function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dO)
     η = u[1]
     dηt, dUxt, dUyt = dut[1], dut[2], dut[3]
     q, Wx, Wy = v[1], v[2], v[3]
@@ -240,7 +240,7 @@ function jacobian_u_t_alg(t::Real, u, dut, v, prob::AlgebraicLFEM, trian, dO)
 end
 
 "∂R/∂u — continuity + gravity + sponge + (nonlinear Acc η-term) + FULL advection derivative."
-function jacobian_u_alg(t::Real, u, du, v, prob::AlgebraicLFEM, trian, dO)
+function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dO)
     η,  Ux,  Uy  = u[1], u[2], u[3]
     dη, dUx, dUy = du[1], du[2], du[3]
     q,  Wx,  Wy  = v[1], v[2], v[3]
@@ -298,16 +298,16 @@ function jacobian_u_alg(t::Real, u, du, v, prob::AlgebraicLFEM, trian, dO)
 end
 
 "TransientFEOperator with the hand Jacobians (default; fast)."
-function build_ode_operator_alg(prob::AlgebraicLFEM, U, V, trian, dO)
-    r  = (t, u, v)      -> residual_alg(t, u, v, prob, trian, dO)
-    j  = (t, u, du, v)  -> jacobian_u_alg(t, u, du, v, prob, trian, dO)
-    jt = (t, u, dut, v) -> jacobian_u_t_alg(t, u, dut, v, prob, trian, dO)
+function build_ode_operator(prob::LFEMProblem, U, V, trian, dO)
+    r  = (t, u, v)      -> global_residual(t, u, v, prob, trian, dO)
+    j  = (t, u, du, v)  -> jacobian_u(t, u, du, v, prob, trian, dO)
+    jt = (t, u, dut, v) -> jacobian_u_t(t, u, dut, v, prob, trian, dO)
     return TransientFEOperator(r, j, jt, U, V)
 end
 
 "AD-Jacobian variant (experimental; the 3-field stacked residual has a much
 smaller expression tree than the old per-layer fused residual)."
-function build_ode_operator_alg_ad(prob::AlgebraicLFEM, U, V, trian, dO)
-    r = (t, u, v) -> residual_alg(t, u, v, prob, trian, dO)
+function build_ode_operator_ad(prob::LFEMProblem, U, V, trian, dO)
+    r = (t, u, v) -> global_residual(t, u, v, prob, trian, dO)
     return TransientFEOperator(r, U, V)
 end

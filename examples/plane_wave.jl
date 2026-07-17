@@ -1,5 +1,5 @@
 # ==============================================================
-#  plane_wave_alg.jl — Long-Crested Plane Wave (2D flume, algebraic solver)
+#  plane_wave.jl — Long-Crested Plane Wave (2D flume, algebraic solver)
 #
 #  Port of ../../LFE-M_2D_solver/examples/plane_wave2D.jl to the stacked
 #  algebraic package. Monochromatic plane wave from a Gaussian line source.
@@ -11,7 +11,7 @@
 #  validated configuration). Production run (old solver values):
 #    Lx=200, Ly=30, nx=400, ny=15, T_final=50*T_wave  → multi-hour.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/plane_wave_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/examples/plane_wave.jl
 # ==============================================================
 
 if !isdefined(Main, :GridapLFEM)
@@ -21,7 +21,7 @@ using .GridapLFEM
 using Printf
 
 println("=" ^ 60)
-println("  plane_wave_alg.jl — long-crested plane wave (LFE-2, algebraic)")
+println("  plane_wave.jl — long-crested plane wave (LFE-2, algebraic)")
 println("=" ^ 60)
 
 # ── Physical parameters ──────────────────────────────────────
@@ -47,7 +47,7 @@ mu_max    = 5.0
 # ── Wave gauges (y = Ly/2) ────────────────────────────────────
 gauges = [(x_wm + 2*4.0, Ly/2), (x_wm + 4*4.0, Ly/2), (x_wm + 8*4.0, Ly/2)]
 
-diags, vert, prob = setup_and_run_alg(
+diags, vert, prob = setup_and_run(
     M           = 2,
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
@@ -69,7 +69,7 @@ diags, vert, prob = setup_and_run_alg(
     linearised  = true,             # linear regime benchmark (A = 0.001)
     advection   = false,
     save_every  = 30,               # one VTK snapshot per period
-    output_dir  = joinpath(@__DIR__, "..", "output", "plane_wave_alg"),
+    output_dir  = joinpath(@__DIR__, "..", "output", "plane_wave"),
     gauges      = gauges,
 )
 
@@ -82,4 +82,4 @@ for (i, gxy) in enumerate(gauges)
     amp = isempty(gv) ? 0.0 : maximum(abs.(gv[n2:end]))
     @printf("  gauge %d at x=%.1f m:  steady amplitude ≈ %.5f m\n", i, gxy[1], amp)
 end
-println("\n  VTK output: GridapLFEM.jl/output/plane_wave_alg/solution.pvd")
+println("\n  VTK output: GridapLFEM.jl/output/plane_wave/solution.pvd")

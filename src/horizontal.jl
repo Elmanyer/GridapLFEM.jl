@@ -1,5 +1,5 @@
 # ==============================================================
-#  horizontal_alg.jl — Stage 2: 2D mesh and the STACKED FE spaces
+#  horizontal.jl — Stage 2: 2D mesh and the STACKED FE spaces
 #
 #  Stacked layout: MultiFieldFESpace with THREE fields
 #      [η, 𝖴x, 𝖴y],   𝖴x,𝖴y ∈ VectorValue{Nσ}
@@ -16,12 +16,12 @@
 # ==============================================================
 
 """
-    build_horizontal_model_alg(domain, partition) → (model, trian)
+    build_horizontal_model(domain, partition) → (model, trian)
 
 2D Cartesian mesh on ((x0,x1),(y0,y1)) (or flat (x0,x1,y0,y1)) with
 `partition = (nx, ny)` cells. Create the measure as `Measure(trian, 2*fe_order+2)`.
 """
-function build_horizontal_model_alg(domain::Tuple, partition::Tuple)
+function build_horizontal_model(domain::Tuple, partition::Tuple)
     if domain isa Tuple{Tuple,Tuple}
         (x0,x1), (y0,y1) = domain
         dom_flat = (x0, x1, y0, y1)
@@ -34,7 +34,7 @@ function build_horizontal_model_alg(domain::Tuple, partition::Tuple)
 end
 
 """
-    build_fe_spaces_alg(model, fe_order, Nσ; y_wall_bc=true, x_wall_bc=false) → (U, V)
+    build_fe_spaces(model, fe_order, Nσ; y_wall_bc=true, x_wall_bc=false) → (U, V)
 
 Stacked 3-field MultiFieldFESpace `[η, 𝖴x, 𝖴y]`.
 
@@ -44,7 +44,7 @@ Stacked 3-field MultiFieldFESpace `[η, 𝖴x, 𝖴y]`.
   (tags 1–4,7,8). REQUIRED for any initial-condition problem (soliton, sloshing,
   IC hump); flumes keep it false (open x-ends, sponge-absorbed).
 """
-function build_fe_spaces_alg(model, fe_order::Int, Nσ::Int;
+function build_fe_spaces(model, fe_order::Int, Nσ::Int;
                              y_wall_bc::Bool = true, x_wall_bc::Bool = false)
     reffe_eta = ReferenceFE(lagrangian, Float64, fe_order)
     reffe_U   = ReferenceFE(lagrangian, VectorValue{Nσ,Float64}, fe_order)

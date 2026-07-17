@@ -1,5 +1,5 @@
 # ==============================================================
-#  run_ring_wave_alg_dist.jl — DISTRIBUTED point-source ring waves (algebraic)
+#  run_ring_wave_dist.jl — DISTRIBUTED point-source ring waves (algebraic)
 #
 #  Gaussian POINT-source wavemaker at the basin centre → circular wavefronts,
 #  4-side sponge absorption. Full field set to VTK (η, u/v per σ-node, w_s*,
@@ -8,7 +8,7 @@
 #  LAUNCH (px·py MUST equal -n):
 #    LFEM_M=2 LFEM_PX=4 LFEM_PY=4 \
 #    ~/.julia/bin/mpiexecjl --project=. -n 16 julia --project=. \
-#        GridapLFEM.jl/examples/distributed/run_ring_wave_alg_dist.jl
+#        GridapLFEM.jl/examples/distributed/run_ring_wave_dist.jl
 #
 #  Case-specific env vars:
 #    LFEM_L        basin side length [m]      200
@@ -20,7 +20,7 @@
 #    LFEM_PERIODS  run length in periods      20
 # ==============================================================
 
-include(joinpath(@__DIR__, "_dist_common_alg.jl"))
+include(joinpath(@__DIR__, "_dist_common.jl"))
 
 M        = genv_i("LFEM_M", 2)
 px, py   = genv_i("LFEM_PX", 2), genv_i("LFEM_PY", 2)
@@ -36,11 +36,11 @@ dt       = genv_f("LFEM_DT", 0.02)
 periods  = genv_f("LFEM_PERIODS", 20.0)
 Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
 save_ev  = genv_i("LFEM_SAVE_EVERY", 20)
-outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "ring_wave_alg_dist_M$(M)"))
+outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "ring_wave_dist_M$(M)"))
 
 banner("RING WAVE (point source) — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
 
-diags, vert, prob = setup_and_run_alg_distributed(
+diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), fe_order=feord,
     domain=(0.0,L,0.0,L), partition=(nx,ny),
     d_val=d, T_wave=Twave, A_wave=Awave,
@@ -54,5 +54,5 @@ diags, vert, prob = setup_and_run_alg_distributed(
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
     print_dt=genv_f("LFEM_PRINT_DT", Twave))
 
-is_rank0() && @printf("ring_wave_alg_dist done: %d steps, %d snapshots to %s\n",
+is_rank0() && @printf("ring_wave_dist done: %d steps, %d snapshots to %s\n",
                       length(diags), length(diags) ÷ max(save_ev,1), outdir)

@@ -1,5 +1,5 @@
 # ==============================================================
-#  test_primitives_alg.jl — algebraic primitives (FAST)
+#  test_primitives.jl — algebraic primitives (FAST)
 #
 #  Verifies the load-bearing conventions of the stacked formulation:
 #    * alg_to_tensor2/alg_to_tensor3 preserve index order,
@@ -8,7 +8,7 @@
 #    * ∂x/∂y = e⋅∇f orientation on VectorValue{Nσ} FE fields,
 #    * outer product (a⊗b)[k,j] = a[k]b[j].
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_primitives_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_primitives.jl
 # ==============================================================
 
 if !isdefined(Main, :GridapLFEM)
@@ -19,7 +19,7 @@ using Gridap
 using LinearAlgebra, Printf
 
 println("=" ^ 60)
-println("  test_primitives_alg.jl — stacked-formulation primitives")
+println("  test_primitives.jl — stacked-formulation primitives")
 println("=" ^ 60)
 
 n_pass = 0; n_fail = 0
@@ -84,5 +84,5 @@ println()
 println("=" ^ 60)
 @printf("  Results: %d PASS,  %d FAIL\n", n_pass, n_fail)
 println("=" ^ 60)
-n_fail > 0 ? error("test_primitives_alg: $n_fail failed!") :
+n_fail > 0 ? error("test_primitives: $n_fail failed!") :
              println("  Primitives validated.")

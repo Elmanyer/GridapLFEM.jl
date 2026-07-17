@@ -1,5 +1,5 @@
 # ==============================================================
-#  run_bathymetry_alg_dist.jl — DISTRIBUTED shoaling over a submerged bar
+#  run_bathymetry_dist.jl — DISTRIBUTED shoaling over a submerged bar
 #                               (variable bathymetry, algebraic solver)
 #
 #  Plane wave generated over depth d0 shoals onto a smooth (tanh-profile)
@@ -12,7 +12,7 @@
 #  LAUNCH (px·py MUST equal -n):
 #    LFEM_M=2 LFEM_PX=8 LFEM_PY=1 \
 #    ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-#        GridapLFEM.jl/examples/distributed/run_bathymetry_alg_dist.jl
+#        GridapLFEM.jl/examples/distributed/run_bathymetry_dist.jl
 #
 #  Case-specific env vars:
 #    LFEM_LX,LFEM_LY  domain size [m]        300 × 20
@@ -27,7 +27,7 @@
 #    LFEM_PERIODS     run length in periods  40
 # ==============================================================
 
-include(joinpath(@__DIR__, "_dist_common_alg.jl"))
+include(joinpath(@__DIR__, "_dist_common.jl"))
 
 M        = genv_i("LFEM_M", 2)
 px, py   = genv_i("LFEM_PX", 2), genv_i("LFEM_PY", 1)
@@ -47,7 +47,7 @@ dt       = genv_f("LFEM_DT", 0.02)
 periods  = genv_f("LFEM_PERIODS", 40.0)
 Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
 save_ev  = genv_i("LFEM_SAVE_EVERY", 25)
-outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "bathymetry_alg_dist_M$(M)"))
+outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "bathymetry_dist_M$(M)"))
 use_linp = genv_b("LFEM_LINP", 1)
 
 # smooth submerged bar: d(x) = d0 − (h_bar/2)·[tanh((x−x_L)/s) − tanh((x−x_R)/s)]
@@ -57,7 +57,7 @@ d_func(x) = d0 - 0.5*hbar*(tanh((x[1]-(xbar-wbar))/sramp) - tanh((x[1]-(xbar+wba
 
 banner("SHOALING OVER SUBMERGED BAR — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
 
-diags, vert, prob = setup_and_run_alg_distributed(
+diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), fe_order=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     d_val=d0, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=nothing,
@@ -72,5 +72,5 @@ diags, vert, prob = setup_and_run_alg_distributed(
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
     print_dt=genv_f("LFEM_PRINT_DT", Twave))
 
-is_rank0() && @printf("bathymetry_alg_dist done: %d steps, %d snapshots to %s\n",
+is_rank0() && @printf("bathymetry_dist done: %d steps, %d snapshots to %s\n",
                       length(diags), length(diags) ÷ max(save_ev,1), outdir)

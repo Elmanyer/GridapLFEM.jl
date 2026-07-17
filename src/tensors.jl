@@ -1,11 +1,11 @@
 # ==============================================================
-#  tensors_alg.jl — constant-tensor constructors + pointwise algebra helpers
+#  tensors.jl — constant-tensor constructors + pointwise algebra helpers
 #
 #  Constructors (build time only). Gridap TensorValue data is column-major
 #  (first index fastest):
 #    TensorValue{N,N}(data...)            → T[i,j]   = data[i + (j-1)N]
 #    ThirdOrderTensorValue{N,N,N}(data..) → T[i,j,k] = data[i + (j-1)N + (k-1)N²]
-#  (verified by test/test_primitives_alg.jl)
+#  (verified by test/test_primitives.jl)
 #
 #  Pointwise helpers wrap constants in Operation closures (closing over
 #  constants is fine — only CellFields must not be closed over in loops).

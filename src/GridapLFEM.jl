@@ -13,10 +13,10 @@
 #
 #  Usage:
 #    include("GridapLFEM.jl/src/GridapLFEM.jl"); using .GridapLFEM
-#    diags, vert, prob = setup_and_run_alg(M=2, T_wave=1.6, A_wave=0.001)
+#    diags, vert, prob = setup_and_run(M=2, T_wave=1.6, A_wave=0.001)
 #
 #  Validated against the per-layer oracle solver (../LFE-M_2D_solver/):
-#  see test/test_equivalence_alg.jl (virtual-work match ~1e-15) and
+#  see test/test_equivalence.jl (virtual-work match ~1e-15) and
 #  algebraic_solver_plan.md.
 # ==============================================================
 
@@ -48,34 +48,34 @@ const Ex     = VectorValue(1.0, 0.0)
 const Ey     = VectorValue(0.0, 1.0)
 const E1_sig = VectorValue(1.0)
 
-include("vertical_alg.jl")       # Stage 1: σ-mesh + full vertical tensor set (incl. P, Pcal)
-include("tensors_alg.jl")        # constant-tensor constructors + pointwise Operation helpers
-include("horizontal_alg.jl")     # Stage 2: 2D mesh + stacked [η,𝖴x,𝖴y] FE spaces + wall BCs
-include("problem_alg.jl")        # AlgebraicLFEM struct + loop-free residual + hand Jacobians
-include("nlpressure_alg.jl")     # FULL nonlinear pressure (native / ∇h exact-IBP / frozen proj.)
-include("reconstruct_alg.jl")    # w / total-pressure σ-level VTK fields (serial + distributed)
-include("monitor_alg.jl")        # solver monitor + governing-eq residual checker + reports
-include("timeloop_alg.jl")       # ODE solver factory + sequential time loop (VTK + recon)
-include("utilities_alg.jl")      # dispersion analysis, sponge, wavemakers, sequential driver
-include("timeloop_alg_dist.jl")  # DISTRIBUTED mesh builder + GMRES solver + time loop
-include("utilities_alg_dist.jl") # DISTRIBUTED driver setup_and_run_alg_distributed
+include("vertical.jl")       # Stage 1: σ-mesh + full vertical tensor set (incl. P, Pcal)
+include("tensors.jl")        # constant-tensor constructors + pointwise Operation helpers
+include("horizontal.jl")     # Stage 2: 2D mesh + stacked [η,𝖴x,𝖴y] FE spaces + wall BCs
+include("problem.jl")        # LFEMProblem struct + loop-free residual + hand Jacobians
+include("nlpressure.jl")     # FULL nonlinear pressure (native / ∇h exact-IBP / frozen proj.)
+include("reconstruct.jl")    # w / total-pressure σ-level VTK fields (serial + distributed)
+include("monitor.jl")        # solver monitor + governing-eq residual checker + reports
+include("timeloop.jl")       # ODE solver factory + sequential time loop (VTK + recon)
+include("utilities.jl")      # dispersion analysis, sponge, wavemakers, sequential driver
+include("timeloop_dist.jl")  # DISTRIBUTED mesh builder + GMRES solver + time loop
+include("utilities_dist.jl") # DISTRIBUTED driver setup_and_run_distributed
 
 # Vertical stage
-export build_vertical_model_alg
-export assemble_vertical_tensors_alg
+export build_vertical_model
+export assemble_vertical_tensors
 
 # Tensor/algebra helpers
 export alg_to_vec, alg_to_tensor2, alg_to_tensor3
 export alg_dx, alg_dy, alg_mul, alg_dot, alg_dc3, alg_outer, alg_vec2
 
 # Horizontal stage
-export build_horizontal_model_alg
-export build_fe_spaces_alg
+export build_horizontal_model
+export build_fe_spaces
 
 # Problem
-export AlgebraicLFEM, build_problem_alg
-export residual_alg, jacobian_u_alg, jacobian_u_t_alg
-export build_ode_operator_alg, build_ode_operator_alg_ad
+export LFEMProblem, build_problem
+export global_residual, jacobian_u, jacobian_u_t
+export build_ode_operator, build_ode_operator_ad
 
 # Nonlinear pressure (full physics)
 export nlp_native_contrib, nlp_gradh_contrib, nlp_frozen_N
@@ -83,28 +83,28 @@ export nlp_gradH_frozen_contrib, nlp_P_frozen_contrib
 export build_nlp_ctx, update_nlp_state!
 
 # Time integration
-export build_ode_solver_alg
-export make_initial_conditions_alg
-export run_time_loop_alg
+export build_ode_solver
+export make_initial_conditions
+export run_time_loop
 
 # Runtime diagnostics (solver monitoring + governing-eq verification)
-export SolverMonitorAlg, take_step_stats!
-export ResidualCheckerAlg, check_residuals_alg
-export print_solver_banner_alg, step_report_alg, check_report_alg, final_report_alg
+export SolverMonitor, take_step_stats!
+export ResidualChecker, check_residuals
+export print_solver_banner, step_report, check_report, final_report
 
 # Utilities
-export find_wavenumber_alg
-export dispersion_ratio_alg, applicable_kd_alg
-export make_sponge_alg, make_wavemaker_line_alg, make_wavemaker_point_alg
-export setup_and_run_alg
+export find_wavenumber
+export dispersion_ratio, applicable_kd
+export make_sponge, make_wavemaker_line, make_wavemaker_point
+export setup_and_run
 
 # Field reconstruction (w / total pressure at σ-levels, VTK)
-export build_field_recon_alg, extra_field_cellfields_alg, recon_level_str_alg
+export build_field_recon, extra_field_cellfields, recon_level_str
 
 # Distributed (MPI)
-export build_horizontal_model_alg_distributed
-export build_ode_solver_alg_distributed
-export run_time_loop_alg_dist
-export setup_and_run_alg_distributed
+export build_horizontal_model_distributed
+export build_ode_solver_distributed
+export run_time_loop_dist
+export setup_and_run_distributed
 
 end # module GridapLFEM

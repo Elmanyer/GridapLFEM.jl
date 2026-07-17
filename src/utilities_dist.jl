@@ -1,7 +1,7 @@
 # ==============================================================
-#  utilities_alg_dist.jl — Distributed driver for the algebraic LFE-M solver
+#  utilities_dist.jl — Distributed driver for the algebraic LFE-M solver
 #
-#  setup_and_run_alg_distributed: parallel counterpart of setup_and_run_alg,
+#  setup_and_run_distributed: parallel counterpart of setup_and_run,
 #  built on the Gridap-native distributed pattern (as the old solver's
 #  setup_and_run_lfem_distributed / GridapSWE run_distributed):
 #      with_mpi() do distribute
@@ -19,12 +19,12 @@
 #
 #  Launch with Julia's own launcher (system mpiexec has a PMIx mismatch here):
 #    ~/.julia/bin/mpiexecjl --project=. -n 4 julia --project=. my_script.jl
-#  with the script calling setup_and_run_alg_distributed(cpu_grid=(2,2), …)
+#  with the script calling setup_and_run_distributed(cpu_grid=(2,2), …)
 #  and n == prod(cpu_grid).
 # ==============================================================
 
 """
-    setup_and_run_alg_distributed(; cpu_grid, M, p_vert, c_bdy, domain, partition,
+    setup_and_run_distributed(; cpu_grid, M, p_vert, c_bdy, domain, partition,
                                     fe_order, d_val, g, T_wave, A_wave, x_wm, y_wm,
                                     sponge_*, mu_max, T_final, dt, theta, output_dir,
                                     save_every, y_wall_bc, x_wall_bc, linearised,
@@ -33,13 +33,13 @@
                                     nl_iter, nl_tol, ls_rtol, ls_maxiter, print_dt)
 
 Distributed (MPI) driver for the stacked algebraic LFE-M solver. Mirrors
-`setup_and_run_alg` with the horizontal mesh/assembly distributed across
+`setup_and_run` with the horizontal mesh/assembly distributed across
 `cpu_grid = (px, py)` ranks (`px·py == mpiexecjl -n N`); the vertical
 pre-computation is replicated per rank (tiny). ALL physics flags are supported
 in parallel. Returns `(diags, vert, prob)` with `diags = [(t, eta_max)]`
 (eta_max via MPI reduction; point gauges are sequential-only).
 """
-function setup_and_run_alg_distributed(;
+function setup_and_run_distributed(;
     cpu_grid     :: Tuple   = (2, 2),
     # Vertical
     M            :: Int     = 2,
@@ -66,7 +66,7 @@ function setup_and_run_alg_distributed(;
     dt           :: Float64 = 0.02,
     theta        :: Float64 = 0.5,
     # Output
-    output_dir   :: String  = joinpath(@__DIR__, "..", "output", "alg_dist_out"),
+    output_dir   :: String  = joinpath(@__DIR__, "..", "output", "dist_out"),
     save_every   :: Int     = 0,
     print_dt                = nothing,
     # BCs
@@ -111,8 +111,8 @@ function setup_and_run_alg_distributed(;
 
         # ----- Stage 1: Vertical pre-computation (all ranks, identical) -----
         c_bdy_used = isnothing(c_bdy) ?
-            get(ALG_DEFAULT_CBDY, M, collect(LinRange(0.0, 1.0, M+1))) : c_bdy
-        vert = assemble_vertical_tensors_alg(M, p_vert, c_bdy_used)
+            get(DEFAULT_CBDY, M, collect(LinRange(0.0, 1.0, M+1))) : c_bdy
+        vert = assemble_vertical_tensors(M, p_vert, c_bdy_used)
         if i_am_main(ranks)
             @printf("  Nσ=%d   ΣΦ=%.6f\n", vert.N_dof, sum(vert.Phi))
         end
@@ -126,10 +126,10 @@ function setup_and_run_alg_distributed(;
         dom_flat = (Float64(x0), Float64(x1), Float64(y0), Float64(y1))
         nx, ny   = partition
 
-        model, trian = build_horizontal_model_alg_distributed(ranks, cpu_grid,
+        model, trian = build_horizontal_model_distributed(ranks, cpu_grid,
                                                               dom_flat, (nx, ny))
         dO   = Measure(trian, 2*fe_order + 2)
-        U, V = build_fe_spaces_alg(model, fe_order, vert.N_dof;
+        U, V = build_fe_spaces(model, fe_order, vert.N_dof;
                                    y_wall_bc=y_wall_bc, x_wall_bc=x_wall_bc)
         if i_am_main(ranks)
             @printf("  domain [%.1f,%.1f]×[%.1f,%.1f]  partition %d×%d\n", x0,x1,y0,y1,nx,ny)
@@ -141,41 +141,41 @@ function setup_and_run_alg_distributed(;
 
         # ----- Stage 3: Physics setup (all ranks) -----
         omega  = 2.0 * pi / T_wave
-        k_wave = find_wavenumber_alg(omega, d_val, g)
+        k_wave = find_wavenumber(omega, d_val, g)
         if i_am_main(ranks)
             @printf("  Wave: λ=%.2f m, kd=%.2f   CFL_x ~ %.3f\n",
                     2pi/k_wave, k_wave*d_val, sqrt(g*d_val)*dt/((x1-x0)/nx))
         end
-        sponge = make_sponge_alg(dom_flat, sponge_wL, sponge_wR, sponge_wB, sponge_wT, mu_max)
-        wm = isnothing(y_wm) ? make_wavemaker_line_alg(x_wm, A_wave, T_wave, k_wave) :
-                               make_wavemaker_point_alg(x_wm, Float64(y_wm), A_wave, T_wave)
+        sponge = make_sponge(dom_flat, sponge_wL, sponge_wR, sponge_wB, sponge_wT, mu_max)
+        wm = isnothing(y_wm) ? make_wavemaker_line(x_wm, A_wave, T_wave, k_wave) :
+                               make_wavemaker_point(x_wm, Float64(y_wm), A_wave, T_wave)
         dfn = isnothing(d_func) ? (x -> d_val) : d_func
 
-        prob = build_problem_alg(vert; g=g, d_func=dfn,
+        prob = build_problem(vert; g=g, d_func=dfn,
             linearised=linearised, advection=advection, lin_pressure=lin_pressure,
             P_full=P_full, nl_pressure68=nl_pressure68, nl_pressure_full=nl_pressure_full,
             mu_sponge=sponge, wm_src=wm)
 
         # ----- Stage 4: Distributed ODE operator + solver + IC -----
-        op      = build_ode_operator_alg(prob, U, V, trian, dO)
-        monitor = SolverMonitorAlg()
-        solver  = build_ode_solver_alg_distributed(dt; theta=theta,
+        op      = build_ode_operator(prob, U, V, trian, dO)
+        monitor = SolverMonitor()
+        solver  = build_ode_solver_distributed(dt; theta=theta,
                       nl_iter=nl_iter, nl_tol=nl_tol,
                       ls_rtol=ls_rtol, ls_maxiter=ls_maxiter, monitor=monitor)
         checker = check_every > 0 ?
-                  ResidualCheckerAlg(prob, U, V, trian, dO, dt, theta, true) : nothing
+                  ResidualChecker(prob, U, V, trian, dO, dt, theta, true) : nothing
         # interpolate_everywhere is REQUIRED distributed (FEFunction(U, zeros) fails)
-        u0 = make_initial_conditions_alg(U, vert.N_dof; eta0_func=eta0_func)
+        u0 = make_initial_conditions(U, vert.N_dof; eta0_func=eta0_func)
 
         # nl_pressure_full: frozen-projection context (CG+Jacobi mass solve, distributed=true —
-        # base `lu` has no method for a partitioned PSparseMatrix, see nlpressure_alg.jl)
+        # base `lu` has no method for a partitioned PSparseMatrix, see nlpressure.jl)
         nlp = nl_pressure_full ?
               (prob, build_nlp_ctx(model, fe_order, vert.N_dof, trian, dO;
                                    distributed=true, cg_rtol=nlp_cg_rtol,
                                    cg_maxiter=nlp_cg_maxiter)) : nothing
 
         # ----- Stage 5: Time loop -----
-        recon = build_field_recon_alg(vert, dfn, g; rho=rho,
+        recon = build_field_recon(vert, dfn, g; rho=rho,
                                       write_w=write_w, write_pressure=write_pressure)
         if recon !== nothing && i_am_main(ranks)
             @printf("  Field output: write_w=%s write_pressure=%s at σ-levels %s\n",
@@ -184,7 +184,7 @@ function setup_and_run_alg_distributed(;
         end
         if i_am_main(ranks)
             println()
-            print_solver_banner_alg(
+            print_solver_banner(
                 @sprintf("NewtonSolver (GridapSolvers, exact hand Jacobians) | max iters = %d | atol (‖r‖₂) = %.1e, rtol = 1.0e-10",
                          nl_iter, nl_tol),
                 @sprintf("GMRES + Jacobi preconditioner | max iters = %d | rtol = %.1e, atol = 1.0e-14",
@@ -195,7 +195,7 @@ function setup_and_run_alg_distributed(;
             println("\n=== Time loop (algebraic, distributed) ===")
             flush(stdout)
         end
-        diags = run_time_loop_alg_dist(ranks, op, solver, u0, 0.0, T_final;
+        diags = run_time_loop_dist(ranks, op, solver, u0, 0.0, T_final;
                     output_dir  = output_dir,
                     save_every  = save_every,
                     trian       = (save_every > 0 ? trian : nothing),

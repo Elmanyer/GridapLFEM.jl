@@ -76,18 +76,18 @@ Every flag is validated against a hand-derived reference or the per-layer oracle
 GridapLFEM.jl/
 ├── src/                         # the solver package
 │   ├── GridapLFEM.jl             module entry: deps, includes, exports
-│   ├── vertical_alg.jl            Stage 1: σ-mesh + vertical tensor set (M, Φ, 𝓜, 𝓖, A, K, P, …)
-│   ├── tensors_alg.jl             constant-tensor constructors + pointwise Operation helpers
-│   ├── horizontal_alg.jl          Stage 2: 2D mesh + stacked FE spaces (serial + distributed)
-│   ├── problem_alg.jl             AlgebraicLFEM struct, residual, hand Jacobians
-│   ├── nlpressure_alg.jl          full nonlinear pressure (native / exact-IBP / frozen projections)
-│   ├── reconstruct_alg.jl         w(σ) / total-pressure σ-level VTK field reconstruction
-│   ├── timeloop_alg.jl            sequential ODE solver factory + time loop
-│   ├── utilities_alg.jl           dispersion analysis, sponge/wavemaker, setup_and_run_alg
-│   ├── timeloop_alg_dist.jl       distributed mesh + GMRES+Jacobi+Newton solver + time loop
-│   └── utilities_alg_dist.jl      setup_and_run_alg_distributed
+│   ├── vertical.jl            Stage 1: σ-mesh + vertical tensor set (M, Φ, 𝓜, 𝓖, A, K, P, …)
+│   ├── tensors.jl             constant-tensor constructors + pointwise Operation helpers
+│   ├── horizontal.jl          Stage 2: 2D mesh + stacked FE spaces (serial + distributed)
+│   ├── problem.jl             LFEMProblem struct, residual, hand Jacobians
+│   ├── nlpressure.jl          full nonlinear pressure (native / exact-IBP / frozen projections)
+│   ├── reconstruct.jl         w(σ) / total-pressure σ-level VTK field reconstruction
+│   ├── timeloop.jl            sequential ODE solver factory + time loop
+│   ├── utilities.jl           dispersion analysis, sponge/wavemaker, setup_and_run
+│   ├── timeloop_dist.jl       distributed mesh + GMRES+Jacobi+Newton solver + time loop
+│   └── utilities_dist.jl      setup_and_run_distributed
 ├── test/                        # 9 test files — see Validation
-├── examples/                    # sequential examples (plane_wave_alg.jl, ring_wave_alg.jl)
+├── examples/                    # sequential examples (plane_wave.jl, ring_wave.jl)
 │   └── distributed/               4 cluster-ready MPI examples + README (mpiexecjl/SLURM)
 ├── building_files/              # math derivation, design/implementation plans, superseded prototype
 │   ├── main.tex / main.log        LaTeX derivation (authoritative math reference, §8 = this solver)
@@ -140,7 +140,7 @@ include("GridapLFEM.jl/src/GridapLFEM.jl")
 using .GridapLFEM
 
 # Sequential run: plane wave in a flume, linear regime
-diags, vert, prob = setup_and_run_alg(
+diags, vert, prob = setup_and_run(
     M           = 2,                       # vertical layers (LFE-2)
     domain      = ((0.0, 60.0), (0.0, 10.0)),
     partition   = (120, 20),               # horizontal mesh
@@ -161,7 +161,7 @@ diags, vert, prob = setup_and_run_alg(
 
 ```julia
 # Same physics, cpu_grid=(px,py) ranks; call from an mpiexecjl -n (px*py) context
-diags, vert, prob = setup_and_run_alg_distributed(
+diags, vert, prob = setup_and_run_distributed(
     cpu_grid = (2, 2), M = 2, domain = (0.0,60.0,0.0,10.0), partition = (120,20),
     d_val = 3.5, T_wave = 1.6, A_wave = 0.001, x_wm = 12.0,
     sponge_wL = 12.0, sponge_wR = 12.0, mu_max = 5.0,
@@ -180,7 +180,7 @@ communication, not yet implemented). See `examples/distributed/README.md` for cl
 
 ---
 
-## `setup_and_run_alg` / `setup_and_run_alg_distributed` — key options
+## `setup_and_run` / `setup_and_run_distributed` — key options
 
 | Argument | Meaning |
 |---|---|
@@ -210,18 +210,18 @@ All gates below are implemented as standalone Julia scripts in `test/`; run with
 
 | Test | What it checks | Result |
 |---|---|---|
-| `test_vertical_alg.jl` | vertical tensor identities, dispersion bridge vs Yang & Liu Table 1 | 15/15 PASS |
-| `test_primitives_alg.jl` | tensor-constructor index order, `∂x/∂y` orientation, contraction semantics | 9/9 PASS |
-| `test_equivalence_alg.jl` | virtual-work match vs the per-layer oracle solver, 3 flag configs | 10/10 PASS, rel ≤ 7e-15 |
-| `test_basic_alg.jl` | smoke run, linearised + fully nonlinear | 6/6 PASS |
-| `test_dispersion_alg.jl` | FEM phase speed vs linear theory at kd=3 | PASS, err 0.90% |
-| `test_conservation_alg.jl` | mass conservation, closed basin, nonlinear advection | PASS, drift 7.8e-16 |
-| `test_sloshing_alg.jl` | standing-wave period vs LFE-M dispersion theory | PASS, err 1.44% |
-| `test_nlpressure_alg.jl` | exact-IBP identity (machine precision), structural scaling, dynamics with all pressure flags on | 9/9 PASS, rel 4e-15 |
-| `test_basic_alg_distributed.jl` | 4-rank MPI, linear + fully nonlinear vs sequential | 6/6 PASS, rel ≤ 5e-9 |
-| `test_nlpressure_alg_distributed.jl` | 4-rank MPI, full nonlinear pressure vs sequential | 3/3 PASS, rel 4.6e-9 |
+| `test_vertical.jl` | vertical tensor identities, dispersion bridge vs Yang & Liu Table 1 | 15/15 PASS |
+| `test_primitives.jl` | tensor-constructor index order, `∂x/∂y` orientation, contraction semantics | 9/9 PASS |
+| `test_equivalence.jl` | virtual-work match vs the per-layer oracle solver, 3 flag configs | 10/10 PASS, rel ≤ 7e-15 |
+| `test_basic.jl` | smoke run, linearised + fully nonlinear | 6/6 PASS |
+| `test_dispersion.jl` | FEM phase speed vs linear theory at kd=3 | PASS, err 0.90% |
+| `test_conservation.jl` | mass conservation, closed basin, nonlinear advection | PASS, drift 7.8e-16 |
+| `test_sloshing.jl` | standing-wave period vs LFE-M dispersion theory | PASS, err 1.44% |
+| `test_nlpressure.jl` | exact-IBP identity (machine precision), structural scaling, dynamics with all pressure flags on | 9/9 PASS, rel 4e-15 |
+| `test_basic_distributed.jl` | 4-rank MPI, linear + fully nonlinear vs sequential | 6/6 PASS, rel ≤ 5e-9 |
+| `test_nlpressure_distributed.jl` | 4-rank MPI, full nonlinear pressure vs sequential | 3/3 PASS, rel 4.6e-9 |
 
-The oracle for `test_equivalence_alg.jl` is the independently validated per-layer solver in
+The oracle for `test_equivalence.jl` is the independently validated per-layer solver in
 `../LFE-M_2D_solver/`. See the `building_files/algebraic_*_plan.md` files for full derivations, implementation
 notes, and detailed results of each validation pass.
 
@@ -232,11 +232,11 @@ notes, and detailed results of each validation pass.
 - **Never apply `∇` to an `Operation`-composed expression that contains a test-function basis** —
   Gridap's block-array `copyto!` isn't implemented for that combination. Expand such derivatives
   by hand using linearity of the vertical contraction in the test,
-  `∂ₐ(W⋅𝓣) = (∂ₐW)⋅𝓣`, and `Σₐ Ψ·∂ₐUₐ = Ψ·DU` (see `nlpressure_alg.jl` for worked examples).
+  `∂ₐ(W⋅𝓣) = (∂ₐW)⋅𝓣`, and `Σₐ Ψ·∂ₐUₐ = Ψ·DU` (see `nlpressure.jl` for worked examples).
 - **AD Jacobians are not viable** on this residual under Gridap 0.19.11 — the multifield
   autodiff split cannot dualize through `∂t(u)` (a missing `TransientMultiFieldCellField`
-  constructor, not a scale/compile-cost issue). Hand-coded Jacobians (`jacobian_u_alg`,
-  `jacobian_u_t_alg`) are the permanent design, not a workaround; they are exact for everything
+  constructor, not a scale/compile-cost issue). Hand-coded Jacobians (`jacobian_u`,
+  `jacobian_u_t`) are the permanent design, not a workaround; they are exact for everything
   except the flag-gated `O(A³)` nonlinear-pressure terms, which are quasi-Newton (as in the oracle).
 - **Distributed linear solves must not use `lu()`** — it has no method for a partitioned
   `PSparseMatrix`. Use `GMRESSolver`/`CGSolver` with `JacobiLinearSolver()` from GridapSolvers,

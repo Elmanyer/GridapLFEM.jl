@@ -1,5 +1,5 @@
 # ==============================================================
-#  _dist_common_alg.jl — shared config for the distributed example scripts
+#  _dist_common.jl — shared config for the distributed example scripts
 #                        (algebraic solver, GridapLFEM)
 #
 #  All example scripts read their parameters from environment variables so the

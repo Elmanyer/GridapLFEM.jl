@@ -1,5 +1,5 @@
 # ==============================================================
-#  nlpressure_alg.jl — FULL nonlinear pressure blocks (𝓐 / 𝓚 / 𝓟 families)
+#  nlpressure.jl — FULL nonlinear pressure blocks (𝓐 / 𝓚 / 𝓟 families)
 #
 #  Completes the model physics: all eight 𝓝_kj components in the three
 #  residual blocks of main.tex §8 (bed-slope 𝓐, surface-slope 𝓚, leading 𝓟).
@@ -20,7 +20,7 @@
 #  oracle's 𝓝 treatment). Slot bookkeeping (a⊗b)[k,j]=a[k]b[j]:
 #    N¹,N² carry the differentiated divergence in the k slot (Ψ·U_a),
 #    N³,N⁴,N⁵ carry the velocity in the k slot (U_a·Ψ).
-#  Verified at machine precision by test_nlpressure_alg.jl gate G1.
+#  Verified at machine precision by test_nlpressure.jl gate G1.
 # ==============================================================
 
 "Contract the test layer-vector into the FIRST index of a constant 3-tensor:
@@ -49,7 +49,7 @@ of c ∈ {6,7,8} is cancelled analytically against one prefactor H (M_c ≡ H·N
     ∂_a𝖺 = (∂_a∂_x h)𝖴x + (∂_xh)∂_a𝖴x + (∂_a∂_y h)𝖴y + (∂_yh)∂_a𝖴y.
 Every term is subtracted (momentum RHS).
 """
-function nlp_native_contrib(prob::AlgebraicLFEM, d_cf, η, H, dhx, dhy, dHx, dHy,
+function nlp_native_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy, dHx, dHy,
                             Ux, Uy, Wx, Wy, DW, af, bf, S, DU, dO)
     # M_c = H·N_c for c = 6,7,8 (first slot carries k = the u_k-type factor)
     M6 = (-1.0)*alg_outer(af, S)
@@ -103,7 +103,7 @@ ANALYTIC bed Hessian. Boundary integrals vanish on solid walls (u·n = 0
 enters every q) / behind sponges — dropped. Vanishes identically on a flat
 bed. Residual-only (no per-step state) → works serial AND distributed.
 """
-function nlp_gradh_contrib(prob::AlgebraicLFEM, d_cf, η, H, dhx, dhy,
+function nlp_gradh_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy,
                            Ux, Uy, Wx, Wy, af, bf, S, DU, dO)
     hxx, hxy, hyy = alg_bed_hessian(d_cf)
     ddx = dhx + alg_dx(η)                       # ∂_x H
@@ -167,7 +167,7 @@ end
 Surface-slope (𝓚, ∇H-prefactored) half of c ∈ {1,2,4,5} using the frozen
 projections (irreducible ∂²η — IBP does not help here).
 """
-function nlp_gradH_frozen_contrib(prob::AlgebraicLFEM, H, dHx, dHy,
+function nlp_gradH_frozen_contrib(prob::LFEMProblem, H, dHx, dHy,
                                   Wx, Wy, N1, N2, N4, N5, dO)
     NK = alg_dc3(prob.K3[1], N1) + alg_dc3(prob.K3[2], N2) +
          alg_dc3(prob.K3[4], N4) + alg_dc3(prob.K3[5], N5)
@@ -180,7 +180,7 @@ end
 Leading-pressure (𝓟) part of c ∈ {1,2,4,5} using the frozen projections
 (IBP unusable — it would need second TEST derivatives through D_W).
 """
-function nlp_P_frozen_contrib(prob::AlgebraicLFEM, H, DW, N1, N2, N4, N5, dO)
+function nlp_P_frozen_contrib(prob::LFEMProblem, H, DW, N1, N2, N4, N5, dO)
     NP = alg_dc3(prob.P3[1], N1) + alg_dc3(prob.P3[2], N2) +
          alg_dc3(prob.P3[4], N4) + alg_dc3(prob.P3[5], N5)
     return ∫( (-1.0)*(H*H)*(NP ⋅ DW) ) * dO
@@ -201,7 +201,7 @@ well-conditioned (unlike the advection-dominated Jacobian), so:
   * `distributed=false` (sequential): direct `lu` factorisation, ONE-OFF.
   * `distributed=true`: `CGSolver(JacobiLinearSolver())` from GridapSolvers —
     the same Jacobi-preconditioned Krylov family as the main distributed
-    Newton solve (`build_ode_solver_alg_distributed`), since base `lu` has no
+    Newton solve (`build_ode_solver_distributed`), since base `lu` has no
     method for a partitioned `PSparseMatrix`. `numerical_setup` is built ONCE
     from the assembled mass matrix and reused every step (`solve!`).
 
@@ -243,7 +243,7 @@ step's residual (project-then-differentiate, one-step lag). Uses `ctx.solve`
 RHS/solution vectors are matrix-derived (see `build_nlp_ctx` docstring) so
 they are exactly compatible with `ctx.Mmass`'s partition on both paths.
 """
-function update_nlp_state!(prob::AlgebraicLFEM, ctx, u_n)
+function update_nlp_state!(prob::LFEMProblem, ctx, u_n)
     η  = u_n[1];  Ux = u_n[2];  Uy = u_n[3]
     d_cf = CellField(prob.d_func, ctx.trian)
     H  = d_cf + η

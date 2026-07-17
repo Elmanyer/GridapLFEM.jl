@@ -42,7 +42,7 @@ mu_max    = 5.0
 # ── Wave gauges (y = Ly/2) ────────────────────────────────────
 gauges = [(x_wm + 2*4.0, Ly/2), (x_wm + 4*4.0, Ly/2), (x_wm + 8*4.0, Ly/2)]
 
-diags, vert, prob = setup_and_run_alg(
+diags, vert, prob = setup_and_run(
     M           = 2,
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
@@ -64,7 +64,7 @@ diags, vert, prob = setup_and_run_alg(
     linearised  = false,             # linear regime benchmark (A = 0.001)
     advection   = true,
     save_every  = 0,                # one VTK snapshot per period
-    output_dir  = joinpath(@__DIR__, "..", "output", "plane_wave_alg"),
+    output_dir  = joinpath(@__DIR__, "..", "output", "plane_wave"),
     gauges      = gauges,
 )
 

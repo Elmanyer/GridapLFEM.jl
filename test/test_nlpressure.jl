@@ -1,5 +1,5 @@
 # ==============================================================
-#  test_nlpressure_alg.jl — FULL nonlinear pressure validation (gates G1–G3)
+#  test_nlpressure.jl — FULL nonlinear pressure validation (gates G1–G3)
 #
 #  G1  MACHINE-PRECISION IBP identity (∇h half, comps 1,2,4,5): on a state of
 #      polynomials of degree ≤ 2 (all second derivatives globally constant ⇒
@@ -13,7 +13,7 @@
 #  G3  Dynamics: short run over a tanh submerged bar with ALL pressure flags
 #      on — bounded, no NaN.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_nlpressure_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_nlpressure.jl
 # ==============================================================
 
 if !isdefined(Main, :GridapLFEM)
@@ -25,7 +25,7 @@ using Gridap.ODEs
 using LinearAlgebra, Printf
 
 println("=" ^ 60)
-println("  test_nlpressure_alg.jl — full nonlinear pressure (G1–G3)")
+println("  test_nlpressure.jl — full nonlinear pressure (G1–G3)")
 println("=" ^ 60)
 
 n_pass = 0; n_fail = 0
@@ -36,12 +36,12 @@ function check(name, cond)
 end
 
 # ---- common setup -------------------------------------------------------------
-vert = assemble_vertical_tensors_alg(2, 1, [0.0, 0.728, 1.0])
+vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
 Nσ   = vert.N_dof                      # = 3
 Lx, Ly = 4.0, 2.0
-model, trian = build_horizontal_model_alg(((0.0,Lx),(0.0,Ly)), (8,4))
+model, trian = build_horizontal_model(((0.0,Lx),(0.0,Ly)), (8,4))
 dO = Measure(trian, 14)                # integrates every polynomial term exactly
-U, V = build_fe_spaces_alg(model, 2, Nσ; y_wall_bc=false)
+U, V = build_fe_spaces(model, 2, Nσ; y_wall_bc=false)
 nq = num_free_dofs(V[1])               # continuity-row count
 
 # polynomial state (all degree ≤ 2; u·n = 0 on the whole boundary)
@@ -103,7 +103,7 @@ H_an   = CellField(Hval, trian)
 dhx_an = CellField(x -> 2*b1*x[1] + b2*x[2], trian)
 dhy_an = CellField(x -> b2*x[1], trian)
 
-vert_prob = build_problem_alg(vert; g=9.81, d_func=d_fun)
+vert_prob = build_problem(vert; g=9.81, d_func=d_fun)
 
 # direct form: −∫ H ∂_αh (W_α ⋅ (𝓐3[c] ⊡ N_c^exact)),  c ∈ {1,2,4,5}
 N1_an = (-1.0)*(alg_outer(dxS_an, Ux_an) + alg_outer(dyS_an, Uy_an))
@@ -188,7 +188,7 @@ println("\n-- G3: dynamics over a submerged bar, ALL pressure flags on --")
 # ==============================================================
 
 bar(x) = 3.5 - 0.5*1.5*(tanh((x[1]-20.0)/4.0) - tanh((x[1]-32.0)/4.0))
-diags, _, _ = setup_and_run_alg(
+diags, _, _ = setup_and_run(
     M=2, d_val=3.5, T_wave=2.0, A_wave=0.001,
     domain=((0.0,60.0),(0.0,2.0)), partition=(60,2), fe_order=2,
     x_wm=8.0, sponge_wL=8.0, sponge_wR=8.0, mu_max=30.0,
@@ -205,5 +205,5 @@ println()
 println("=" ^ 60)
 @printf("  Results: %d PASS,  %d FAIL\n", n_pass, n_fail)
 println("=" ^ 60)
-n_fail > 0 ? error("test_nlpressure_alg: $n_fail failed!") :
+n_fail > 0 ? error("test_nlpressure: $n_fail failed!") :
              println("  Full nonlinear pressure validated.")

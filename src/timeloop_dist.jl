@@ -1,10 +1,10 @@
 # ==============================================================
-#  timeloop_alg_dist.jl — Distributed (MPI) mesh, solver stack and time loop
+#  timeloop_dist.jl — Distributed (MPI) mesh, solver stack and time loop
 #
 #  Port of ../../LFE-M_2D_solver/src/timeloop2D_dist.jl to the algebraic
 #  package. Because the stacked residual/Jacobians are Gridap-native CellField
 #  algebra (Operation is forwarded for DistributedCellField), THE SAME
-#  residual_alg/jacobian_*_alg run distributed unchanged — including the FULL
+#  residual/jacobian_* run distributed unchanged — including the FULL
 #  nonlinear physics (advection, slope pressure, P_full, nl_pressure68). No
 #  owned V⊗H loop is needed, unlike the old solver.
 #
@@ -19,13 +19,13 @@
 # ==============================================================
 
 """
-    build_horizontal_model_alg_distributed(ranks, cpu_grid, domain, partition)
+    build_horizontal_model_distributed(ranks, cpu_grid, domain, partition)
 
 Partitioned 2D Cartesian mesh across MPI ranks. `cpu_grid=(px,py)` is the
 process topology (`px·py == mpiexec -n`); `domain=(x0,x1,y0,y1)` (flat 4-tuple);
 `partition=(nx,ny)` cells (nx divisible by px, ny by py). Returns `(model, trian)`.
 """
-function build_horizontal_model_alg_distributed(ranks, cpu_grid::Tuple,
+function build_horizontal_model_distributed(ranks, cpu_grid::Tuple,
                                                 domain::NTuple{4,Float64},
                                                 partition::Tuple)
     model = CartesianDiscreteModel(ranks, cpu_grid, domain, partition)
@@ -34,14 +34,14 @@ function build_horizontal_model_alg_distributed(ranks, cpu_grid::Tuple,
 end
 
 """
-    build_ode_solver_alg_distributed(dt; theta, nl_iter, nl_tol, ls_rtol,
+    build_ode_solver_distributed(dt; theta, nl_iter, nl_tol, ls_rtol,
                                      ls_maxiter, monitor)
 
 Distributed ODE solver factory: ThetaMethod wrapping NewtonSolver(GMRES with
 Jacobi preconditioner) — the scalable GridapSWE-pattern stack. Pass a
-`SolverMonitorAlg` as `monitor` to collect per-step convergence statistics.
+`SolverMonitor` as `monitor` to collect per-step convergence statistics.
 """
-function build_ode_solver_alg_distributed(dt::Float64;
+function build_ode_solver_distributed(dt::Float64;
                                           solver_type :: Symbol  = :theta,
                                           theta       :: Float64 = 0.5,
                                           nl_iter     :: Int     = 20,
@@ -64,12 +64,12 @@ function build_ode_solver_alg_distributed(dt::Float64;
 end
 
 """
-    eta_max_alg_distributed(eta_n)
+    eta_max_distributed(eta_n)
 
 Global max |η| across ranks: own_values only (no ghost duplication) + MPI max
 reduction. (norm(PVector, Inf) is broken in PartitionedArrays 0.3.5.)
 """
-function eta_max_alg_distributed(eta_n)
+function eta_max_distributed(eta_n)
     free_vals = get_free_dof_values(eta_n)
     local_maxes = map(own_values(free_vals)) do lv
         isempty(lv) ? 0.0 : maximum(abs, lv)
@@ -78,7 +78,7 @@ function eta_max_alg_distributed(eta_n)
 end
 
 """
-    run_time_loop_alg_dist(ranks, op, solver, u0, t0, T_final; output_dir,
+    run_time_loop_dist(ranks, op, solver, u0, t0, T_final; output_dir,
                            save_every, trian, Nσ, print_every, print_dt, recon,
                            trial_space, dt, nlp, monitor, checker, check_every,
                            check_tol)
@@ -87,19 +87,19 @@ Distributed time loop. Returns `[(t, eta_max, nl_iters, res_nl, t_solve)]`
 (eta_max by MPI reduction; no point gauges; the last three are −1/NaN without
 a `monitor`). VTK: per-σ-node components of the stacked fields under the OLD
 field names (`eta, u1x, u1y, …`), plus the reconstructed `w_s<σ>`/`p_s<σ>`
-fields when `recon` is given (from `build_field_recon_alg` — pure CellField
+fields when `recon` is given (from `build_field_recon` — pure CellField
 algebra, distributed-transparent).
 
 Runtime diagnostics (printed on rank 0 only; the underlying stats/assemblies
 are computed collectively on ALL ranks — do not rank-guard the calls):
-  * `monitor` (SolverMonitorAlg) — Newton iterations, residuals, convergence
+  * `monitor` (SolverMonitor) — Newton iterations, residuals, convergence
     flag, last GMRES iteration count, solve wall time per step;
   * `print_every` — report every N steps (default 1); a legacy `print_dt`
     (simulation seconds) overrides it when given;
-  * `checker` (ResidualCheckerAlg) + `check_every` — independent reassembly
+  * `checker` (ResidualChecker) + `check_every` — independent reassembly
     of the governing equations, verified against `check_tol`.
 """
-function run_time_loop_alg_dist(ranks, op, solver, u0,
+function run_time_loop_dist(ranks, op, solver, u0,
                                 t0::Float64, T_final::Float64;
                                 output_dir :: String  = "output",
                                 save_every :: Int     = 0,
@@ -111,8 +111,8 @@ function run_time_loop_alg_dist(ranks, op, solver, u0,
                                 trial_space           = nothing,
                                 dt         :: Float64 = 0.0,
                                 nlp                   = nothing,   # (prob, ctx) for nl_pressure_full
-                                monitor               = nothing,   # SolverMonitorAlg
-                                checker               = nothing,   # ResidualCheckerAlg
+                                monitor               = nothing,   # SolverMonitor
+                                checker               = nothing,   # ResidualChecker
                                 check_every:: Int     = 0,
                                 check_tol  :: Float64 = 1e-8)
     if i_am_main(ranks)
@@ -140,7 +140,7 @@ function run_time_loop_alg_dist(ranks, op, solver, u0,
             step  += 1
             stats  = monitor === nothing ? nothing : take_step_stats!(monitor)
             eta_n  = u_n[1]
-            emax   = eta_max_alg_distributed(eta_n)
+            emax   = eta_max_distributed(eta_n)
             push!(diags, (t=t_n, eta_max=emax,
                           nl_iters=stats === nothing ? -1 : stats.nl_iters,
                           res_nl=stats === nothing ? NaN : stats.res,
@@ -156,8 +156,8 @@ function run_time_loop_alg_dist(ranks, op, solver, u0,
                 if i_am_main(ranks)
                     wall  = time() - wall0
                     eta_s = steps_total > step ? (wall/step)*(steps_total - step) : NaN
-                    println(step_report_alg(step, t_n, emax, stats;
-                                            eta_s=eta_s, tag="[alg-dist]"))
+                    println(step_report(step, t_n, emax, stats;
+                                            eta_s=eta_s, tag="[dist]"))
                     flush(stdout)
                 end
                 t_last_print = t_n
@@ -169,9 +169,9 @@ function run_time_loop_alg_dist(ranks, op, solver, u0,
 
             # independent verification of the governing equations (collective!)
             if checker !== nothing && check_every > 0 && step % check_every == 0
-                cres = check_residuals_alg(checker, t_n, u_n, prev_vals)
+                cres = check_residuals(checker, t_n, u_n, prev_vals)
                 if cres !== nothing && i_am_main(ranks)
-                    println(check_report_alg(step, t_n, cres, check_tol))
+                    println(check_report(step, t_n, cres, check_tol))
                     flush(stdout)
                 end
             end
@@ -188,7 +188,7 @@ function run_time_loop_alg_dist(ranks, op, solver, u0,
                     if recon !== nothing
                         u_prev = prev_vals === nothing ? nothing :
                                  FEFunction(trial_space, prev_vals)
-                        append!(fields, extra_field_cellfields_alg(u_n, u_prev, dt, recon, trian))
+                        append!(fields, extra_field_cellfields(u_n, u_prev, dt, recon, trian))
                     end
                     pvd[t_n] = createvtk(trian, fname; cellfields=fields, append=false)
                 end
@@ -204,7 +204,7 @@ function run_time_loop_alg_dist(ranks, op, solver, u0,
             end
 
             # nl_pressure_full: refresh the frozen projections π𝖲, π𝖻 (CG+Jacobi
-            # distributed mass solve, see nlpressure_alg.jl :: build_nlp_ctx)
+            # distributed mass solve, see nlpressure.jl :: build_nlp_ctx)
             if nlp !== nothing
                 update_nlp_state!(nlp[1], nlp[2], u_n)
             end
@@ -228,9 +228,9 @@ function run_time_loop_alg_dist(ranks, op, solver, u0,
     end
 
     if i_am_main(ranks)
-        print(final_report_alg(step, isempty(diags) ? t0 : diags[end].t,
+        print(final_report(step, isempty(diags) ? t0 : diags[end].t,
                                time() - wall0, nl_total, t_solve_tot, n_vtk;
-                               tag="[alg-dist]"))
+                               tag="[dist]"))
         flush(stdout)
     end
     return diags

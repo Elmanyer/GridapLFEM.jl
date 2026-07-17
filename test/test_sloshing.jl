@@ -1,5 +1,5 @@
 # ==============================================================
-#  test_sloshing_alg.jl — standing-wave dynamics (SMALL & FAST)
+#  test_sloshing.jl — standing-wave dynamics (SMALL & FAST)
 #
 #  Port of ../../LFE-M_2D_solver/test/test_sloshing_lfem2D.jl.
 #  Closed basin [0,L], first sloshing mode η₀ = A cos(πx/L), u = 0 IC.
@@ -7,7 +7,7 @@
 #  k = π/L:  c² = g d · Φᵀ(M − (kd)²B)⁻¹Φ,  T = 2π/(kc). We measure the
 #  numerical period at the antinode gauge (DFT peak) and compare (<5%).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_sloshing_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_sloshing.jl
 # ==============================================================
 
 if !isdefined(Main, :GridapLFEM)
@@ -17,11 +17,11 @@ using .GridapLFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 60)
-println("  test_sloshing_alg.jl — standing wave vs dispersion theory")
+println("  test_sloshing.jl — standing wave vs dispersion theory")
 println("=" ^ 60)
 
 g = 9.81; d_val = 1.0; L = 2.0; Ly = 0.5
-vert = assemble_vertical_tensors_alg(2, 1, [0.0, 0.728, 1.0])
+vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
 
 # theory: ω from the LFE-M dispersion at k = π/L
 k = π / L; kd = k * d_val
@@ -36,7 +36,7 @@ eta0(x) = A0 * cos(π * x[1] / L)
 dt = T_th / 40; Tf = 3 * T_th
 
 # closed basin (x_wall_bc MANDATORY for IC problems); no wavemaker, no sponge
-diags, _, _ = setup_and_run_alg(
+diags, _, _ = setup_and_run(
     M=2, c_bdy=[0.0, 0.728, 1.0], d_val=d_val, g=g,
     domain=((0.0, L), (0.0, Ly)), partition=(24, 2), fe_order=2,
     T_wave=1.0, A_wave=0.0, x_wm=-1e6,
@@ -64,5 +64,5 @@ mx = maximum(abs.(gs))
                (println("  FAIL  unbounded ($mx)"); global n_fail += 1)
 
 println("=" ^ 60)
-n_fail > 0 ? error("test_sloshing_alg: $n_fail failed!") :
+n_fail > 0 ? error("test_sloshing: $n_fail failed!") :
              println("  Standing-wave dynamics validated.")

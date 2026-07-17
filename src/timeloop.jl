@@ -1,5 +1,5 @@
 # ==============================================================
-#  timeloop_alg.jl — ODE solver factory + time loop (stacked layout)
+#  timeloop.jl — ODE solver factory + time loop (stacked layout)
 #
 #  Port of ../../LFE-M_2D_solver/src/timeloop2D.jl. Only VTK output changes:
 #  the stacked VectorValue{Nσ} velocity fields are written per σ-node
@@ -8,15 +8,15 @@
 # ==============================================================
 
 """
-    build_ode_solver_alg(dt; solver_type, theta, rho_inf, nl_iter, nl_tol,
+    build_ode_solver(dt; solver_type, theta, rho_inf, nl_iter, nl_tol,
                          show_trace, monitor)
 
 Gridap ODE solver factory: `:theta` (Crank–Nicolson θ=0.5, recommended),
 `:gen_alpha`, `:rk3` (SDIRK). Nonlinear solve: Newton + LU. Pass a
-`SolverMonitorAlg` as `monitor` to collect per-step convergence statistics
+`SolverMonitor` as `monitor` to collect per-step convergence statistics
 (the monitor wraps the Newton solver transparently).
 """
-function build_ode_solver_alg(dt::Float64;
+function build_ode_solver(dt::Float64;
                               solver_type :: Symbol  = :theta,
                               theta       :: Float64 = 0.5,
                               rho_inf     :: Float64 = 0.5,
@@ -43,8 +43,8 @@ function build_ode_solver_alg(dt::Float64;
 end
 
 """
-    make_initial_conditions_alg(U)                      (sequential-only fast path)
-    make_initial_conditions_alg(U, Nσ; eta0_func=nothing)
+    make_initial_conditions(U)                      (sequential-only fast path)
+    make_initial_conditions(U, Nσ; eta0_func=nothing)
 
 Initial conditions for the stacked MultiFieldFESpace U. The 2-arg form uses
 `interpolate_everywhere` — REQUIRED in distributed mode (`FEFunction(U, zeros)`
@@ -52,11 +52,11 @@ creates a plain local array and fails on PVector layouts) and equally valid
 sequentially. `eta0_func` (x → η₀) enables initial-condition-release problems
 (Gaussian hump, soliton); those REQUIRE `x_wall_bc=true` (closed basin).
 """
-function make_initial_conditions_alg(U)
+function make_initial_conditions(U)
     return FEFunction(U, zeros(Float64, num_free_dofs(U)))
 end
 
-function make_initial_conditions_alg(U, Nσ::Int; eta0_func = nothing)
+function make_initial_conditions(U, Nσ::Int; eta0_func = nothing)
     zvv  = VectorValue(ntuple(_ -> 0.0, Nσ)...)
     eta0 = isnothing(eta0_func) ? (x -> 0.0) : eta0_func
     return interpolate_everywhere([eta0, x -> zvv, x -> zvv], U)
@@ -66,7 +66,7 @@ end
 alg_component(Uf, j::Int) = Operation(v -> v[j])(Uf)
 
 """
-    run_time_loop_alg(op, solver, u0, t0, T_final; output_dir, save_every,
+    run_time_loop(op, solver, u0, t0, T_final; output_dir, save_every,
                       trian, Nσ, print_every, print_dt, gauges, recon,
                       trial_space, dt, nlp, monitor, checker, check_every,
                       check_tol)
@@ -74,20 +74,20 @@ alg_component(Uf, j::Int) = Operation(v -> v[j])(Uf)
 Time loop from t0 to T_final. Returns `[(t, eta_max, gauge_vals, nl_iters,
 res_nl, t_solve)]` (the last three are −1/NaN when no `monitor` is given).
 `save_every > 0` writes VTK snapshots (fields: eta, u1x, u1y, …, uNσx, uNσy)
-plus a `solution.pvd` index. If `recon` (from `build_field_recon_alg`) is given,
+plus a `solution.pvd` index. If `recon` (from `build_field_recon`) is given,
 the reconstructed `w_s<σ>`/`p_s<σ>` fields are appended to each snapshot
 (`trial_space`+`dt` required for the u̇ backward FD of the pressure).
 
 Runtime diagnostics:
-  * `monitor` (SolverMonitorAlg, also passed to `build_ode_solver_alg`) —
+  * `monitor` (SolverMonitor, also passed to `build_ode_solver`) —
     per-step Newton iterations, residuals, convergence flag, solve wall time;
   * `print_every` — report line every N steps (default 1 = every step);
     a legacy `print_dt` (simulation seconds) overrides it when given;
-  * `checker` (ResidualCheckerAlg) + `check_every` — every N steps reassemble
+  * `checker` (ResidualChecker) + `check_every` — every N steps reassemble
     the governing equations independently and verify ‖R‖∞ ≤ `check_tol`.
 Stops early on NaN or eta_max > 1e4.
 """
-function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
+function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
                            output_dir :: String  = "output",
                            save_every :: Int     = 0,
                            trian                 = nothing,
@@ -99,8 +99,8 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
                            trial_space           = nothing,
                            dt         :: Float64 = 0.0,
                            nlp                   = nothing,   # (prob, ctx) for nl_pressure_full
-                           monitor               = nothing,   # SolverMonitorAlg
-                           checker               = nothing,   # ResidualCheckerAlg
+                           monitor               = nothing,   # SolverMonitor
+                           checker               = nothing,   # ResidualChecker
                            check_every:: Int     = 0,
                            check_tol  :: Float64 = 1e-8)
     mkpath(output_dir)
@@ -146,7 +146,7 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
             if do_print
                 wall  = time() - wall0
                 eta_s = steps_total > step ? (wall/step)*(steps_total - step) : NaN
-                println(step_report_alg(step, t_n, emax, stats; eta_s=eta_s))
+                println(step_report(step, t_n, emax, stats; eta_s=eta_s))
                 flush(stdout)
                 t_last_print = t_n
             end
@@ -157,9 +157,9 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
 
             # independent verification of the governing equations
             if checker !== nothing && check_every > 0 && step % check_every == 0
-                cres = check_residuals_alg(checker, t_n, u_n, prev_vals)
+                cres = check_residuals(checker, t_n, u_n, prev_vals)
                 if cres !== nothing
-                    println(check_report_alg(step, t_n, cres, check_tol))
+                    println(check_report(step, t_n, cres, check_tol))
                     flush(stdout)
                 end
             end
@@ -176,7 +176,7 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
                     if recon !== nothing
                         u_prev = prev_vals === nothing ? nothing :
                                  FEFunction(trial_space, prev_vals)
-                        append!(fields, extra_field_cellfields_alg(u_n, u_prev, dt, recon, trian))
+                        append!(fields, extra_field_cellfields(u_n, u_prev, dt, recon, trian))
                     end
                     pvd[t_n] = createvtk(trian, fname; cellfields=fields, append=false)
                 end
@@ -210,7 +210,7 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
         _loop(nothing)
     end
 
-    print(final_report_alg(step, isempty(diags) ? t0 : diags[end].t,
+    print(final_report(step, isempty(diags) ? t0 : diags[end].t,
                            time() - wall0, nl_total, t_solve_tot, n_vtk))
     flush(stdout)
     return diags

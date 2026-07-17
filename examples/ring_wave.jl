@@ -1,5 +1,5 @@
 # ==============================================================
-#  ring_wave_alg.jl — Ring Waves from a Point Source (algebraic solver)
+#  ring_wave.jl — Ring Waves from a Point Source (algebraic solver)
 #
 #  Port of ../../LFE-M_2D_solver/examples/ring_wave2D.jl to the stacked
 #  algebraic package. Gaussian point-source wavemaker at the centre of a
@@ -11,7 +11,7 @@
 #  DEFAULT = QUICK validation size (8 periods, 80×80 cells). Production:
 #    L=200, n_side=200, T_final=20*T_wave  → multi-hour.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/ring_wave_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/examples/ring_wave.jl
 # ==============================================================
 
 if !isdefined(Main, :GridapLFEM)
@@ -21,7 +21,7 @@ using .GridapLFEM
 using Printf
 
 println("=" ^ 60)
-println("  ring_wave_alg.jl — point-source ring waves (LFE-2, algebraic)")
+println("  ring_wave.jl — point-source ring waves (LFE-2, algebraic)")
 println("=" ^ 60)
 
 # ── Physical parameters ──────────────────────────────────────
@@ -52,7 +52,7 @@ gauges   = [(x_wm + r, y_wm) for r in r_gauges]
 push!(gauges, (x_wm, y_wm + 10.0))
 push!(gauges, (x_wm + 10.0/sqrt(2.0), y_wm + 10.0/sqrt(2.0)))
 
-diags, vert, prob = setup_and_run_alg(
+diags, vert, prob = setup_and_run(
     M           = 2,
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
@@ -74,7 +74,7 @@ diags, vert, prob = setup_and_run_alg(
     linearised  = true,
     advection   = false,
     save_every  = 30,
-    output_dir  = joinpath(@__DIR__, "..", "output", "ring_wave_alg"),
+    output_dir  = joinpath(@__DIR__, "..", "output", "ring_wave"),
     gauges      = gauges,
 )
 
@@ -94,4 +94,4 @@ gv_d  = [d.gauge_vals[end]   for d in diags if !isempty(d.gauge_vals)]
 n2 = length(gv_y) ÷ 2
 amp_y = maximum(abs.(gv_y[n2:end])); amp_d = maximum(abs.(gv_d[n2:end]))
 @printf("  symmetry at r=10:  +x %.6f  +y %.6f  diag %.6f\n", amps[2], amp_y, amp_d)
-println("\n  VTK output: GridapLFEM.jl/output/ring_wave_alg/solution.pvd")
+println("\n  VTK output: GridapLFEM.jl/output/ring_wave/solution.pvd")

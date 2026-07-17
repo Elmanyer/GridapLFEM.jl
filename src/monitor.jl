@@ -1,9 +1,9 @@
 # ==============================================================
-#  monitor_alg.jl — runtime solver instrumentation & diagnostics
+#  monitor.jl — runtime solver instrumentation & diagnostics
 #
 #  Three tools, shared by the sequential and distributed time loops:
 #
-#  1. SolverMonitorAlg — a transparent NonlinearSolver wrapper. The ODE
+#  1. SolverMonitor — a transparent NonlinearSolver wrapper. The ODE
 #     machinery (ThetaMethod/GeneralizedAlpha/RungeKutta) calls solve! on it
 #     once per stage; the wrapper delegates to the real solver, wall-times
 #     the call and harvests the convergence data:
@@ -16,7 +16,7 @@
 #     Stats accumulate across stage calls (RK) and are read+reset once per
 #     time step with take_step_stats!.
 #
-#  2. ResidualCheckerAlg — independent verification that the governing
+#  2. ResidualChecker — independent verification that the governing
 #     equations are satisfied. ThetaMethod solves exactly
 #         residual(t_n + θΔt, θ u_{n+1} + (1−θ) u_n, (u_{n+1}−u_n)/Δt) = 0
 #     so reassembling that residual from the accepted states must return a
@@ -34,14 +34,14 @@
 # ==============================================================
 
 """
-    SolverMonitorAlg()
+    SolverMonitor()
 
 Transparent nonlinear-solver wrapper collecting per-step convergence
-statistics. Create empty, pass to `build_ode_solver_alg(...; monitor=...)`
+statistics. Create empty, pass to `build_ode_solver(...; monitor=...)`
 (the factory attaches the real solver), read each step with
 [`take_step_stats!`](@ref).
 """
-mutable struct SolverMonitorAlg <: Gridap.Algebra.NonlinearSolver
+mutable struct SolverMonitor <: Gridap.Algebra.NonlinearSolver
     inner     :: Any        # the wrapped NonlinearSolver (set by the factory)
     ncalls    :: Int        # solve! calls since last take_step_stats! (RK: stages)
     nl_iters  :: Int        # accumulated nonlinear iterations
@@ -52,9 +52,9 @@ mutable struct SolverMonitorAlg <: Gridap.Algebra.NonlinearSolver
     t_solve   :: Float64    # accumulated wall time inside solve! [s]
 end
 
-SolverMonitorAlg() = SolverMonitorAlg(nothing, 0, 0, NaN, NaN, true, -1, 0.0)
+SolverMonitor() = SolverMonitor(nothing, 0, 0, NaN, NaN, true, -1, 0.0)
 
-function Gridap.Algebra.solve!(x::AbstractVector, m::SolverMonitorAlg,
+function Gridap.Algebra.solve!(x::AbstractVector, m::SolverMonitor,
                                op::Gridap.Algebra.NonlinearOperator, cache)
     t0    = time()
     cache = Gridap.Algebra.solve!(x, m.inner, op, cache)
@@ -65,7 +65,7 @@ function Gridap.Algebra.solve!(x::AbstractVector, m::SolverMonitorAlg,
 end
 
 # NLsolve-backed sequential solver: the result object lives on the cache.
-function _monitor_harvest!(m::SolverMonitorAlg, nls::NLSolver, cache)
+function _monitor_harvest!(m::SolverMonitor, nls::NLSolver, cache)
     r = cache.result
     r === nothing && return nothing
     m.nl_iters += r.iterations
@@ -81,7 +81,7 @@ function _monitor_harvest!(m::SolverMonitorAlg, nls::NLSolver, cache)
 end
 
 # GridapSolvers NewtonSolver (distributed stack): stats live on the ConvergenceLog.
-function _monitor_harvest!(m::SolverMonitorAlg, nls::NewtonSolver, cache)
+function _monitor_harvest!(m::SolverMonitor, nls::NewtonSolver, cache)
     log   = nls.log
     niter = log.num_iters
     r0    = log.residuals[1]
@@ -97,16 +97,16 @@ function _monitor_harvest!(m::SolverMonitorAlg, nls::NewtonSolver, cache)
     return nothing
 end
 
-_monitor_harvest!(m::SolverMonitorAlg, nls, cache) = nothing   # unknown solver: timing only
+_monitor_harvest!(m::SolverMonitor, nls, cache) = nothing   # unknown solver: timing only
 
 """
-    take_step_stats!(m::SolverMonitorAlg) → NamedTuple | nothing
+    take_step_stats!(m::SolverMonitor) → NamedTuple | nothing
 
 Read the statistics accumulated since the previous call and reset the
 accumulators. Returns `nothing` when no solve happened in between.
 Fields: `ncalls, nl_iters, res0, res, converged, lin_iters, t_solve`.
 """
-function take_step_stats!(m::SolverMonitorAlg)
+function take_step_stats!(m::SolverMonitor)
     m.ncalls == 0 && return nothing
     s = (ncalls=m.ncalls, nl_iters=m.nl_iters, res0=m.res0, res=m.res_final,
          converged=m.converged, lin_iters=m.lin_iters, t_solve=m.t_solve)
@@ -120,9 +120,9 @@ end
 # --------------------------------------------------------------
 
 # PVector-safe norms (∞-norm of a PVector must go through own_values).
-_alg_norm2(v)   = norm(v)
-_alg_norminf(v::AbstractVector) = isempty(v) ? 0.0 : maximum(abs, v)
-function _alg_norminf(v::PVector)
+_norm2(v)   = norm(v)
+_norminf(v::AbstractVector) = isempty(v) ? 0.0 : maximum(abs, v)
+function _norminf(v::PVector)
     lm = map(own_values(v)) do lv
         isempty(lv) ? 0.0 : maximum(abs, lv)
     end
@@ -130,14 +130,14 @@ function _alg_norminf(v::PVector)
 end
 
 """
-    ResidualCheckerAlg(prob, U, V, trian, dO, dt, theta, is_theta)
+    ResidualChecker(prob, U, V, trian, dO, dt, theta, is_theta)
 
 Reassembles the residual of the governing equations from the accepted time
 steps (independently of the ODE solver's own assembly). See
-[`check_residuals_alg`](@ref).
+[`check_residuals`](@ref).
 """
-struct ResidualCheckerAlg
-    prob     :: AlgebraicLFEM
+struct ResidualChecker
+    prob     :: LFEMProblem
     U        :: Any
     V        :: Any
     trian    :: Any
@@ -148,7 +148,7 @@ struct ResidualCheckerAlg
 end
 
 """
-    check_residuals_alg(chk, t_n, u_n, prev_vals) → NamedTuple | nothing
+    check_residuals(chk, t_n, u_n, prev_vals) → NamedTuple | nothing
 
 `prev_vals` = free-DOF values of u_{n-1}. Returns
   * `res_theta`, `res_theta_inf` — ‖R‖₂/‖R‖∞ of the θ-scheme discrete system
@@ -158,7 +158,7 @@ end
     u̇ from backward differencing (local time-discretisation error, O(Δt)).
 Collective in distributed runs (assembly + norms) — call on ALL ranks.
 """
-function check_residuals_alg(chk::ResidualCheckerAlg, t_n::Float64, u_n, prev_vals)
+function check_residuals(chk::ResidualChecker, t_n::Float64, u_n, prev_vals)
     (prev_vals === nothing || chk.dt <= 0) && return nothing
     dt = chk.dt
     vn = get_free_dof_values(u_n)
@@ -175,16 +175,16 @@ function check_residuals_alg(chk::ResidualCheckerAlg, t_n::Float64, u_n, prev_va
         uth = FEFunction(chk.U, vth)
         tth = t_n - dt + θ*dt
         tu  = Gridap.ODEs.TransientCellField(uth, (udot,))
-        rv  = assemble_vector(v -> residual_alg(tth, tu, v, chk.prob, chk.trian, chk.dO),
+        rv  = assemble_vector(v -> global_residual(tth, tu, v, chk.prob, chk.trian, chk.dO),
                               chk.V)
-        res_th, res_th_inf = _alg_norm2(rv), _alg_norminf(rv)
+        res_th, res_th_inf = _norm2(rv), _norminf(rv)
     end
 
     tu2 = Gridap.ODEs.TransientCellField(u_n, (udot,))
-    rv2 = assemble_vector(v -> residual_alg(t_n, tu2, v, chk.prob, chk.trian, chk.dO),
+    rv2 = assemble_vector(v -> global_residual(t_n, tu2, v, chk.prob, chk.trian, chk.dO),
                           chk.V)
     return (res_theta=res_th, res_theta_inf=res_th_inf,
-            res_pde=_alg_norm2(rv2), res_pde_inf=_alg_norminf(rv2))
+            res_pde=_norm2(rv2), res_pde_inf=_norminf(rv2))
 end
 
 # --------------------------------------------------------------
@@ -192,7 +192,7 @@ end
 # --------------------------------------------------------------
 
 "Format a duration in seconds as mm:ss or h:mm:ss."
-function fmt_hms_alg(s::Float64)
+function fmt_hms(s::Float64)
     (isnan(s) || !isfinite(s)) && return "--:--"
     sec = round(Int, s)
     h, rem = divrem(sec, 3600)
@@ -201,12 +201,12 @@ function fmt_hms_alg(s::Float64)
 end
 
 """
-    print_solver_banner_alg(nl_desc, ls_desc; solver_type, theta, dt, t0, T_final,
+    print_solver_banner(nl_desc, ls_desc; solver_type, theta, dt, t0, T_final,
                             print_every, print_dt, check_every, check_tol, io=stdout)
 
 Solver-configuration banner printed by the drivers before the time loop.
 """
-function print_solver_banner_alg(nl_desc::String, ls_desc::String;
+function print_solver_banner(nl_desc::String, ls_desc::String;
                                  solver_type::Symbol, theta::Float64,
                                  dt::Float64, t0::Float64, T_final::Float64,
                                  print_every::Int=1, print_dt=nothing,
@@ -234,13 +234,13 @@ function print_solver_banner_alg(nl_desc::String, ls_desc::String;
 end
 
 """
-    step_report_alg(step, t_n, emax, stats; eta_s=NaN, tag="") → String
+    step_report(step, t_n, emax, stats; eta_s=NaN, tag="") → String
 
 One-line per-step progress report: step index, simulation time, max |η|,
 nonlinear convergence data (iterations, initial→final residual, flag, last
 GMRES count), nonlinear-solve wall time, run ETA.
 """
-function step_report_alg(step::Int, t_n::Float64, emax::Float64, stats;
+function step_report(step::Int, t_n::Float64, emax::Float64, stats;
                          eta_s::Float64=NaN, tag::String="")
     io = IOBuffer()
     isempty(tag) || print(io, tag, " ")
@@ -253,18 +253,18 @@ function step_report_alg(step::Int, t_n::Float64, emax::Float64, stats;
         stats.lin_iters >= 0 && @printf(io, "  gmres=%d", stats.lin_iters)
         @printf(io, "  | %7.3f s", stats.t_solve)
     end
-    isnan(eta_s) || print(io, "  | ETA ", fmt_hms_alg(eta_s))
+    isnan(eta_s) || print(io, "  | ETA ", fmt_hms(eta_s))
     return String(take!(io))
 end
 
 """
-    check_report_alg(step, t_n, cres, tol) → String
+    check_report(step, t_n, cres, tol) → String
 
 Report line for a governing-equation residual check (`cres` from
-[`check_residuals_alg`](@ref)). The θ-scheme ‖R‖∞ is compared against `tol`:
+[`check_residuals`](@ref)). The θ-scheme ‖R‖∞ is compared against `tol`:
 `OK` = the accepted step satisfies the discrete governing equations.
 """
-function check_report_alg(step::Int, t_n::Float64, cres, tol::Float64)
+function check_report(step::Int, t_n::Float64, cres, tol::Float64)
     io = IOBuffer()
     @printf(io, "  [check] step %d  t=%.4f:", step, t_n)
     if !isnan(cres.res_theta)
@@ -278,11 +278,11 @@ function check_report_alg(step::Int, t_n::Float64, cres, tol::Float64)
 end
 
 """
-    final_report_alg(step, t_final, wall_s, nl_total, t_solve_total, n_vtk; tag="") → String
+    final_report(step, t_final, wall_s, nl_total, t_solve_total, n_vtk; tag="") → String
 
 End-of-run performance summary.
 """
-function final_report_alg(step::Int, t_final::Float64, wall_s::Float64,
+function final_report(step::Int, t_final::Float64, wall_s::Float64,
                           nl_total::Int, t_solve_total::Float64, n_vtk::Int;
                           tag::String="")
     io = IOBuffer()
@@ -290,8 +290,8 @@ function final_report_alg(step::Int, t_final::Float64, wall_s::Float64,
     @printf(io, "Done. %d steps, final t=%.3f\n", step, t_final)
     if step > 0
         @printf(io, "  wall time   : %s  (%.3f s/step average)\n",
-                fmt_hms_alg(wall_s), wall_s/step)
-        @printf(io, "  solve time  : %s  (%.1f%% of wall)\n", fmt_hms_alg(t_solve_total),
+                fmt_hms(wall_s), wall_s/step)
+        @printf(io, "  solve time  : %s  (%.1f%% of wall)\n", fmt_hms(t_solve_total),
                 wall_s > 0 ? 100.0*t_solve_total/wall_s : 0.0)
         @printf(io, "  Newton iters: %d total  (%.2f/step average)\n",
                 nl_total, nl_total/step)

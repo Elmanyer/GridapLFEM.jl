@@ -1,5 +1,5 @@
 # ==============================================================
-#  vertical_alg.jl — Stage 1: σ-mesh and the full LFE-M vertical tensor set
+#  vertical.jl — Stage 1: σ-mesh and the full LFE-M vertical tensor set
 #
 #  Port of ../../LFE-M_2D_solver/src/vertical_lfem2D.jl (validated 28/28)
 #  with ONE addition: the nonlinear leading-pressure tensor
@@ -20,13 +20,13 @@
 # ==============================================================
 
 """
-    build_vertical_model_alg(M, c_bdy)
+    build_vertical_model(M, c_bdy)
 
 1D Gridap CartesianDiscreteModel for σ ∈ [0,1]: `M` elements with boundaries
 at `c_bdy` (length M+1), via a piecewise-linear coordinate map.
 "tag_1" = σ=0 (seabed), "tag_2" = σ=1 (free surface).
 """
-function build_vertical_model_alg(M::Int, c_bdy::Vector{Float64})
+function build_vertical_model(M::Int, c_bdy::Vector{Float64})
     @assert length(c_bdy) == M + 1
     @assert c_bdy[1] ≈ 0.0 && c_bdy[end] ≈ 1.0
 
@@ -47,13 +47,13 @@ function build_vertical_model_alg(M::Int, c_bdy::Vector{Float64})
 end
 
 """
-    compute_antiderivative_alg(phi_j_fn, V_F, U_F, dS)
+    compute_antiderivative(phi_j_fn, V_F, U_F, dS)
 
 φⱼ_int = ∫₀^σ φⱼ dσ' as a degree-(p+1) FEFunction via the BVP
 dF/dσ = +φⱼ, F(0)=0 (H1-seminorm Galerkin — exact, the trial space contains
 the antiderivative).
 """
-function compute_antiderivative_alg(phi_j_fn, V_F, U_F, dS)
+function compute_antiderivative(phi_j_fn, V_F, U_F, dS)
     a(F, v) = ∫((∇(F) ⋅ E1_sig) * (∇(v) ⋅ E1_sig)) * dS
     l(v)    = ∫((phi_j_fn) * (∇(v) ⋅ E1_sig)) * dS
     op      = AffineFEOperator(a, l, U_F, V_F)
@@ -61,7 +61,7 @@ function compute_antiderivative_alg(phi_j_fn, V_F, U_F, dS)
 end
 
 """
-    assemble_vertical_tensors_alg(M, p, c_bdy) → NamedTuple
+    assemble_vertical_tensors(M, p, c_bdy) → NamedTuple
 
 Full LFE-M vertical static tensor set. Fields:
 
@@ -79,11 +79,11 @@ Full LFE-M vertical static tensor set. Fields:
   B     (N×N)      dispersion matrix −∫φᵢ_int φⱼ_int ≤ 0
   + σ-mesh/FE objects (sigma_model, phi_fns, phi_int_fns, dphi_fns, …)
 """
-function assemble_vertical_tensors_alg(M::Int, p::Int, c_bdy::Vector{Float64})
+function assemble_vertical_tensors(M::Int, p::Int, c_bdy::Vector{Float64})
     @assert length(c_bdy) == M + 1
     @assert c_bdy[1] ≈ 0.0 && c_bdy[end] ≈ 1.0
 
-    sigma_model = build_vertical_model_alg(M, c_bdy)
+    sigma_model = build_vertical_model(M, c_bdy)
     sigma_trian = Triangulation(sigma_model)
 
     reffe_phi = ReferenceFE(lagrangian, Float64, p)
@@ -112,7 +112,7 @@ function assemble_vertical_tensors_alg(M::Int, p::Int, c_bdy::Vector{Float64})
         dphi_fns[j] = ∇(phi_fns[j]) ⋅ E1_sig
     end
     for j in 1:N_dof
-        phi_int_fns[j] = compute_antiderivative_alg(phi_fns[j], V_int, U_int, dS)
+        phi_int_fns[j] = compute_antiderivative(phi_fns[j], V_int, U_int, dS)
     end
 
     # ---- depth weights Φⱼ -----------------------------------------------------

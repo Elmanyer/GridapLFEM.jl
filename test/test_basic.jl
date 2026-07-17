@@ -1,5 +1,5 @@
 # ==============================================================
-#  test_basic_alg.jl — smoke test (SMALL & FAST)
+#  test_basic.jl — smoke test (SMALL & FAST)
 #
 #  Port of ../../LFE-M_2D_solver/test/test_basic_lfem2D.jl to the algebraic
 #  package. Tiny flat-bed plane-wave flume (16×2 m, 16×2 Q2 cells, M=2,
@@ -8,7 +8,7 @@
 #    linearised=false, advection=true → fully nonlinear target
 #  Checks: no NaN, bounded amplitude, wave generated.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_basic_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_basic.jl
 # ==============================================================
 
 if !isdefined(Main, :GridapLFEM)
@@ -18,7 +18,7 @@ using .GridapLFEM
 using Printf
 
 println("=" ^ 60)
-println("  test_basic_alg.jl — algebraic solver smoke (small)")
+println("  test_basic.jl — algebraic solver smoke (small)")
 println("=" ^ 60)
 
 n_pass = 0; n_fail = 0
@@ -33,7 +33,7 @@ T_wave = 1.6                 # d = 3.5 ⇒ kd = 5.5, λ ≈ 4 m
 
 function run_mode(linflag, advflag, label)
     println("\n--- $label (linearised=$linflag, advection=$advflag) ---")
-    diags, vert, prob = setup_and_run_alg(
+    diags, vert, prob = setup_and_run(
         M=2, d_val=3.5, T_wave=T_wave, A_wave=A_wave,
         domain=((0.0,16.0),(0.0,2.0)), partition=(16,2), fe_order=2,
         x_wm=4.0, y_wm=nothing,
@@ -58,5 +58,5 @@ println()
 println("=" ^ 60)
 @printf("  Results: %d PASS,  %d FAIL\n", n_pass, n_fail)
 println("=" ^ 60)
-n_fail > 0 ? error("test_basic_alg: $n_fail failed!") :
+n_fail > 0 ? error("test_basic: $n_fail failed!") :
              println("  Algebraic solver smoke passed.")

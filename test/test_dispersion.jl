@@ -1,12 +1,12 @@
 # ==============================================================
-#  test_dispersion_alg.jl — FEM dispersion gate (SMALL & FAST)
+#  test_dispersion.jl — FEM dispersion gate (SMALL & FAST)
 #
 #  Port of ../../LFE-M_2D_solver/test/test_dispersion_lfem2D.jl.
 #  Time-domain check that the algebraic solver's R_P (leading pressure)
 #  term reproduces the linear dispersion end-to-end: kd = 3, gauges 2λ from
 #  the wavemaker separated λ/2, DFT phase at the forcing frequency.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_dispersion_alg.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_dispersion.jl
 # ==============================================================
 
 if !isdefined(Main, :GridapLFEM)
@@ -16,7 +16,7 @@ using .GridapLFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 60)
-println("  test_dispersion_alg.jl — algebraic solver dispersion (kd=3)")
+println("  test_dispersion.jl — algebraic solver dispersion (kd=3)")
 println("=" ^ 60)
 
 n_pass = 0; n_fail = 0
@@ -58,7 +58,7 @@ dt = T_wave/24; Tf = 8*T_wave
 x_g1 = x_wm + 2lam; x_g2 = x_g1 + lam/2; y_g = Ly/2
 @printf("  Domain %.0f×%.0f m, %d×%d cells, %d periods\n", Lx, Ly, nx, ny, 8)
 
-diags, _, _ = setup_and_run_alg(
+diags, _, _ = setup_and_run(
     M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,ny),
     fe_order=2, d_val=d_val, T_wave=T_wave, A_wave=0.0005, x_wm=x_wm,
     y_wm=nothing, sponge_wL=8.0, sponge_wR=8.0, sponge_wB=0.0, sponge_wT=0.0,
@@ -75,5 +75,5 @@ println()
 println("=" ^ 60)
 @printf("  Results: %d PASS,  %d FAIL\n", n_pass, n_fail)
 println("=" ^ 60)
-n_fail > 0 ? error("test_dispersion_alg: $n_fail failed!") :
+n_fail > 0 ? error("test_dispersion: $n_fail failed!") :
              println("  Algebraic solver reproduces dispersion.")
