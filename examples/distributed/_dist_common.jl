@@ -19,7 +19,7 @@
 #    LFEM_WRITE_PRESSURE  write p_s<σ> fields (1/0)       1
 #    LFEM_CBDY        comma-sep σ node boundaries        (else optimised M≤4 / uniform)
 #    LFEM_RHO         water density [kg/m³]              1025
-#    LFEM_PRINT_DT    console print interval [s]         (script default)
+#    LFEM_PRINT_EVERY solver progress report every N steps    (default 10)
 #    LFEM_LINEARISED  linearised physics (1/0)           0  (fully nonlinear)
 #    LFEM_ADVECTION   nonlinear advection (1/0)          1
 #    LFEM_LINP        linear slope pressure A/K (1/0)    script default

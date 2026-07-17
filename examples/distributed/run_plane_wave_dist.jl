@@ -36,9 +36,9 @@ x_wm     = genv_f("LFEM_XWM", 40.0)
 sponge   = genv_f("LFEM_SPONGE", 40.0)
 mumax    = genv_f("LFEM_MUMAX", 5.0)
 dt       = genv_f("LFEM_DT", 0.02)
-periods  = genv_f("LFEM_PERIODS", 75.0)
+periods  = genv_f("LFEM_PERIODS", 50.0)
 Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
-save_ev  = genv_i("LFEM_SAVE_EVERY", 20)
+save_ev  = genv_i("LFEM_SAVE_EVERY", 10)
 outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "plane_wave_dist_M$(M)"))
 
 banner("PLANE WAVE (line source) — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
@@ -54,7 +54,7 @@ diags, vert, prob = setup_and_run_distributed(
     y_wall_bc=true, x_wall_bc=false,
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
-    print_dt=genv_f("LFEM_PRINT_DT", Twave))
+    print_every=genv_i("LFEM_PRINT_EVERY", 10))
 
 is_rank0() && @printf("plane_wave_dist done: %d steps, %d snapshots to %s\n",
                       length(diags), length(diags) ÷ max(save_ev,1), outdir)

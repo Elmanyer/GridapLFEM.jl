@@ -55,7 +55,7 @@ diags, vert, prob = setup_and_run_distributed(
     y_wall_bc=true, x_wall_bc=true,                  # ★ CLOSED basin (mandatory for IC)
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
-    print_dt=genv_f("LFEM_PRINT_DT", 1.0))
+    print_every=genv_i("LFEM_PRINT_EVERY", 10))
 
 is_rank0() && @printf("ic_hump_dist done: %d steps, %d snapshots to %s\n",
                       length(diags), length(diags) ÷ max(save_ev,1), outdir)
