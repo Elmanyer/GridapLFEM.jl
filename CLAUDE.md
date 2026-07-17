@@ -39,7 +39,7 @@ vertical nodes; velocity modes are 1-based `j=1..Nσ`, one per node. (Do **not**
 | `wavemaker_sponge_BC.tex` | Source of the wavemaker/sponge/BC subsection — **now integrated into `main.tex` §8** (with the BC boundary-flux list modernised there); kept as the standalone original. | integrated |
 | `algebraic_residual_math.md` | ★ Operator simplifications: how to write the §8 residual with native Gridap tensor ops, **no MultiField decomposition, no vertical-index loops**. The `L`/`N` pressure stacks, the leading-pressure `R_P` (§6b), IBP of second-derivative terms, verified Gridap operator table. | **spec — start here** |
 | `algebraic_residual_plan.md` | ★ Phased implementation plan (P1–P6) for the new residual: FE-space redesign, tensor constants, residual skeleton, Jacobian, validation, risks. | **plan — then here** |
-| `src/` (`GridapLFEM.jl` + 9 submodules) | ★★★ **The self-contained SERIAL + DISTRIBUTED algebraic solver PACKAGE** (`module GridapLFEM`): vertical tensors (incl. new `Pcal`), constant-tensor + Operation helpers, stacked spaces (distributed-safe MultiField dispatch), loop-free residual + hand Jacobians (the SAME code runs distributed — Operation is forwarded for `DistributedCellField`), θ time loops (sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…` — old naming) **plus reconstructed `w_s<σ>`/`p_s<σ>` fields** (`reconstruct_alg.jl`, `write_w`/`write_pressure`), drivers `setup_and_run_alg` and `setup_and_run_alg_distributed` (with_mpi; **full nonlinear physics distributed** — no V⊗H loop needed; `eta0_func` IC hook). No dependency on the old solver. | **VALIDATED 2026-07-10** |
+| `src/` (`GridapLFEM.jl` + 10 submodules) | ★★★ **The self-contained SERIAL + DISTRIBUTED algebraic solver PACKAGE** (`module GridapLFEM`): vertical tensors (incl. new `Pcal`), constant-tensor + Operation helpers, stacked spaces (distributed-safe MultiField dispatch), loop-free residual + hand Jacobians (the SAME code runs distributed — Operation is forwarded for `DistributedCellField`), θ time loops (sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…` — old naming) **plus reconstructed `w_s<σ>`/`p_s<σ>` fields** (`reconstruct_alg.jl`, `write_w`/`write_pressure`), drivers `setup_and_run_alg` and `setup_and_run_alg_distributed` (with_mpi; **full nonlinear physics distributed** — no V⊗H loop needed; `eta0_func` IC hook). No dependency on the old solver. | **VALIDATED 2026-07-10** |
 | `test/` (6 tests) | `test_vertical_alg` 15/15, `test_primitives_alg` 9/9, `test_equivalence_alg` 10/10 (oracle virtual-work, ≤7e-15), `test_basic_alg` 6/6, `test_dispersion_alg` 1/1 (kd=3 err 0.90%), `test_basic_alg_distributed` (4 ranks 2×2, linear + FULLY NONLINEAR, sequential agreement). | **PASS** |
 | `examples/` | `plane_wave_alg.jl`, `ring_wave_alg.jl` (sequential, quick defaults) + `examples/distributed/` — 4 env-configurable cluster scripts (plane wave, ring wave, IC hump closed basin, bathymetry/shoaling) + README with mpiexecjl/SLURM templates. | scripted |
 | `algebraic_solver_plan.md` | The package port plan (module/test/example map, notation rules) + execution results. | executed |
@@ -366,6 +366,28 @@ identical to, the matrix's own PRange, and `mul!` asserts exact partition equali
 `solve!`. `test/test_nlpressure_alg_distributed.jl` (4 ranks, 2×2, tanh bar, ALL pressure flags)
 matches the sequential reference to rel 4.6e-9. Every physics flag now runs both serial and
 distributed.
+
+**RUNTIME SOLVER MONITORING (2026-07-17).** New `src/monitor_alg.jl` (serial + distributed):
+* `SolverMonitorAlg` — transparent `NonlinearSolver` wrapper (pass via `monitor=` to the two
+  solver factories); harvests per step: Newton iterations, initial→final residual, convergence
+  flag, last GMRES iteration count (distributed), nonlinear-solve wall time. Sources:
+  `NLSolver` cache `.result` (NLsolve, `store_trace=true` now set) / GridapSolvers
+  `NewtonSolver.log` (ConvergenceLog).
+* `ResidualCheckerAlg` + `check_residuals_alg` — every `check_every` steps the GOVERNING
+  EQUATIONS are reassembled independently: (a) the θ-scheme discrete residual at
+  `(t+θΔt, θu_{n+1}+(1−θ)u_n, (u_{n+1}−u_n)/Δt)` (exactly what ThetaMethod solves — must sit at
+  the Newton tolerance, verified ~1e-13; prints WARN if > `check_tol`), (b) the instantaneous PDE
+  residual at `(t_n, u_n, u̇_FD)` (= local time-discretisation error, O(Δt)). PVector-safe norms.
+* Both time loops print: solver-config banner (solver type, tolerances, max iters, dt/steps),
+  per-step line (`step, t, eta_max, NL its, r0→r, [conv], gmres, solve s, ETA`), timed VTK
+  writes, non-convergence warnings, end-of-run summary (wall, s/step, %solve, Newton totals).
+  Diags tuples gained `nl_iters, res_nl, t_solve`.
+* Driver kwargs (both `setup_and_run_alg*`): `nl_iter, nl_tol` (sequential — was hardcoded),
+  `print_every=1` (step-based; legacy `print_dt` still honoured when passed — cluster scripts
+  unchanged), `check_every=50` (0=off), `check_tol=1e-8`.
+* Fixed along the way: commit a640ffc had `createvtk(...; cellfields=fields; append=false)` —
+  a double-semicolon SYNTAX ERROR in both time loops (HEAD did not even load); now
+  `cellfields=fields, append=false`.
 
 Remaining (open): physical benchmarks at scale (Stokes harmonics / Dingemans bar on the cluster)
 and a distributed-gauge utility.

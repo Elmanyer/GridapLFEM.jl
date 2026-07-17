@@ -8,10 +8,13 @@
 # ==============================================================
 
 """
-    build_ode_solver_alg(dt; solver_type, theta, rho_inf, nl_iter, nl_tol, show_trace)
+    build_ode_solver_alg(dt; solver_type, theta, rho_inf, nl_iter, nl_tol,
+                         show_trace, monitor)
 
 Gridap ODE solver factory: `:theta` (Crank–Nicolson θ=0.5, recommended),
-`:gen_alpha`, `:rk3` (SDIRK). Nonlinear solve: Newton + LU.
+`:gen_alpha`, `:rk3` (SDIRK). Nonlinear solve: Newton + LU. Pass a
+`SolverMonitorAlg` as `monitor` to collect per-step convergence statistics
+(the monitor wraps the Newton solver transparently).
 """
 function build_ode_solver_alg(dt::Float64;
                               solver_type :: Symbol  = :theta,
@@ -19,10 +22,15 @@ function build_ode_solver_alg(dt::Float64;
                               rho_inf     :: Float64 = 0.5,
                               nl_iter     :: Int     = 20,
                               nl_tol      :: Float64 = 1e-10,
-                              show_trace  :: Bool    = false)
+                              show_trace  :: Bool    = false,
+                              monitor                = nothing)
     ls  = LUSolver()
     nls = NLSolver(ls; show_trace=show_trace, method=:newton,
-                   iterations=nl_iter, ftol=nl_tol)
+                   iterations=nl_iter, ftol=nl_tol, store_trace=true)
+    if monitor !== nothing
+        monitor.inner = nls
+        nls = monitor
+    end
     if solver_type == :theta
         return ThetaMethod(nls, dt, theta)
     elseif solver_type == :gen_alpha
@@ -59,13 +67,24 @@ alg_component(Uf, j::Int) = Operation(v -> v[j])(Uf)
 
 """
     run_time_loop_alg(op, solver, u0, t0, T_final; output_dir, save_every,
-                      trian, Nσ, print_dt, gauges, recon, trial_space, dt)
+                      trian, Nσ, print_every, print_dt, gauges, recon,
+                      trial_space, dt, nlp, monitor, checker, check_every,
+                      check_tol)
 
-Time loop from t0 to T_final. Returns `[(t, eta_max, gauge_vals)]`.
+Time loop from t0 to T_final. Returns `[(t, eta_max, gauge_vals, nl_iters,
+res_nl, t_solve)]` (the last three are −1/NaN when no `monitor` is given).
 `save_every > 0` writes VTK snapshots (fields: eta, u1x, u1y, …, uNσx, uNσy)
 plus a `solution.pvd` index. If `recon` (from `build_field_recon_alg`) is given,
 the reconstructed `w_s<σ>`/`p_s<σ>` fields are appended to each snapshot
 (`trial_space`+`dt` required for the u̇ backward FD of the pressure).
+
+Runtime diagnostics:
+  * `monitor` (SolverMonitorAlg, also passed to `build_ode_solver_alg`) —
+    per-step Newton iterations, residuals, convergence flag, solve wall time;
+  * `print_every` — report line every N steps (default 1 = every step);
+    a legacy `print_dt` (simulation seconds) overrides it when given;
+  * `checker` (ResidualCheckerAlg) + `check_every` — every N steps reassemble
+    the governing equations independently and verify ‖R‖∞ ≤ `check_tol`.
 Stops early on NaN or eta_max > 1e4.
 """
 function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
@@ -73,23 +92,34 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
                            save_every :: Int     = 0,
                            trian                 = nothing,
                            Nσ         :: Int     = 1,
-                           print_dt   :: Float64 = 10.0,
+                           print_every:: Int     = 1,
+                           print_dt              = nothing,   # legacy time-based reporting
                            gauges                = [],
                            recon                 = nothing,
                            trial_space           = nothing,
                            dt         :: Float64 = 0.0,
-                           nlp                   = nothing)   # (prob, ctx) for nl_pressure_full
+                           nlp                   = nothing,   # (prob, ctx) for nl_pressure_full
+                           monitor               = nothing,   # SolverMonitorAlg
+                           checker               = nothing,   # ResidualCheckerAlg
+                           check_every:: Int     = 0,
+                           check_tol  :: Float64 = 1e-8)
     mkpath(output_dir)
     odesol = solve(solver, op, t0, T_final, u0)
 
-    # previous-step DOFs → u̇ backward FD for the reconstructed pressure
+    # previous-step DOFs → u̇ backward FD (reconstructed pressure + residual check)
     prev_vals = nothing
+    need_prev = recon !== nothing || (checker !== nothing && check_every > 0)
 
-    diags        = NamedTuple{(:t,:eta_max,:gauge_vals),
-                              Tuple{Float64,Float64,Vector{Float64}}}[]
+    diags        = NamedTuple{(:t,:eta_max,:gauge_vals,:nl_iters,:res_nl,:t_solve),
+                              Tuple{Float64,Float64,Vector{Float64},Int,Float64,Float64}}[]
     t_last_print = t0
     step         = 0
     do_vtk       = !isnothing(trian) && save_every > 0
+    steps_total  = dt > 0 ? round(Int, (T_final - t0)/dt) : 0
+    wall0        = time()
+    nl_total     = 0
+    t_solve_tot  = 0.0
+    n_vtk        = 0
 
     gauge_pts = map(g -> (g isa VectorValue ? g : VectorValue(Float64(g[1]), Float64(g[2]))),
                     gauges)
@@ -97,34 +127,65 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
     function _loop(pvd)
         for (t_n, u_n) in odesol
             step  += 1
+            stats  = monitor === nothing ? nothing : take_step_stats!(monitor)
             eta_n  = u_n[1]
             emax   = maximum(abs.(get_free_dof_values(eta_n)))
             gauge_data = isempty(gauge_pts) ? Float64[] :
                          [eta_n(pt) for pt in gauge_pts]
-            push!(diags, (t=t_n, eta_max=emax, gauge_vals=gauge_data))
+            push!(diags, (t=t_n, eta_max=emax, gauge_vals=gauge_data,
+                          nl_iters=stats === nothing ? -1 : stats.nl_iters,
+                          res_nl=stats === nothing ? NaN : stats.res,
+                          t_solve=stats === nothing ? NaN : stats.t_solve))
+            if stats !== nothing
+                nl_total    += stats.nl_iters
+                t_solve_tot += stats.t_solve
+            end
 
-            if t_n - t_last_print >= print_dt
-                @printf("  t=%8.3f   eta_max=%10.6f   step %d\n", t_n, emax, step)
+            do_print = print_dt === nothing ? (step % print_every == 0) :
+                                              (t_n - t_last_print >= Float64(print_dt))
+            if do_print
+                wall  = time() - wall0
+                eta_s = steps_total > step ? (wall/step)*(steps_total - step) : NaN
+                println(step_report_alg(step, t_n, emax, stats; eta_s=eta_s))
+                flush(stdout)
                 t_last_print = t_n
+            end
+            if stats !== nothing && !stats.converged
+                println("  *** WARNING: nonlinear solver did NOT converge at step $step (t=$t_n) ***")
+                flush(stdout)
+            end
+
+            # independent verification of the governing equations
+            if checker !== nothing && check_every > 0 && step % check_every == 0
+                cres = check_residuals_alg(checker, t_n, u_n, prev_vals)
+                if cres !== nothing
+                    println(check_report_alg(step, t_n, cres, check_tol))
+                    flush(stdout)
+                end
             end
 
             if !isnothing(pvd) && step % save_every == 0
-                tn_str = replace(@sprintf("%.4f", t_n), "." => "_")
-                fname  = joinpath(output_dir, "sol_t_$(tn_str)")
-                fields = Pair{String,Any}["eta" => eta_n]
-                for k in 1:Nσ
-                    push!(fields, "u$(k)x" => alg_component(u_n[2], k))
-                    push!(fields, "u$(k)y" => alg_component(u_n[3], k))
+                t_vtk = @elapsed begin
+                    tn_str = replace(@sprintf("%.4f", t_n), "." => "_")
+                    fname  = joinpath(output_dir, "sol_t_$(tn_str)")
+                    fields = Pair{String,Any}["eta" => eta_n]
+                    for k in 1:Nσ
+                        push!(fields, "u$(k)x" => alg_component(u_n[2], k))
+                        push!(fields, "u$(k)y" => alg_component(u_n[3], k))
+                    end
+                    if recon !== nothing
+                        u_prev = prev_vals === nothing ? nothing :
+                                 FEFunction(trial_space, prev_vals)
+                        append!(fields, extra_field_cellfields_alg(u_n, u_prev, dt, recon, trian))
+                    end
+                    pvd[t_n] = createvtk(trian, fname; cellfields=fields, append=false)
                 end
-                if recon !== nothing
-                    u_prev = prev_vals === nothing ? nothing :
-                             FEFunction(trial_space, prev_vals)
-                    append!(fields, extra_field_cellfields_alg(u_n, u_prev, dt, recon, trian))
-                end
-                pvd[t_n] = createvtk(trian, fname; cellfields=fields; append=false)
+                n_vtk += 1
+                @printf("  [vtk] snapshot %d written at t=%.4f (%.2f s)\n", n_vtk, t_n, t_vtk)
+                flush(stdout)
             end
 
-            if recon !== nothing
+            if need_prev
                 prev_vals = copy(get_free_dof_values(u_n))
             end
 
@@ -149,7 +210,8 @@ function run_time_loop_alg(op, solver, u0, t0::Float64, T_final::Float64;
         _loop(nothing)
     end
 
-    @printf("Done. %d steps, final t=%.3f\n", step,
-            isempty(diags) ? t0 : diags[end].t)
+    print(final_report_alg(step, isempty(diags) ? t0 : diags[end].t,
+                           time() - wall0, nl_total, t_solve_tot, n_vtk))
+    flush(stdout)
     return diags
 end

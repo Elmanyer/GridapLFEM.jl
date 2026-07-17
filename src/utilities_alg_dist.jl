@@ -93,6 +93,10 @@ function setup_and_run_alg_distributed(;
     nl_tol       :: Float64 = 1e-10,
     ls_rtol      :: Float64 = 1e-9,
     ls_maxiter   :: Int     = 800,
+    # Runtime diagnostics
+    print_every  :: Int     = 1,          # step report every N steps (print_dt overrides)
+    check_every  :: Int     = 50,         # governing-eq residual check every N steps (0 = off)
+    check_tol    :: Float64 = 1e-8,       # ‖R_θ‖∞ verification threshold
 )
     n_procs = prod(cpu_grid)
 
@@ -153,10 +157,13 @@ function setup_and_run_alg_distributed(;
             mu_sponge=sponge, wm_src=wm)
 
         # ----- Stage 4: Distributed ODE operator + solver + IC -----
-        op     = build_ode_operator_alg(prob, U, V, trian, dO)
-        solver = build_ode_solver_alg_distributed(dt; theta=theta,
-                     nl_iter=nl_iter, nl_tol=nl_tol,
-                     ls_rtol=ls_rtol, ls_maxiter=ls_maxiter)
+        op      = build_ode_operator_alg(prob, U, V, trian, dO)
+        monitor = SolverMonitorAlg()
+        solver  = build_ode_solver_alg_distributed(dt; theta=theta,
+                      nl_iter=nl_iter, nl_tol=nl_tol,
+                      ls_rtol=ls_rtol, ls_maxiter=ls_maxiter, monitor=monitor)
+        checker = check_every > 0 ?
+                  ResidualCheckerAlg(prob, U, V, trian, dO, dt, theta, true) : nothing
         # interpolate_everywhere is REQUIRED distributed (FEFunction(U, zeros) fails)
         u0 = make_initial_conditions_alg(U, vert.N_dof; eta0_func=eta0_func)
 
@@ -176,17 +183,28 @@ function setup_and_run_alg_distributed(;
                     string(round.(recon.levels; digits=3)))
         end
         if i_am_main(ranks)
+            println()
+            print_solver_banner_alg(
+                @sprintf("NewtonSolver (GridapSolvers, exact hand Jacobians) | max iters = %d | atol (‖r‖₂) = %.1e, rtol = 1.0e-10",
+                         nl_iter, nl_tol),
+                @sprintf("GMRES + Jacobi preconditioner | max iters = %d | rtol = %.1e, atol = 1.0e-14",
+                         ls_maxiter, ls_rtol);
+                solver_type=:theta, theta=theta, dt=dt, t0=0.0, T_final=T_final,
+                print_every=print_every, print_dt=print_dt,
+                check_every=check_every, check_tol=check_tol)
             println("\n=== Time loop (algebraic, distributed) ===")
             flush(stdout)
         end
-        pdt = isnothing(print_dt) ? max(dt, T_final/50.0) : Float64(print_dt)
         diags = run_time_loop_alg_dist(ranks, op, solver, u0, 0.0, T_final;
                     output_dir  = output_dir,
                     save_every  = save_every,
                     trian       = (save_every > 0 ? trian : nothing),
                     Nσ          = vert.N_dof,
-                    print_dt    = pdt,
-                    recon       = recon, trial_space = U, dt = dt, nlp = nlp)
+                    print_every = print_every,
+                    print_dt    = print_dt,
+                    recon       = recon, trial_space = U, dt = dt, nlp = nlp,
+                    monitor     = monitor, checker = checker,
+                    check_every = check_every, check_tol = check_tol)
 
         return (diags, vert, prob)
     end

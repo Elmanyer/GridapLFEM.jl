@@ -172,6 +172,13 @@ function setup_and_run_alg(;
     eta0_func               = nothing,    # initial free surface η₀(x) (IC problems: set x_wall_bc=true!)
     use_ad       :: Bool    = false,
     show_trace   :: Bool    = false,
+    # Nonlinear solver controls
+    nl_iter      :: Int     = 20,         # max Newton iterations per step
+    nl_tol       :: Float64 = 1e-10,      # Newton ftol (‖r‖∞, NLsolve)
+    # Runtime diagnostics
+    print_every  :: Int     = 1,          # step report every N steps (1 = every step)
+    check_every  :: Int     = 50,         # governing-eq residual check every N steps (0 = off)
+    check_tol    :: Float64 = 1e-8,       # ‖R_θ‖∞ verification threshold
     # Field output (reconstructed at the Nσ vertical σ-nodes)
     write_w        :: Bool    = false,    # vertical velocity fields w_s<σ>
     write_pressure :: Bool    = false,    # total pressure fields p_s<σ>
@@ -209,8 +216,13 @@ function setup_and_run_alg(;
 
     op = use_ad ? build_ode_operator_alg_ad(prob, U, V, trian, dO) :
                   build_ode_operator_alg(prob, U, V, trian, dO)
-    solver = build_ode_solver_alg(dt; solver_type=solver_type, theta=theta,
-                                  rho_inf=rho_inf, show_trace=show_trace)
+    monitor = SolverMonitorAlg()
+    solver  = build_ode_solver_alg(dt; solver_type=solver_type, theta=theta,
+                                   rho_inf=rho_inf, nl_iter=nl_iter, nl_tol=nl_tol,
+                                   show_trace=show_trace, monitor=monitor)
+    checker = check_every > 0 ?
+              ResidualCheckerAlg(prob, U, V, trian, dO, dt, theta,
+                                 solver_type == :theta) : nothing
     u0 = isnothing(eta0_func) ? make_initial_conditions_alg(U) :
          make_initial_conditions_alg(U, vert.N_dof; eta0_func=eta0_func)
 
@@ -226,11 +238,21 @@ function setup_and_run_alg(;
                 string(round.(recon.levels; digits=3)))
     end
 
+    println()
+    print_solver_banner_alg(
+        @sprintf("Newton (NLsolve, exact hand Jacobians) | max iters = %d | ftol (‖r‖∞) = %.1e",
+                 nl_iter, nl_tol),
+        "LU direct factorisation (sequential)";
+        solver_type=solver_type, theta=theta, dt=dt, t0=0.0, T_final=T_final,
+        print_every=print_every, check_every=check_every, check_tol=check_tol)
+
     println("\n=== Time loop (algebraic) ===")
     diags = run_time_loop_alg(op, solver, u0, 0.0, T_final;
                               output_dir=output_dir, save_every=save_every,
                               trian=trian, Nσ=vert.N_dof,
-                              print_dt=max(dt, T_final/50.0), gauges=gauges,
-                              recon=recon, trial_space=U, dt=dt, nlp=nlp)
+                              print_every=print_every, gauges=gauges,
+                              recon=recon, trial_space=U, dt=dt, nlp=nlp,
+                              monitor=monitor, checker=checker,
+                              check_every=check_every, check_tol=check_tol)
     return diags, vert, prob
 end

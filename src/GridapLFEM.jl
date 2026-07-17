@@ -54,6 +54,7 @@ include("horizontal_alg.jl")     # Stage 2: 2D mesh + stacked [η,𝖴x,𝖴y] F
 include("problem_alg.jl")        # AlgebraicLFEM struct + loop-free residual + hand Jacobians
 include("nlpressure_alg.jl")     # FULL nonlinear pressure (native / ∇h exact-IBP / frozen proj.)
 include("reconstruct_alg.jl")    # w / total-pressure σ-level VTK fields (serial + distributed)
+include("monitor_alg.jl")        # solver monitor + governing-eq residual checker + reports
 include("timeloop_alg.jl")       # ODE solver factory + sequential time loop (VTK + recon)
 include("utilities_alg.jl")      # dispersion analysis, sponge, wavemakers, sequential driver
 include("timeloop_alg_dist.jl")  # DISTRIBUTED mesh builder + GMRES solver + time loop
@@ -85,6 +86,11 @@ export build_nlp_ctx, update_nlp_state!
 export build_ode_solver_alg
 export make_initial_conditions_alg
 export run_time_loop_alg
+
+# Runtime diagnostics (solver monitoring + governing-eq verification)
+export SolverMonitorAlg, take_step_stats!
+export ResidualCheckerAlg, check_residuals_alg
+export print_solver_banner_alg, step_report_alg, check_report_alg, final_report_alg
 
 # Utilities
 export find_wavenumber_alg
