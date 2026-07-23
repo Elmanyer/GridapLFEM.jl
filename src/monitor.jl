@@ -158,23 +158,42 @@ end
     u̇ from backward differencing (local time-discretisation error, O(Δt)).
 Collective in distributed runs (assembly + norms) — call on ALL ranks.
 """
+# true when the multifield trial space carries transient Dirichlet members
+# (wave-generation BCs) — sequential and distributed
+function _has_transient_trial(U)
+    U isa MultiFieldFESpace &&
+        return any(s -> s isa Gridap.ODEs.TransientTrialFESpace, U.spaces)
+    U isa GridapDistributed.DistributedMultiFieldFESpace &&
+        return Gridap.ODEs.has_transient(U)
+    return false
+end
+
 function check_residuals(chk::ResidualChecker, t_n::Float64, u_n, prev_vals)
     (prev_vals === nothing || chk.dt <= 0) && return nothing
     dt = chk.dt
     vn = get_free_dof_values(u_n)
 
+    # Transient-Dirichlet trials (wave generation BCs): evaluate the trial space
+    # at the reassembly time — the Dirichlet values of u are g(t) and those of u̇
+    # the analytic ġ(t) (time_derivative space), matching the ODE machinery.
+    transient = _has_transient_trial(chk.U)
+    Uat(t)  = transient ? Gridap.Arrays.evaluate(chk.U, t) : chk.U
+    Udat(t) = transient ?
+              Gridap.Arrays.evaluate(Gridap.ODEs.time_derivative(chk.U), t) : chk.U
+
     vdot = copy(vn)
     vdot .= (vn .- prev_vals) ./ dt                    # u̇ = (u_n − u_{n-1})/Δt
-    udot = FEFunction(chk.U, vdot)
+    udot = FEFunction(Udat(t_n), vdot)
 
     res_th, res_th_inf = NaN, NaN
     if chk.is_theta
         θ   = chk.theta
         vth = copy(vn)
         vth .= θ .* vn .+ (1.0 - θ) .* prev_vals       # u_θ (the state ThetaMethod solved at)
-        uth = FEFunction(chk.U, vth)
         tth = t_n - dt + θ*dt
-        tu  = Gridap.ODEs.TransientCellField(uth, (udot,))
+        uth = FEFunction(Uat(tth), vth)
+        udot_th = transient ? FEFunction(Udat(tth), vdot) : udot
+        tu  = Gridap.ODEs.TransientCellField(uth, (udot_th,))
         rv  = assemble_vector(v -> global_residual(tth, tu, v, chk.prob, chk.trian, chk.dO),
                               chk.V)
         res_th, res_th_inf = _norm2(rv), _norminf(rv)

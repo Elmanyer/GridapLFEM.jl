@@ -42,6 +42,8 @@ using MPI
 using GridapSolvers
 using GridapSolvers.LinearSolvers
 using GridapSolvers.NonlinearSolvers
+# Stochastic sea-state synthesis (Dirichlet boundary wave generation)
+using WaveSpec
 
 # 2D unit vectors + 1D sigma-mesh gradient extractor
 const Ex     = VectorValue(1.0, 0.0)
@@ -57,6 +59,7 @@ include("reconstruct.jl")    # w / total-pressure σ-level VTK fields (serial + 
 include("monitor.jl")        # solver monitor + governing-eq residual checker + reports
 include("timeloop.jl")       # ODE solver factory + sequential time loop (VTK + recon)
 include("utilities.jl")      # dispersion analysis, sponge, wavemakers, sequential driver
+include("waveinput.jl")      # Dirichlet boundary wave generation + WaveSpec coupling
 include("timeloop_dist.jl")  # DISTRIBUTED mesh builder + GMRES solver + time loop
 include("utilities_dist.jl") # DISTRIBUTED driver setup_and_run_distributed
 
@@ -97,6 +100,11 @@ export find_wavenumber
 export dispersion_ratio, applicable_kd
 export make_sponge, make_wavemaker_line, make_wavemaker_point
 export setup_and_run
+
+# Dirichlet boundary wave generation (waveinput.jl) + WaveSpec re-export
+export WaveInput, eta_bc, ux_bc, uy_bc, incident_fields
+export sigma_dof_nodes, model_wavenumber, ramp_value, waveinput_summary
+export WaveSpec
 
 # Field reconstruction (w / total pressure at σ-levels, VTK)
 export build_field_recon, extra_field_cellfields, recon_level_str

@@ -51,6 +51,9 @@ struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
     nlp_state    :: Base.RefValue{Any} # frozen (π𝖲, π𝖻) FEFunctions; nothing before step 1
     mu_sponge    :: Function
     wm_src       :: Function
+    relax_bc     :: Bool              # generation/absorption relaxation zone (Dirichlet inflow)
+    relax_mu     :: Function          # zone profile μ_g(x) (quadratic, max at the boundary)
+    relax_tg     :: Any               # incident_fields NamedTuple (eta, ux, uy) or nothing
 end
 
 """
@@ -69,7 +72,10 @@ function build_problem(vert;
         nl_pressure68:: Bool     = false,
         nl_pressure_full :: Bool = false,
         mu_sponge    :: Function = (x -> 0.0),
-        wm_src       :: Function = ((x, t) -> 0.0))
+        wm_src       :: Function = ((x, t) -> 0.0),
+        relax_bc     :: Bool     = false,
+        relax_mu     :: Function = (x -> 0.0),
+        relax_tg                 = nothing)
     Φ  = alg_to_vec(vert.Phi)
     Mv = alg_to_tensor2(vert.Mmat)
     Bv = alg_to_tensor2(vert.B)
@@ -81,10 +87,13 @@ function build_problem(vert;
     A3 = ntuple(c -> alg_to_tensor3(vert.Acal[:, :, :, c]), 8)
     K3 = ntuple(c -> alg_to_tensor3(vert.Kcal[:, :, :, c]), 8)
     P3 = ntuple(c -> alg_to_tensor3(vert.Pcal[:, :, :, c]), 8)
+    relax_bc && relax_tg === nothing &&
+        error("build_problem: relax_bc=true requires relax_tg (incident_fields NamedTuple)")
     return LFEMProblem(g, d_func, vert.N_dof, Φ, Mv, Bv, P, Av, Kv, M3, G3,
                          A3, K3, P3, linearised, advection, lin_pressure,
                          P_full, nl_pressure68, nl_pressure_full,
-                         Ref{Any}(nothing), mu_sponge, wm_src)
+                         Ref{Any}(nothing), mu_sponge, wm_src,
+                         relax_bc, relax_mu, relax_tg)
 end
 
 """
@@ -144,6 +153,21 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
 
     # ---- sponge -----------------------------------------------------------------
     r = r + ∫( mu_cf*((Wx ⋅ alg_mul(prob.Mv, Ux)) + (Wy ⋅ alg_mul(prob.Mv, Uy))) ) * dO
+
+    # ---- generation/absorption relaxation zone (Dirichlet inflow) ---------------
+    #  Relax the state toward the incident wave in a zone adjacent to the
+    #  generation boundary: absorbs outgoing deviations, enforces the incident
+    #  field (classical relaxation-zone practice). Linear in u.
+    if prob.relax_bc
+        tg     = prob.relax_tg
+        mug_cf = CellField(prob.relax_mu, trian)
+        eta_i  = CellField(x -> tg.eta(x, t), trian)
+        ux_i   = CellField(x -> tg.ux(x, t),  trian)
+        uy_i   = CellField(x -> tg.uy(x, t),  trian)
+        r = r + ∫( mug_cf*q*(η - eta_i)
+                 + mug_cf*((Wx ⋅ alg_mul(prob.Mv, Ux - ux_i))
+                         + (Wy ⋅ alg_mul(prob.Mv, Uy - uy_i))) ) * dO
+    end
 
     # ---- nonlinear advection (𝓜/𝓖 block) ---------------------------------------
     if prob.advection
@@ -269,6 +293,14 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dO)
 
     # sponge
     r = r + ∫( mu_cf*((Wx ⋅ alg_mul(prob.Mv, dUx)) + (Wy ⋅ alg_mul(prob.Mv, dUy))) ) * dO
+
+    # relaxation zone (linear in u — exact derivative)
+    if prob.relax_bc
+        mug_cf = CellField(prob.relax_mu, trian)
+        r = r + ∫( mug_cf*q*dη
+                 + mug_cf*((Wx ⋅ alg_mul(prob.Mv, dUx))
+                         + (Wy ⋅ alg_mul(prob.Mv, dUy))) ) * dO
+    end
 
     # full advection derivative
     if prob.advection

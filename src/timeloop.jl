@@ -56,14 +56,27 @@ function make_initial_conditions(U)
     return FEFunction(U, zeros(Float64, num_free_dofs(U)))
 end
 
-function make_initial_conditions(U, Nσ::Int; eta0_func = nothing)
+function make_initial_conditions(U, Nσ::Int; eta0_func = nothing,
+                                     ux0_func = nothing, uy0_func = nothing)
     zvv  = VectorValue(ntuple(_ -> 0.0, Nσ)...)
     eta0 = isnothing(eta0_func) ? (x -> 0.0) : eta0_func
-    return interpolate_everywhere([eta0, x -> zvv, x -> zvv], U)
+    ux0  = isnothing(ux0_func)  ? (x -> zvv) : ux0_func
+    uy0  = isnothing(uy0_func)  ? (x -> zvv) : uy0_func
+    return interpolate_everywhere([eta0, ux0, uy0], U)
 end
 
 "Extract σ-node component j of a stacked VectorValue{Nσ} CellField (scalar CellField)."
 alg_component(Uf, j::Int) = Operation(v -> v[j])(Uf)
+
+"""
+    space_at(U, t)
+
+Evaluate a (possibly transient-Dirichlet) trial space at time `t`. Static
+spaces pass through unchanged (sequential callable syntax / the distributed
+`Arrays.evaluate` no-op). Needed wherever `FEFunction`s are rebuilt from DOF
+vectors in wave-generation (transient Dirichlet) runs.
+"""
+space_at(U, t::Real) = Gridap.Arrays.evaluate(U, t)
 
 """
     run_time_loop(op, solver, u0, t0, T_final; output_dir, save_every,
@@ -174,8 +187,10 @@ function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
                         push!(fields, "u$(k)y" => alg_component(u_n[3], k))
                     end
                     if recon !== nothing
+                        # trial space evaluated at t_{n-1}: correct Dirichlet values
+                        # for transient-BC runs; static spaces return themselves.
                         u_prev = prev_vals === nothing ? nothing :
-                                 FEFunction(trial_space, prev_vals)
+                                 FEFunction(space_at(trial_space, t_n - dt), prev_vals)
                         append!(fields, extra_field_cellfields(u_n, u_prev, dt, recon, trian))
                     end
                     pvd[t_n] = createvtk(trian, fname; cellfields=fields, append=false)

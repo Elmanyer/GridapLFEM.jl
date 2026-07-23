@@ -64,6 +64,13 @@ The **complete** `building_files/main.tex` §8 global residual, every term:
   surface-slope/leading-pressure halves — see `building_files/algebraic_pressure_completion_plan.md`)
 - Quadratic sponge absorption layers
 - Solid-wall / open boundary conditions
+- **Dirichlet boundary wave generation** (`wave_bc`) — waves enter through time-varying
+  Dirichlet data (η, 𝖴x, and 𝖴y for directional seas) on a domain side, no interior source:
+  regular waves, hand-built multichromatic seas, or **WaveSpec.jl stochastic sea states**
+  (JONSWAP/TMA/…, angular spreading) via the `AiryState → WaveInput` converter. Discrete
+  LFE-M eigenmode vertical polarization (`:model`, default) or Airy cosh sampling (`:airy`);
+  Hann start-up ramp; optional generation/absorption relaxation zone (`relax_bc`). See
+  `building_files/boundary_wave_generation.md`.
 
 Every flag is validated against a hand-derived reference or the per-layer oracle solver; see
 [Validation](#validation) below.
@@ -84,6 +91,7 @@ GridapLFEM.jl/
 │   ├── reconstruct.jl         w(σ) / total-pressure σ-level VTK field reconstruction
 │   ├── timeloop.jl            sequential ODE solver factory + time loop
 │   ├── utilities.jl           dispersion analysis, sponge/wavemaker, setup_and_run
+│   ├── waveinput.jl           Dirichlet boundary wave generation + WaveSpec.jl coupling
 │   ├── timeloop_dist.jl       distributed mesh + GMRES+Jacobi+Newton solver + time loop
 │   └── utilities_dist.jl      setup_and_run_distributed
 ├── test/                        # 9 test files — see Validation
@@ -193,6 +201,10 @@ communication, not yet implemented). See `examples/distributed/README.md` for cl
 | `lin_pressure`, `P_full` | linear slope-pressure package; full leading-pressure form |
 | `nl_pressure68`, `nl_pressure_full` | nonlinear pressure: native set / full set (see [Physics](#physics-implemented)) |
 | `eta0_func` | initial free-surface release `η₀(x,y)` — **requires `x_wall_bc=true`** (closed basin) |
+| `wave_bc` | Dirichlet boundary wave generation: `:regular` (from `A_wave`/`T_wave`), a `WaveInput`, or a `WaveSpec.AiryWaves.AiryState` (auto-converted); disables the interior wavemaker |
+| `bc_side`, `bc_profile` | generation boundary (`:left`/`:right`); vertical polarization (`:model` = discrete eigenmode, default / `:airy` = cosh sampling) |
+| `T_ramp`, `ic_from_bc` | Hann start-up ramp (default 2 peak periods); hot start from the incident field (needs `T_ramp=0`) |
+| `relax_bc`, `relax_width` | generation/absorption relaxation zone at the inflow (strength `mu_max`, default width one peak wavelength) |
 | `y_wall_bc`, `x_wall_bc` | solid-wall BCs; `x_wall_bc=true` mandatory for any IC-release problem |
 | `write_w`, `write_pressure`, `rho` | reconstruct vertical velocity / total pressure at every σ-node into VTK |
 | `save_every`, `output_dir`, `gauges` | VTK snapshot cadence, output directory, point-gauge stations (sequential only) |
@@ -220,6 +232,10 @@ All gates below are implemented as standalone Julia scripts in `test/`; run with
 | `test_nlpressure.jl` | exact-IBP identity (machine precision), structural scaling, dynamics with all pressure flags on | 9/9 PASS, rel 4e-15 |
 | `test_basic_distributed.jl` | 4-rank MPI, linear + fully nonlinear vs sequential | 6/6 PASS, rel ≤ 5e-9 |
 | `test_nlpressure_distributed.jl` | 4-rank MPI, full nonlinear pressure vs sequential | 3/3 PASS, rel 4.6e-9 |
+| `test_waveinput.jl` | Dirichlet-generation data: dispersion/transport identities, closures, AD, WaveSpec converter | 30/30 PASS |
+| `test_bc_generation.jl` | Dirichlet-generated regular wave e2e (kd=3): amplitude, celerity, `:airy`, relaxation zone, nonlinear | 11/11 PASS (amp err 8.6%, model-celerity err 2.1%) |
+| `test_bc_spectrum.jl` | 3-component Dirichlet sea: Goda–Suzuki incident amplitudes, reflection, intermodulation | 8/8 PASS (err ≤ 9.2%, refl ≈ 4%) |
+| `test_bc_generation_distributed.jl` | 4-rank MPI Dirichlet generation vs sequential reference | 4/4 PASS, rel 3.1e-8 |
 
 The oracle for `test_equivalence.jl` is the independently validated per-layer solver in
 `../LFE-M_2D_solver/`. See the `building_files/algebraic_*_plan.md` files for full derivations, implementation

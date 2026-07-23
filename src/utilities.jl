@@ -133,6 +133,17 @@ const DEFAULT_CBDY = Dict(
 Full driver for the algebraic solver (mirror of the old `setup_and_run_lfem`).
 `y_wm = nothing` → line source (plane wave); a number → point source (ring).
 Flags: `linearised, advection, lin_pressure, P_full, nl_pressure68, use_ad`.
+
+Dirichlet boundary wave generation (waveinput.jl): pass `wave_bc` =
+  * `:regular`             — monochromatic wave built from `A_wave`/`T_wave`;
+  * a `WaveInput`          — any prebuilt component table;
+  * a `WaveSpec.AiryWaves.AiryState` — stochastic sea state (auto-converted).
+The interior wavemaker is then disabled and η/𝖴x (and 𝖴y for directional
+seas) are prescribed on `bc_side` (`:left`/`:right`). Related kwargs:
+`bc_profile` (`:model`/`:airy` vertical polarization), `T_ramp` (Hann ramp,
+`nothing` → 2 peak periods), `ic_from_bc` (hot start from the incident field;
+requires `T_ramp=0.0`), `relax_bc`+`relax_width` (generation/absorption
+relaxation zone adjacent to the inflow, strength `mu_max`).
 """
 function setup_and_run(;
     M            :: Int     = 2,
@@ -170,6 +181,14 @@ function setup_and_run(;
     nl_pressure_full :: Bool = false,     # + c∈{1,2,4,5} (∇h exact-IBP; ∇H/𝓟 frozen projections)
     d_func                  = nothing,
     eta0_func               = nothing,    # initial free surface η₀(x) (IC problems: set x_wall_bc=true!)
+    # Dirichlet boundary wave generation (waveinput.jl)
+    wave_bc                 = nothing,    # :regular | WaveInput | WaveSpec.AiryWaves.AiryState
+    bc_side      :: Symbol  = :left,      # generation boundary (:left/:right)
+    bc_profile   :: Symbol  = :model,     # vertical polarization (:model/:airy)
+    T_ramp                  = nothing,    # Hann ramp [s]; nothing → 2 peak periods
+    ic_from_bc   :: Bool    = false,      # hot start from the incident field (needs T_ramp=0)
+    relax_bc     :: Bool    = false,      # relaxation zone at the inflow (strength mu_max)
+    relax_width  :: Float64 = 0.0,        # zone width [m]; 0 → one peak wavelength
     use_ad       :: Bool    = false,
     show_trace   :: Bool    = false,
     # Nonlinear solver controls
@@ -192,27 +211,88 @@ function setup_and_run(;
     vert = assemble_vertical_tensors(M, p_vert, c_bdy)
     @printf("  Nσ=%d   ΣΦ=%.6f\n", vert.N_dof, sum(vert.Phi))
 
-    println("\n=== 2D Horizontal FE problem (stacked [η,𝖴x,𝖴y]) ===")
     model, trian = build_horizontal_model(domain, partition)
     dO = Measure(trian, 2*fe_order + 2)
-    U, V = build_fe_spaces(model, fe_order, vert.N_dof;
-                               y_wall_bc=y_wall_bc, x_wall_bc=x_wall_bc)
-    @printf("  Fields: 3 (η + 2 stacked VectorValue{%d})   free DOFs: %d\n",
-            vert.N_dof, num_free_dofs(U))
 
     omega  = 2.0*pi/T_wave
     k_wave = find_wavenumber(omega, d_val, g)
+    dfn    = isnothing(d_func) ? (x -> d_val) : d_func
+    if domain isa Tuple{Tuple,Tuple}
+        (x0d, x1d), (y0d, y1d) = domain
+    else
+        x0d, x1d, y0d, y1d = domain
+    end
+
+    # ---- Dirichlet boundary wave generation (waveinput.jl) --------------------
+    wi = nothing
+    if wave_bc !== nothing
+        bc_side in (:left, :right) ||
+            error("setup_and_run: bc_side must be :left or :right (got :$bc_side)")
+        Tr = T_ramp === nothing ? nothing : Float64(T_ramp)
+        wi = wave_bc isa WaveInput ? wave_bc :
+             wave_bc === :regular ?
+                 WaveInput(vert; A=A_wave, T=T_wave, d=d_val, g=g,
+                           T_ramp=(Tr === nothing ? 2.0*T_wave : Tr),
+                           profile=bc_profile) :
+                 WaveInput(vert, wave_bc; d=d_val, g=g, T_ramp=Tr,
+                           profile=bc_profile)
+        println()
+        waveinput_summary(wi)
+        xg = bc_side == :left ? x0d : x1d
+        dsamp = [dfn(VectorValue(xg, y0d + s*(y1d - y0d))) for s in 0.0:0.25:1.0]
+        all(v -> isapprox(v, wi.d; rtol=1e-8), dsamp) ||
+            @warn "wave_bc: depth along the generation boundary is not constant " *
+                  "(or differs from the WaveInput depth $(wi.d) m)"
+        wi.directional && y_wall_bc &&
+            error("setup_and_run: a directional sea (θ≠0 components) requires " *
+                  "y_wall_bc=false and lateral sponges (sponge_wB/wT)")
+        ic_from_bc && wi.T_ramp > 0.0 &&
+            error("setup_and_run: ic_from_bc=true requires T_ramp=0.0 " *
+                  "(the hot start replaces the ramp)")
+        gen_w = bc_side == :left ? sponge_wL : sponge_wR
+        gen_w > 0.0 && !relax_bc &&
+            @warn "wave_bc: a plain sponge overlaps the generation boundary and " *
+                  "damps the incident wave; set its width to 0 or use relax_bc=true"
+        opp_w = bc_side == :left ? sponge_wR : sponge_wL
+        opp_w > 0.0 ||
+            @warn "wave_bc: no sponge opposite the inflow — expect reflections"
+    end
+
+    println("\n=== 2D Horizontal FE problem (stacked [η,𝖴x,𝖴y]) ===")
+    inflow = wi === nothing ? nothing :
+             (side=bc_side, eta=eta_bc(wi), ux=ux_bc(wi),
+              uy=wi.directional ? uy_bc(wi) : nothing)
+    U, V = build_fe_spaces(model, fe_order, vert.N_dof;
+                               y_wall_bc=y_wall_bc, x_wall_bc=x_wall_bc,
+                               inflow=inflow)
+    @printf("  Fields: 3 (η + 2 stacked VectorValue{%d})   free DOFs: %d\n",
+            vert.N_dof, num_free_dofs(U(0.0)))
     @printf("  Wave: λ=%.2f m, kd=%.2f\n", 2pi/k_wave, k_wave*d_val)
 
     sponge = make_sponge(domain, sponge_wL, sponge_wR, sponge_wB, sponge_wT, mu_max)
-    wm = isnothing(y_wm) ? make_wavemaker_line(x_wm, A_wave, T_wave, k_wave) :
+    wm = wi !== nothing ? ((x, t) -> 0.0) :
+         isnothing(y_wm) ? make_wavemaker_line(x_wm, A_wave, T_wave, k_wave) :
                            make_wavemaker_point(x_wm, Float64(y_wm), A_wave, T_wave)
-    dfn = isnothing(d_func) ? (x -> d_val) : d_func
+
+    # generation/absorption relaxation zone adjacent to the inflow
+    relax_mu_fn = x -> 0.0
+    relax_tg    = nothing
+    use_relax   = wi !== nothing && relax_bc
+    if use_relax
+        wrx = relax_width > 0.0 ? relax_width : 2.0*pi/wi.ks[argmax(wi.amps)]
+        relax_mu_fn = bc_side == :left ?
+            (x -> x[1] < x0d + wrx ? mu_max*((x0d + wrx - x[1])/wrx)^2 : 0.0) :
+            (x -> x[1] > x1d - wrx ? mu_max*((x[1] - (x1d - wrx))/wrx)^2 : 0.0)
+        relax_tg = incident_fields(wi)
+        @printf("  Relaxation zone: width=%.2f m, μ_max=%.2f, %s boundary\n",
+                wrx, mu_max, string(bc_side))
+    end
 
     prob = build_problem(vert; g=g, d_func=dfn,
         linearised=linearised, advection=advection, lin_pressure=lin_pressure,
         P_full=P_full, nl_pressure68=nl_pressure68, nl_pressure_full=nl_pressure_full,
-        mu_sponge=sponge, wm_src=wm)
+        mu_sponge=sponge, wm_src=wm,
+        relax_bc=use_relax, relax_mu=relax_mu_fn, relax_tg=relax_tg)
 
     op = use_ad ? build_ode_operator_ad(prob, U, V, trian, dO) :
                   build_ode_operator(prob, U, V, trian, dO)
@@ -223,8 +303,19 @@ function setup_and_run(;
     checker = check_every > 0 ?
               ResidualChecker(prob, U, V, trian, dO, dt, theta,
                                  solver_type == :theta) : nothing
-    u0 = isnothing(eta0_func) ? make_initial_conditions(U) :
-         make_initial_conditions(U, vert.N_dof; eta0_func=eta0_func)
+    u0 = if wi !== nothing && ic_from_bc
+        inc = incident_fields(wi)
+        make_initial_conditions(U(0.0), vert.N_dof;
+            eta0_func = x -> inc.eta(x, 0.0),
+            ux0_func  = x -> inc.ux(x, 0.0),
+            uy0_func  = x -> inc.uy(x, 0.0))
+    elseif wi !== nothing
+        make_initial_conditions(U(0.0), vert.N_dof; eta0_func=eta0_func)
+    elseif isnothing(eta0_func)
+        make_initial_conditions(U)
+    else
+        make_initial_conditions(U, vert.N_dof; eta0_func=eta0_func)
+    end
 
     # nl_pressure_full: frozen-projection context (mass matrix factorised once)
     nlp = nl_pressure_full ?

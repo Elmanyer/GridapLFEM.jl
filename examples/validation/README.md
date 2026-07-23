@@ -12,6 +12,7 @@ The fast, gated correctness tests live in `../../test/` (see `../../ValidationTe
 | `solitary_wave.jl` | solitary wave | celerity `≈√(g(d+A))` + shape retention | nonlinearity–dispersion balance |
 | `ring_spreading.jl` | point-source ring waves | radial symmetry + far-field `1/√r` decay | 2-D isotropy/geometry |
 | `bichromatic_sideband.jl` | deep-water two-frequency group | both frequencies present, bounded (scaffold) | §4 (bichromatic / sideband) |
+| `spectral_fidelity.jl` | JONSWAP sea via Dirichlet BC generation (WaveSpec.jl) | component-wise amplitude + dispersion transfer through the domain; Hs recovery | spectral fidelity (BC generation) |
 
 ## Running
 

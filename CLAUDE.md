@@ -1,15 +1,19 @@
 # CLAUDE.md — `GridapLFEM.jl/` (LFE-M derivation & the algebraic-residual project)
 
-**What this folder is.** The *mathematical* home of the 2D LFE-M model: the LaTeX derivation
-(`main.tex`), a Jupyter prototype (`test_2HDmodel.ipynb`), and a set of Markdown documents that
-translate the derivation into a Gridap implementation. It is the design/paper side; the *running
-solver* lives one level up in `../LFE-M_2D_solver/` (see that folder's `CLAUDE.md`).
+**What this folder is.** The **production home of the 2D LFE-M solver**: the self-contained
+serial+distributed algebraic package `src/GridapLFEM.jl` (stacked `[η,𝖴x,𝖴y]` layout, loop-free
+residual), its test suite (`test/`), sequential/cluster examples (`examples/`), the standalone
+postprocessing library (`postprocessing/GridapLFEMPost`), the vendored sea-state package
+(`WaveSpec.jl/`), and the design/paper side in `building_files/` (the LaTeX derivation
+`latex_doc/`, the spec/plan documents, the validation reports). The older per-layer solver in
+`../LFE-M_2D_solver/` remains only as the validated **oracle** used by `test_equivalence.jl`.
 
-**The forward task this folder exists to support:** implement a **new, fully algebraic (loop-free)
-residual function** for the LFE-M model — one that follows `main.tex` §8 using native Gridap tensor
-algebra instead of per-layer `for`-loop index contractions. `algebraic_residual_math.md` and
-`algebraic_residual_plan.md` are the spec + plan for that task. **A new agent picking this up should
-read those two files, then §5–§7 below, then start at Phase P1 of the plan.**
+**How to read this document.** The status block below is the at-a-glance state; the §1 table maps
+every file; §2–§10 are the authoritative explanation of *how* the algebraic residual is built and
+*why* (kept because the design rationale — stacked value types, index conventions, pressure-term
+treatment — is what future modifications must respect). A new agent extending the solver should
+read the status block, the §1 table, and then the section relevant to the change (§3 layout rules,
+§5 residual terms, §6 nonlinear pressure, §9 solver conventions).
 
 ---
 
@@ -34,18 +38,20 @@ vertical nodes; velocity modes are 1-based `j=1..Nσ`, one per node. (Do **not**
 | File | What it is | Status |
 |------|-----------|--------|
 | `Project.toml` / `Manifest.toml` | **Not a registered package** (no `name`/`uuid`/`version` — intentional, `GridapLFEM` is loaded via `include()`+`using .GridapLFEM`, never `Pkg.add`). This is a standalone environment pinned to the SAME package versions as the parent `../Project.toml` (Gridap 0.19.11, GridapDistributed 0.4.13, GridapSolvers 0.6.2, PartitionedArrays 0.3.5, MPI 0.20.26 — 2026-07-13). If you add a new `using X` to any `src/*.jl` file, run `Pkg.add("X")` here too (`--project=GridapLFEM.jl`) or this environment silently falls out of sync and `--project=GridapLFEM.jl` breaks while the parent env keeps working. | pinned to parent |
-| `main.tex` / `LFE_M_model_discretisation.pdf` | **Authoritative** step-by-step derivation, 3D Euler → σ-map → vertical FE → §8 Gridap global residual. **This is the reviewed `main_corrected.tex`, promoted 2026-07-10**: §8 now also contains the field-layout subsection (why `[H,𝖴x,𝖴y]`), the detailed 𝓛/𝓝 pressure-operator implementation subsection, and the wave-generation/sponge/BC subsection (integrated from `wavemaker_sponge_BC.tex`); §9 = full horizontal discretisation, completed & corrected (static tensors + state-weighted `C̄/S̄/P̄` operators = the V⊗H route). ⚠ Sign convention (this version): `R_P ≡ +∫H²[(𝓛:P^V)+(𝓝⫶𝓟^V)]·(∇·V)` and it is **subtracted** in the global sum, uniformly with `R_lin`/`R_nonlin` — the framed residual and all physics are unchanged. The PDF is stale until recompiled. | authoritative |
-| `LFEM_Gridap.md` | Clean synthesis of `main.tex` §1–§8 (the derivation leading to the single scalar residual). Uses **`main.tex` notation exclusively**; §9 is a notation bridge to the solver code. | done |
-| `wavemaker_sponge_BC.tex` | Source of the wavemaker/sponge/BC subsection — **now integrated into `main.tex` §8** (with the BC boundary-flux list modernised there); kept as the standalone original. | integrated |
+| `latex_doc/` (`main.tex` + 9 section files) | **Authoritative** LaTeX derivation, reorganised 2026-07-23 into a multi-file project: `main.tex` (preamble/macros) inputs `GoverningEquations`, `SigmaTransformation`, `VerticalFEapprox`, `wDerivation`, `pDerivation`, `VerticalProjection`, `VerticalSemiDiscreteSystem`, **`GridapImplementation.tex` (§8** — stacked layout, residual implementation, 𝓛/𝓝 pressure treatment, wave generation/sponge/BC **incl. the Dirichlet boundary wave generation subsection**) and **`ValidationTests.tex` (§9** — the validation report incl. the BC-generation gates, Goda–Suzuki, spectral fidelity). ⚠ Sign convention: `R_P` is a positive integral **subtracted** in the global sum, uniformly with `R_lin`/`R_nonlin`. Compile-checked with pdflatex (flat-input wrapper; `pstricks.sty` missing locally is a toolchain gap, not content). NOTE: `main.tex` inputs use subfolder paths (`SigmaEulerModel/…`) — the flat copies here are the editable source; the stray root fragments `section8extension.tex`, `subsection8.4.tex`, `subsection8.6.tex` are superseded drafts. | authoritative |
+| `LFEM_Gridap.md` | Clean synthesis of the derivation §1–§8 (leading to the single scalar residual). Uses the LaTeX notation exclusively; §9 is a notation bridge to the solver code. | done |
 | `algebraic_residual_math.md` | ★ Operator simplifications: how to write the §8 residual with native Gridap tensor ops, **no MultiField decomposition, no vertical-index loops**. The `L`/`N` pressure stacks, the leading-pressure `R_P` (§6b), IBP of second-derivative terms, verified Gridap operator table. | **spec — start here** |
 | `algebraic_residual_plan.md` | ★ Phased implementation plan (P1–P6) for the new residual: FE-space redesign, tensor constants, residual skeleton, Jacobian, validation, risks. | **plan — then here** |
-| `src/` (`GridapLFEM.jl` + 10 submodules) | ★★★ **The self-contained SERIAL + DISTRIBUTED algebraic solver PACKAGE** (`module GridapLFEM`): vertical tensors (incl. new `Pcal`), constant-tensor + Operation helpers, stacked spaces (distributed-safe MultiField dispatch), loop-free residual + hand Jacobians (the SAME code runs distributed — Operation is forwarded for `DistributedCellField`), θ time loops (sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…` — old naming) **plus reconstructed `w_s<σ>`/`p_s<σ>` fields** (`reconstruct.jl`, `write_w`/`write_pressure`), drivers `setup_and_run` and `setup_and_run_distributed` (with_mpi; **full nonlinear physics distributed** — no V⊗H loop needed; `eta0_func` IC hook). No dependency on the old solver. | **VALIDATED 2026-07-10** |
-| `test/` (17 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` 10/10 (oracle virtual-work, ≤7e-15), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` (4 ranks), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_mms` 3/3 (unsteady nonlinear MMS), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, **`test_dispersion_nonlinear` 3/3** (full-NL⇒Airy, robust k-fit, kd=1/3/5 err 0.93/0.36/3.05%), **`test_shallow_water` 6/6** (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. | **PASS** |
-| `examples/` (+ `validation/`, `distributed/`) | `plane_wave.jl`, `ring_wave.jl` (sequential, quick defaults); `examples/distributed/` — 4 env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry) + README; **`examples/validation/`** — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + **`dispersion_sweep.jl`** (full-NL Cm/Ce(kd) curve, robust k-fit) + README. | scripted |
-| `postprocessing/` (`GridapLFEMPost`) | ★ **Self-contained postprocessing library** (its OWN env: ReadVTK, Plots+GR, FFTW, Interpolations — pinned separately from the solver). Reads VTK (`solution.pvd`/`sol_t_*.vtu`) + CSV → `WaveSimulation` (auto-`regularize!`s the duplicated Q2 node cloud to a Cartesian grid). Modules: `io, probes, spectral, diagnostics, reconstruct, plotting`. Gauges/DFT/celerity/harmonics/radial/conservation; heatmap/animation(GIF)/Hovmöller/dispersion/profile plots. **`reconstruct.jl`** rebuilds `w(σ)`/`p_nh(σ)` FROM the stored velocity modes at any σ (analytic σ-basis, Gauss quad, no Gridap; matches solver `w_s` to 4–8%). 4 example scripts + README + PLAN. No dependency on the solver. | **VALIDATED 2026-07-21** |
+| `src/` (`GridapLFEM.jl` + 11 submodules) | ★★★ **The self-contained SERIAL + DISTRIBUTED algebraic solver PACKAGE** (`module GridapLFEM`): vertical tensors (incl. `Pcal`), constant-tensor + Operation helpers, stacked spaces (distributed-safe MultiField dispatch **+ transient-Dirichlet inflow variants**), loop-free residual + hand Jacobians (the SAME code runs distributed — Operation is forwarded for `DistributedCellField`), θ time loops (sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…`) **plus reconstructed `w_s<σ>`/`p_s<σ>` fields** (`reconstruct.jl`), **`waveinput.jl` — Dirichlet boundary wave generation + WaveSpec.jl coupling** (component tables, `:model`/`:airy` polarizations, ramp, relaxation zone), drivers `setup_and_run` and `setup_and_run_distributed` (with_mpi; full nonlinear physics distributed; `eta0_func` IC hook; `wave_bc` generation kwargs). No dependency on the old solver. | **VALIDATED** (2026-07-10; BC generation 2026-07-23) |
+| `test/` (21 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` 10/10 (oracle virtual-work, ≤7e-15), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` (4 ranks), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_mms` 3/3 (unsteady nonlinear MMS), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, **`test_dispersion_nonlinear` 3/3** (full-NL⇒Airy, robust k-fit, kd=1/3/5 err 0.93/0.36/3.05%), **`test_shallow_water` 6/6** (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch (2026-07-23):** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. | **PASS** |
+| `examples/` (+ `validation/`, `distributed/`) | Sequential: `plane_wave.jl`, `ring_wave.jl` + **BC generation** `bc_plane_wave.jl`, `bc_irregular_sea.jl` (JONSWAP, gauge CSV), `bc_directional_sea.jl`; `examples/distributed/` — **6** env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry, **`run_irregular_sea_dist.jl`, `run_directional_sea_dist.jl`** — sea-state env vars + `build_airy_state()` in `_dist_common.jl`) + README; **`examples/validation/`** — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + `dispersion_sweep.jl` + **`spectral_fidelity.jl`** (JONSWAP component-wise amplitude+dispersion transfer) + README. | scripted / smoke-validated |
+| `postprocessing/` (`GridapLFEMPost`) | ★ **Self-contained postprocessing library** (its OWN env: ReadVTK, Plots+GR, FFTW, Interpolations — pinned separately from the solver). Reads VTK (`solution.pvd`/`sol_t_*.vtu`) + CSV → `WaveSimulation` (auto-`regularize!`s the duplicated Q2 node cloud to a Cartesian grid). Modules: `io, probes, spectral, diagnostics, reconstruct, plotting, seastate`. Gauges/DFT/celerity/harmonics/radial/conservation; heatmap/animation(GIF)/Hovmöller/dispersion/profile plots; **`seastate.jl`** — Welch PSD, JONSWAP target overlay (WaveSpec-identical form), spectral moments/Hs, zero-upcrossing heights, Rayleigh exceedance (+ `spectral_validation.jl` example). **`reconstruct.jl`** rebuilds `w(σ)`/`p_nh(σ)` FROM the stored velocity modes at any σ (analytic σ-basis, Gauss quad, no Gridap; matches solver `w_s` to 4–8%). 4 example scripts + README + PLAN. No dependency on the solver. | **VALIDATED 2026-07-21** |
 | `algebraic_solver_plan.md` | The package port plan (module/test/example map, notation rules) + execution results. | executed |
 | `algebraic_distributed_plan.md` | The distributed-memory port plan (old→new functionality map, GMRES stack conventions, reconstruction port) + validation results. | executed |
 | `algebraic_pressure_completion_plan.md` | The pressure-physics completion plan: ALL eight 𝓝 components in all three blocks (native {3,6,7,8}; ∇h half {1,2,4,5} exact-IBP; ∇H/𝓟 halves {1,2,4,5} frozen L²-projections) + gates (IBP identity 4e-15; scaling 4/8/4; conservation 7.8e-16; sloshing 1.44%; AD ruled out — Gridap 0.19.11 transient-multifield-AD constructor bug). | executed |
+| `WaveSpec.jl/` (repo-vendored package) | ★ **Stochastic sea-state synthesis** (CMOE-TUDelft; JONSWAP/TMA/… spectra, sampling strategies, angular spreading, `AiryState`). `Pkg.develop`ed in BOTH environments (this folder's and the parent's); `using WaveSpec` re-exported by `GridapLFEM`. The `WaveInput` converter (`src/waveinput.jl`) snapshots seeded amplitudes/phases into plain arrays and re-solves wavenumbers with the solver's g (WaveSpec uses 9.80665). `change_seed!(::AiryState)` bug fixed here 2026-07-23 (+ regression testset 7/7) — commit pending by the user. | dependency (fixed) |
+| `boundary_wave_generation.md` / `_plan.md` | ★ Dirichlet boundary wave generation: the math note (nodal trace, `:model` discrete-eigenmode polarization derivation, ramp, well-posedness/reflection, relaxation zone, WaveSpec contract, validation map with measured numbers) and the executed P0–P7 plan. | executed |
+| `production_docs_plan.md` | Follow-up batch (2026-07-23): WaveSpec fix, production sea-state cluster scripts, library review, LaTeX documentation (§8 Dirichlet subsection + §9 validation extensions). | executed |
 | `algebraic_lfem2D.jl` | Standalone prototype of the residual (pre-package; validated 16/16). Superseded by `src/` — kept for reference. | superseded |
 | `test_algebraic_lfem2D.jl` | Prototype validation script (16/16). Superseded by `test/`. | superseded |
 | `test_2HDmodel.ipynb` | Prototype notebook. Its vertical pre-compute is good; **its `residual` is broken** (see §6). It is the *motivation* for the algebraic residual, not a working reference. | broken (reference only) |
@@ -63,26 +69,49 @@ the unit basis as `w_j = −φ_j_int`). The bridge table is in `LFEM_Gridap.md` 
 > built and *why*; this block is the at-a-glance status.
 
 **Working and validated (sequential + distributed):**
-- **Solver** (`src/`): stacked `[η,𝖴x,𝖴y]` loop-free residual + hand Jacobians; θ time loops
-  (sequential LU+Newton / distributed GMRES+Jacobi+Newton); full nonlinear physics (advection, full
-  leading pressure `R_P`, all eight 𝓝 nonlinear-pressure components — native {3,6,7,8} + frozen-projection
-  {1,2,4,5}) in **both** serial and distributed; wavemaker/sponge/wall-BC; runtime residual monitoring
-  (`src/monitor.jl`); `w_s`/`p_s` VTK reconstruction.
-- **Tests** (`test/`, 17 + `cluster/`): unit tensors (15/15), stacked primitives (9/9), oracle virtual-work
-  equivalence (10/10, ≤7e-15), dispersion (closed-form curve 9/9 + linear + **full-NL asymptotic
-  consistency 3/3** + **shallow-water limit 6/6**), sloshing, conservation, energy, unsteady nonlinear MMS
-  (3/3), convergence, vertical profile, nonlinear pressure (9/9), distributed agreement (all ≤5e-9),
-  cluster conservation (verified 2 ranks).
-- **Postprocessing** (`postprocessing/`): standalone `GridapLFEMPost` — VTK/CSV → analysis/plots, and
-  from-modes `w(σ)`/`p_nh(σ)` reconstruction. Validated against solver output.
-- **Docs** (`building_files/`): `main.tex` (authoritative derivation, §8 residual incl. `R_P`),
-  `LFEM_Gridap.md`, `ValidationTests.md`/`.tex` (the validation report).
+
+- **Solver core** (`src/`): stacked `[η,𝖴x,𝖴y]` loop-free residual + hand Jacobians; θ time loops
+  (sequential LU+Newton / distributed GMRES+Jacobi+Newton); full nonlinear physics — advection, full
+  leading pressure `R_P`, all eight 𝓝 nonlinear-pressure components (native {3,6,7,8} +
+  frozen-projection {1,2,4,5}) — in **both** serial and distributed; wavemaker/sponge/wall-BC;
+  runtime solver monitoring + governing-equation residual checker (`monitor.jl`, transient-aware);
+  `w_s`/`p_s` VTK reconstruction.
+- **Dirichlet boundary wave generation + WaveSpec coupling** (`waveinput.jl`, 2026-07-23): waves
+  generated purely from time-varying Dirichlet data on a domain side — regular / multichromatic /
+  **WaveSpec `AiryState` stochastic sea states** (seeded phases ⇒ rank-deterministic); `:model`
+  discrete-eigenmode polarization (default; exact transport `Φ·Uamp = Aω/(kd)`) vs `:airy` cosh
+  sampling; model-dispersion wavenumber solver; Hann ramp / hot start; optional
+  generation/absorption **relaxation zone**. Driver kwargs
+  `wave_bc/bc_side/bc_profile/T_ramp/ic_from_bc/relax_bc/relax_width` on BOTH drivers; transient
+  trial spaces work sequentially AND distributed.
+- **Tests** (`test/`, 21 + `cluster/`): all PASS — see the §1 table for the per-file scores.
+  Highlights: oracle equivalence ≤7e-15; the asymptotic-consistency pair (full-NL⇒Airy, kd→0⇒√(gd));
+  unsteady nonlinear MMS ~3e-9; BC generation 30/30 + 11/11 + 8/8 (Goda–Suzuki) + distributed 4/4
+  (rel 3.05e-8); distributed agreement ≤5e-9 throughout.
+- **Production cluster scripts** (`examples/distributed/`, 6 total): incl.
+  `run_irregular_sea_dist.jl` / `run_directional_sea_dist.jl` (env-configured JONSWAP ± spreading
+  via `build_airy_state()`; smoke-validated on 2 ranks, θ-checker at 4e-12 under transient
+  Dirichlet). Validation runs on record: `spectral_fidelity.jl` at 60 Tp — Hs transfer 1.023,
+  dispersion 14/14 within 5% of model k, incident amplitudes 9/14 within 10%;
+  `bc_irregular_sea.jl` — near-inflow Welch Hs ratio 0.979.
+- **Postprocessing** (`postprocessing/GridapLFEMPost`): VTK/CSV → analysis/plots, from-modes
+  `w(σ)`/`p_nh(σ)` reconstruction, and the sea-state module (Welch PSD, JONSWAP target overlay,
+  Hs, Rayleigh exceedance). Validated against solver output.
+- **Docs**: `latex_doc/` (authoritative derivation; §8 incl. the Dirichlet-generation subsection;
+  §9 the validation report incl. BC gates — compile-checked), `LFEM_Gridap.md`,
+  `boundary_wave_generation.md`, `ValidationTests.md`.
+- **WaveSpec fix**: `change_seed!(::AiryState)` field bug fixed + regression testset 7/7
+  (2026-07-23) — the WaveSpec commit itself is pending by the user.
 
 **Under development / open:**
 - At-scale physical benchmarks on the cluster (Stokes harmonics, Dingemans bar) — scripts exist
   (`examples/validation/`, `examples/distributed/`), quantitative overlays on paper data pending.
+- Production-length (200+ Tp) irregular/directional sea runs on the cluster (scripts ready,
+  smoke-validated; full runs not yet launched).
 - Run-and-reconstruct **pressure** profile test; distributed-gauge utility.
 - Sheared-current focusing case (paper §4 case 5) — needs an ambient-current term (modelling extension).
+- Boundary-generation follow-ups: `:bottom`/`:top` generation sides; second-order (bound-wave)
+  irregular BC corrections.
 
 ---
 

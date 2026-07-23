@@ -187,7 +187,7 @@ function run_time_loop_dist(ranks, op, solver, u0,
                     end
                     if recon !== nothing
                         u_prev = prev_vals === nothing ? nothing :
-                                 FEFunction(trial_space, prev_vals)
+                                 FEFunction(space_at(trial_space, t_n - dt), prev_vals)
                         append!(fields, extra_field_cellfields(u_n, u_prev, dt, recon, trian))
                     end
                     pvd[t_n] = createvtk(trian, fname; cellfields=fields, append=false)

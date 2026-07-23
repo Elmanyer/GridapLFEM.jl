@@ -84,6 +84,14 @@ function setup_and_run_distributed(;
     nlp_cg_maxiter :: Int   = 500,
     d_func                  = nothing,
     eta0_func               = nothing,     # η₀(x) initial release (REQUIRES x_wall_bc=true)
+    # Dirichlet boundary wave generation (waveinput.jl) — deterministic per rank
+    wave_bc                 = nothing,     # :regular | WaveInput | WaveSpec AiryState
+    bc_side      :: Symbol  = :left,
+    bc_profile   :: Symbol  = :model,
+    T_ramp                  = nothing,
+    ic_from_bc   :: Bool    = false,
+    relax_bc     :: Bool    = false,
+    relax_width  :: Float64 = 0.0,
     # Field output
     write_w        :: Bool    = false,
     write_pressure :: Bool    = false,
@@ -126,11 +134,37 @@ function setup_and_run_distributed(;
         dom_flat = (Float64(x0), Float64(x1), Float64(y0), Float64(y1))
         nx, ny   = partition
 
+        # ----- Dirichlet boundary wave generation (deterministic on all ranks:
+        #       the WaveInput snapshots seeded phases into plain arrays) -----
+        wi = nothing
+        if wave_bc !== nothing
+            bc_side in (:left, :right) ||
+                error("setup_and_run_distributed: bc_side must be :left or :right")
+            Tr = T_ramp === nothing ? nothing : Float64(T_ramp)
+            wi = wave_bc isa WaveInput ? wave_bc :
+                 wave_bc === :regular ?
+                     WaveInput(vert; A=A_wave, T=T_wave, d=d_val, g=g,
+                               T_ramp=(Tr === nothing ? 2.0*T_wave : Tr),
+                               profile=bc_profile) :
+                     WaveInput(vert, wave_bc; d=d_val, g=g, T_ramp=Tr,
+                               profile=bc_profile)
+            i_am_main(ranks) && waveinput_summary(wi)
+            wi.directional && y_wall_bc &&
+                error("setup_and_run_distributed: directional sea requires " *
+                      "y_wall_bc=false and lateral sponges")
+            ic_from_bc && wi.T_ramp > 0.0 &&
+                error("setup_and_run_distributed: ic_from_bc=true requires T_ramp=0.0")
+        end
+        inflow = wi === nothing ? nothing :
+                 (side=bc_side, eta=eta_bc(wi), ux=ux_bc(wi),
+                  uy=wi.directional ? uy_bc(wi) : nothing)
+
         model, trian = build_horizontal_model_distributed(ranks, cpu_grid,
                                                               dom_flat, (nx, ny))
         dO   = Measure(trian, 2*fe_order + 2)
         U, V = build_fe_spaces(model, fe_order, vert.N_dof;
-                                   y_wall_bc=y_wall_bc, x_wall_bc=x_wall_bc)
+                                   y_wall_bc=y_wall_bc, x_wall_bc=x_wall_bc,
+                                   inflow=inflow)
         if i_am_main(ranks)
             @printf("  domain [%.1f,%.1f]×[%.1f,%.1f]  partition %d×%d\n", x0,x1,y0,y1,nx,ny)
             @printf("  Fields: 3 (η + 2 stacked VectorValue{%d}) | lin=%s adv=%s linP=%s Pfull=%s nlP68=%s nlPfull=%s\n",
@@ -147,14 +181,28 @@ function setup_and_run_distributed(;
                     2pi/k_wave, k_wave*d_val, sqrt(g*d_val)*dt/((x1-x0)/nx))
         end
         sponge = make_sponge(dom_flat, sponge_wL, sponge_wR, sponge_wB, sponge_wT, mu_max)
-        wm = isnothing(y_wm) ? make_wavemaker_line(x_wm, A_wave, T_wave, k_wave) :
+        wm = wi !== nothing ? ((x, t) -> 0.0) :
+             isnothing(y_wm) ? make_wavemaker_line(x_wm, A_wave, T_wave, k_wave) :
                                make_wavemaker_point(x_wm, Float64(y_wm), A_wave, T_wave)
         dfn = isnothing(d_func) ? (x -> d_val) : d_func
+
+        # generation/absorption relaxation zone adjacent to the inflow
+        relax_mu_fn = x -> 0.0
+        relax_tg    = nothing
+        use_relax   = wi !== nothing && relax_bc
+        if use_relax
+            wrx = relax_width > 0.0 ? relax_width : 2.0*pi/wi.ks[argmax(wi.amps)]
+            relax_mu_fn = bc_side == :left ?
+                (x -> x[1] < x0 + wrx ? mu_max*((x0 + wrx - x[1])/wrx)^2 : 0.0) :
+                (x -> x[1] > x1 - wrx ? mu_max*((x[1] - (x1 - wrx))/wrx)^2 : 0.0)
+            relax_tg = incident_fields(wi)
+        end
 
         prob = build_problem(vert; g=g, d_func=dfn,
             linearised=linearised, advection=advection, lin_pressure=lin_pressure,
             P_full=P_full, nl_pressure68=nl_pressure68, nl_pressure_full=nl_pressure_full,
-            mu_sponge=sponge, wm_src=wm)
+            mu_sponge=sponge, wm_src=wm,
+            relax_bc=use_relax, relax_mu=relax_mu_fn, relax_tg=relax_tg)
 
         # ----- Stage 4: Distributed ODE operator + solver + IC -----
         op      = build_ode_operator(prob, U, V, trian, dO)
@@ -164,8 +212,17 @@ function setup_and_run_distributed(;
                       ls_rtol=ls_rtol, ls_maxiter=ls_maxiter, monitor=monitor)
         checker = check_every > 0 ?
                   ResidualChecker(prob, U, V, trian, dO, dt, theta, true) : nothing
-        # interpolate_everywhere is REQUIRED distributed (FEFunction(U, zeros) fails)
-        u0 = make_initial_conditions(U, vert.N_dof; eta0_func=eta0_func)
+        # interpolate_everywhere is REQUIRED distributed (FEFunction(U, zeros) fails);
+        # space_at evaluates transient trials at t=0 (no-op for static spaces)
+        u0 = if wi !== nothing && ic_from_bc
+            inc = incident_fields(wi)
+            make_initial_conditions(space_at(U, 0.0), vert.N_dof;
+                eta0_func = x -> inc.eta(x, 0.0),
+                ux0_func  = x -> inc.ux(x, 0.0),
+                uy0_func  = x -> inc.uy(x, 0.0))
+        else
+            make_initial_conditions(space_at(U, 0.0), vert.N_dof; eta0_func=eta0_func)
+        end
 
         # nl_pressure_full: frozen-projection context (CG+Jacobi mass solve, distributed=true —
         # base `lu` has no method for a partitioned PSparseMatrix, see nlpressure.jl)

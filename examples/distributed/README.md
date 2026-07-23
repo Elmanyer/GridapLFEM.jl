@@ -20,6 +20,8 @@ components 6–8).
 | `run_ring_wave_dist.jl`  | radial ring wave, point-source wavemaker, square basin, 4-side sponge |
 | `run_ic_hump_dist.jl`    | Gaussian hump released from rest, **closed basin** (`x_wall_bc=true` — mandatory for IC problems) |
 | `run_bathymetry_dist.jl` | shoaling of a plane wave over a smooth submerged bar (variable `d(x)`, slope-pressure package on) |
+| `run_irregular_sea_dist.jl` | **long-crested JONSWAP sea via Dirichlet boundary generation** (WaveSpec.jl, no wavemaker; seeded phases → rank-identical component table) |
+| `run_directional_sea_dist.jl` | **short-crested JONSWAP × cosine-power spreading via Dirichlet BCs** (η, 𝖴x AND 𝖴y prescribed; `y_wall_bc=false` + lateral sponges) |
 
 Each runs at **any** vertical resolution (`LFEM_M`) and any core count. All knobs are
 environment variables with sensible defaults — see `_dist_common.jl` (shared) and each
@@ -47,7 +49,36 @@ LFEM_PX=2 LFEM_PY=1 LFEM_NX=60 LFEM_NY=4 LFEM_LX=60 LFEM_LY=4 \
 LFEM_PERIODS=1 LFEM_SAVE_EVERY=40 LFEM_XWM=12 LFEM_SPONGE=12 \
   ~/.julia/bin/mpiexecjl --project=. -n 2 julia --project=. \
   GridapLFEM.jl/examples/distributed/run_plane_wave_dist.jl
+
+# Irregular JONSWAP sea via Dirichlet generation, 128 ranks:
+LFEM_M=2 LFEM_PX=32 LFEM_PY=4 LFEM_HS=0.002 LFEM_TP=1.6 LFEM_NFREQ=21 \
+  ~/.julia/bin/mpiexecjl --project=. -n 128 julia --project=. \
+  GridapLFEM.jl/examples/distributed/run_irregular_sea_dist.jl
+
+# Directional (short-crested) sea, 128 ranks:
+LFEM_M=2 LFEM_PX=16 LFEM_PY=8 LFEM_NTHETA=7 LFEM_SPREAD_STD=20 \
+  ~/.julia/bin/mpiexecjl --project=. -n 128 julia --project=. \
+  GridapLFEM.jl/examples/distributed/run_directional_sea_dist.jl
 ```
+
+### Dirichlet-generation guidance (the two `*_sea_dist` scripts)
+
+- **Spectral band inside the model:** choose `LFEM_FMAX_FAC` so the shortest bin stays inside
+  the vertical model's applicable band (`kd(fmax) ≲ kd_app(M)`: 10.9/39.2/127.9 for
+  LFE-2/3/4) AND is resolved by ≥ 6 cells per wavelength. Out-of-band components fall back
+  to the Airy wavenumber with a warning and are simply not propagated correctly.
+- **Bin spacing:** `LFEM_SAMPLING=uniform` (default) keeps bins well separated, so offline
+  per-component DFT analysis is leakage-free over long windows; `energy` (equal-energy bins)
+  concentrates resolution at the peak but packs bins tightly — prefer it only for spectrum-
+  shape studies analysed with Welch PSDs (postprocessing `psd_welch`).
+- **Reproducibility:** the phase seed `LFEM_SEED` makes the realisation deterministic —
+  identical on every rank (WaveInput snapshots the seeded phases into plain arrays) and
+  across reruns; change it for ensemble statistics.
+- **Amplitude regime:** keep component amplitudes within the linear-stability rule
+  (`Hs/2 ≲ 0.001` scaled) for long fully nonlinear runs.
+- **Absorption:** never place a plain sponge on the generation side (it damps the incident
+  wave — the driver warns); use `LFEM_RELAX=1` for a generation/absorption relaxation zone
+  instead when re-reflection at the inflow matters.
 
 > `MPI_Finalize` prints a benign OFI/WiFi-NIC error and exits 143 on the development machine —
 > the computation completes correctly beforehand. Julia buffers stdout when redirected to a

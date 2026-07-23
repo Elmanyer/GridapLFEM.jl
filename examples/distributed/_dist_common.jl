@@ -61,6 +61,65 @@ nlp68_flag()    = genv_b("LFEM_NLP68", 0)
 is_rank0() = get(ENV, "OMPI_COMM_WORLD_RANK",
                  get(ENV, "PMI_RANK", "0")) == "0"
 
+# ---- Dirichlet boundary wave generation (WaveSpec.jl sea states) -------------
+#  Environment variables (used by run_irregular_sea_dist / run_directional_sea_dist):
+#    LFEM_HS          significant wave height [m]        0.002 (linear regime)
+#    LFEM_TP          peak period [s]                    1.6
+#    LFEM_GAMMA       JONSWAP peakedness (0 = estimate)  3.3
+#    LFEM_NFREQ       frequency samples (bins = nf-1)    21
+#    LFEM_FMIN_FAC    fmin = 1/(FMIN_FAC·Tp)             2.5
+#    LFEM_FMAX_FAC    fmax = 1/(FMAX_FAC·Tp)             0.75  (keep kd ≲ kd_app AND
+#                                                        ≥6 cells per shortest λ — see README)
+#    LFEM_SAMPLING    bin spacing: uniform|energy        uniform (leakage-free analysis)
+#    LFEM_NTHETA      angle samples (≤1 → long-crested)  0
+#    LFEM_SPREAD_STD  cosine-power spreading σθ [deg]    20
+#    LFEM_THETA_MAX   angular truncation ±θmax [deg]     60
+#    LFEM_SEED        phase seed (reproducible)          20260723
+#    LFEM_BC_SIDE     generation boundary left|right     left
+#    LFEM_BC_PROFILE  vertical polarization model|airy   model
+#    LFEM_TRAMP       Hann ramp [s] (unset → 2·Tp)       —
+#    LFEM_RELAX       relaxation zone at the inflow      0
+#    LFEM_RELAX_W     zone width [m] (0 → one peak λ)    0
+#  The WaveInput conversion snapshots the SEEDED phases into plain arrays, so
+#  every MPI rank builds an identical component table — no communication needed.
+hs_val()         = genv_f("LFEM_HS", 0.002)
+tp_val()         = genv_f("LFEM_TP", 1.6)
+bc_side_sym()    = Symbol(genv("LFEM_BC_SIDE", "left"))
+bc_profile_sym() = Symbol(genv("LFEM_BC_PROFILE", "model"))
+tramp_val()      = haskey(ENV, "LFEM_TRAMP") ? genv_f("LFEM_TRAMP", 0.0) : nothing
+relax_flag()     = genv_b("LFEM_RELAX", 0)
+relax_w_val()    = genv_f("LFEM_RELAX_W", 0.0)
+
+"""
+    build_airy_state(d_val; directional=false) → WaveSpec.AiryWaves.AiryState
+
+Env-configured stochastic sea state: JONSWAP spectrum, uniform-frequency (or
+equal-energy) bins, optional cosine-power angular spreading, seeded phases.
+`directional=true` switches the default spreading on (`LFEM_NTHETA` ≥ 2).
+"""
+function build_airy_state(d_val; directional::Bool=false)
+    Hs, Tp = hs_val(), tp_val()
+    γ      = genv_f("LFEM_GAMMA", 3.3)
+    nf     = genv_i("LFEM_NFREQ", 21)
+    fmin   = 1.0/(genv_f("LFEM_FMIN_FAC", 2.5)*Tp)
+    fmax   = 1.0/(genv_f("LFEM_FMAX_FAC", 0.75)*Tp)
+    dom    = lowercase(genv("LFEM_SAMPLING", "uniform")) == "energy" ?
+             WaveSpec.SpectralSampling.Energy : WaveSpec.SpectralSampling.Frequency
+    spec   = γ > 0 ? WaveSpec.ContinuousSpectrums.JONSWAP(Hs, Tp, γ) :
+                     WaveSpec.ContinuousSpectrums.JONSWAP(Hs, Tp)
+    dspec  = WaveSpec.SpectralSpreading.DiscreteSpectralSpreading(
+                 spec, WaveSpec.SpectralSampling.UniformSampling(),
+                 fmin, fmax, nf; domain=dom, mess=is_rank0())
+    nθ = genv_i("LFEM_NTHETA", directional ? 7 : 0)
+    spread = nθ <= 1 ? WaveSpec.AngularSpreading.DiscreteAngularSpreading(0.0) :
+             WaveSpec.AngularSpreading.DiscreteAngularSpreading(
+                 :cosinepow, 0.0, genv_f("LFEM_SPREAD_STD", 20.0)*pi/180,
+                 -genv_f("LFEM_THETA_MAX", 60.0)*pi/180,
+                  genv_f("LFEM_THETA_MAX", 60.0)*pi/180, nθ)
+    state = WaveSpec.AiryWaves.AiryState(dspec, spread, d_val)
+    return WaveSpec.AiryWaves.change_seed!(state, genv_i("LFEM_SEED", 20260723))
+end
+
 function banner(title, M, cpu_grid, partition, ncells, outdir)
     is_rank0() || return
     @printf("############################################################\n")

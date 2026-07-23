@@ -70,6 +70,7 @@ include("spectral.jl")
 include("diagnostics.jl")
 include("reconstruct.jl")
 include("plotting.jl")
+include("seastate.jl")
 
 # ---- exports -----------------------------------------------------------------
 export WaveSimulation, GridView, Gauge, SigmaProfile, CsvTable
@@ -82,6 +83,8 @@ export SigmaBasis, sigma_basis, phi, phi_int, pi3, unit_w
 export reconstruct_profile, reconstruct_w, reconstruct_pressure
 export plot_field, animate_field, plot_gauge, plot_hovmoller, plot_dispersion
 export plot_vertical_profile, plot_harmonic_growth, plot_radial_decay, plot_csv
+export jonswap_density, psd_welch, spectral_moment, significant_height
+export zero_crossing_heights, plot_sea_spectrum, plot_exceedance
 export savefig, gif, plot, plot!          # re-exported from Plots
 
 end # module
