@@ -57,6 +57,22 @@ adv_flag()      = genv_b("LFEM_ADVECTION", 1)
 pfull_flag()    = genv_b("LFEM_PFULL", 0)
 nlp68_flag()    = genv_b("LFEM_NLP68", 0)
 
+# ---- Time integrator + nonlinear/linear solver controls ---------------------
+#  Default integrator is the fully-implicit RungeKutta :SDIRK_2_2 (L-stable,
+#  more robust than Crank–Nicolson). Override caps/tolerances per cluster job:
+#    LFEM_SOLVER      integrator: sdirk|theta        sdirk
+#    LFEM_TABLEAU     RK tableau (solver=sdirk)       SDIRK_2_2
+#    LFEM_NL_ITER     max Newton iterations / stage    50
+#    LFEM_NL_TOL      Newton tolerance (production)    1e-6
+#    LFEM_LS_MAXITER  max GMRES iterations / Newton    2000
+#    LFEM_LS_RTOL     GMRES relative tolerance         1e-9
+solver_sym()     = Symbol(genv("LFEM_SOLVER", "sdirk"))
+tableau_sym()    = Symbol(genv("LFEM_TABLEAU", "SDIRK_2_2"))
+nl_iter_val()    = genv_i("LFEM_NL_ITER", 50)
+nl_tol_val()     = genv_f("LFEM_NL_TOL", 1e-6)
+ls_maxiter_val() = genv_i("LFEM_LS_MAXITER", 2000)
+ls_rtol_val()    = genv_f("LFEM_LS_RTOL", 1e-9)
+
 # rank-0 detection BEFORE MPI.Init (OpenMPI / MPICH set these per rank).
 is_rank0() = get(ENV, "OMPI_COMM_WORLD_RANK",
                  get(ENV, "PMI_RANK", "0")) == "0"

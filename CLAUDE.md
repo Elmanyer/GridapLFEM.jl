@@ -42,7 +42,7 @@ vertical nodes; velocity modes are 1-based `j=1..Nσ`, one per node. (Do **not**
 | `LFEM_Gridap.md` | Clean synthesis of the derivation §1–§8 (leading to the single scalar residual). Uses the LaTeX notation exclusively; §9 is a notation bridge to the solver code. | done |
 | `algebraic_residual_math.md` | ★ Operator simplifications: how to write the §8 residual with native Gridap tensor ops, **no MultiField decomposition, no vertical-index loops**. The `L`/`N` pressure stacks, the leading-pressure `R_P` (§6b), IBP of second-derivative terms, verified Gridap operator table. | **spec — start here** |
 | `algebraic_residual_plan.md` | ★ Phased implementation plan (P1–P6) for the new residual: FE-space redesign, tensor constants, residual skeleton, Jacobian, validation, risks. | **plan — then here** |
-| `src/` (`GridapLFEM.jl` + 11 submodules) | ★★★ **The self-contained SERIAL + DISTRIBUTED algebraic solver PACKAGE** (`module GridapLFEM`): vertical tensors (incl. `Pcal`), constant-tensor + Operation helpers, stacked spaces (distributed-safe MultiField dispatch **+ transient-Dirichlet inflow variants**), loop-free residual + hand Jacobians (the SAME code runs distributed — Operation is forwarded for `DistributedCellField`), θ time loops (sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…`) **plus reconstructed `w_s<σ>`/`p_s<σ>` fields** (`reconstruct.jl`), **`waveinput.jl` — Dirichlet boundary wave generation + WaveSpec.jl coupling** (component tables, `:model`/`:airy` polarizations, ramp, relaxation zone), drivers `setup_and_run` and `setup_and_run_distributed` (with_mpi; full nonlinear physics distributed; `eta0_func` IC hook; `wave_bc` generation kwargs). No dependency on the old solver. | **VALIDATED** (2026-07-10; BC generation 2026-07-23) |
+| `src/` (`GridapLFEM.jl` + 11 submodules) | ★★★ **The self-contained SERIAL + DISTRIBUTED algebraic solver PACKAGE** (`module GridapLFEM`): vertical tensors (incl. `Pcal`), constant-tensor + Operation helpers, stacked spaces (distributed-safe MultiField dispatch **+ transient-Dirichlet inflow variants**), loop-free residual + hand Jacobians (the SAME code runs distributed — Operation is forwarded for `DistributedCellField`), time loops (default fully-implicit `RungeKutta(:SDIRK_2_2)`; `:theta` Crank–Nicolson optional — `solver_type` kwarg; sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…`) **plus reconstructed `w_s<σ>`/`p_s<σ>` fields** (`reconstruct.jl`), **`waveinput.jl` — Dirichlet boundary wave generation + WaveSpec.jl coupling** (component tables, `:model`/`:airy` polarizations, ramp, relaxation zone), drivers `setup_and_run` and `setup_and_run_distributed` (with_mpi; full nonlinear physics distributed; `eta0_func` IC hook; `wave_bc` generation kwargs). No dependency on the old solver. | **VALIDATED** (2026-07-10; BC generation 2026-07-23) |
 | `test/` (21 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` 10/10 (oracle virtual-work, ≤7e-15), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` (4 ranks), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_mms` 3/3 (unsteady nonlinear MMS), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, **`test_dispersion_nonlinear` 3/3** (full-NL⇒Airy, robust k-fit, kd=1/3/5 err 0.93/0.36/3.05%), **`test_shallow_water` 6/6** (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch (2026-07-23):** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. | **PASS** |
 | `examples/` (+ `validation/`, `distributed/`) | Sequential: `plane_wave.jl`, `ring_wave.jl` + **BC generation** `bc_plane_wave.jl`, `bc_irregular_sea.jl` (JONSWAP, gauge CSV), `bc_directional_sea.jl`; `examples/distributed/` — **6** env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry, **`run_irregular_sea_dist.jl`, `run_directional_sea_dist.jl`** — sea-state env vars + `build_airy_state()` in `_dist_common.jl`) + README; **`examples/validation/`** — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + `dispersion_sweep.jl` + **`spectral_fidelity.jl`** (JONSWAP component-wise amplitude+dispersion transfer) + README. | scripted / smoke-validated |
 | `postprocessing/` (`GridapLFEMPost`) | ★ **Self-contained postprocessing library** (its OWN env: ReadVTK, Plots+GR, FFTW, Interpolations — pinned separately from the solver). Reads VTK (`solution.pvd`/`sol_t_*.vtu`) + CSV → `WaveSimulation` (auto-`regularize!`s the duplicated Q2 node cloud to a Cartesian grid). Modules: `io, probes, spectral, diagnostics, reconstruct, plotting, seastate`. Gauges/DFT/celerity/harmonics/radial/conservation; heatmap/animation(GIF)/Hovmöller/dispersion/profile plots; **`seastate.jl`** — Welch PSD, JONSWAP target overlay (WaveSpec-identical form), spectral moments/Hs, zero-upcrossing heights, Rayleigh exceedance (+ `spectral_validation.jl` example). **`reconstruct.jl`** rebuilds `w(σ)`/`p_nh(σ)` FROM the stored velocity modes at any σ (analytic σ-basis, Gauss quad, no Gridap; matches solver `w_s` to 4–8%). 4 example scripts + README + PLAN. No dependency on the solver. | **VALIDATED 2026-07-21** |
@@ -70,8 +70,10 @@ the unit basis as `w_j = −φ_j_int`). The bridge table is in `LFEM_Gridap.md` 
 
 **Working and validated (sequential + distributed):**
 
-- **Solver core** (`src/`): stacked `[η,𝖴x,𝖴y]` loop-free residual + hand Jacobians; θ time loops
-  (sequential LU+Newton / distributed GMRES+Jacobi+Newton); full nonlinear physics — advection, full
+- **Solver core** (`src/`): stacked `[η,𝖴x,𝖴y]` loop-free residual + hand Jacobians; time loops
+  default to the **fully-implicit `RungeKutta(:SDIRK_2_2)`** (L-stable 2nd-order, more robust than
+  Crank–Nicolson; `:theta` still selectable via `solver_type`) — sequential LU+Newton / distributed
+  GMRES+Jacobi+Newton; full nonlinear physics — advection, full
   leading pressure `R_P`, all eight 𝓝 nonlinear-pressure components (native {3,6,7,8} +
   frozen-projection {1,2,4,5}) — in **both** serial and distributed; wavemaker/sponge/wall-BC;
   runtime solver monitoring + governing-equation residual checker (`monitor.jl`, transient-aware);
@@ -436,15 +438,20 @@ distributed.
 * `ResidualChecker` + `check_residuals` — every `check_every` steps the GOVERNING
   EQUATIONS are reassembled independently: (a) the θ-scheme discrete residual at
   `(t+θΔt, θu_{n+1}+(1−θ)u_n, (u_{n+1}−u_n)/Δt)` (exactly what ThetaMethod solves — must sit at
-  the Newton tolerance, verified ~1e-13; prints WARN if > `check_tol`), (b) the instantaneous PDE
-  residual at `(t_n, u_n, u̇_FD)` (= local time-discretisation error, O(Δt)). PVector-safe norms.
+  the Newton tolerance, verified ~1e-13; prints WARN if > `check_tol`) — **only runs under
+  `solver_type=:theta`** (`is_theta` gate; `res_theta=NaN` and the θ-WARN is skipped under SDIRK),
+  (b) the instantaneous PDE residual at `(t_n, u_n, u̇_FD)` (= local time-discretisation error,
+  O(Δt)), reassembled for any integrator. PVector-safe norms.
 * Both time loops print: solver-config banner (solver type, tolerances, max iters, dt/steps),
   per-step line (`step, t, eta_max, NL its, r0→r, [conv], gmres, solve s, ETA`), timed VTK
   writes, non-convergence warnings, end-of-run summary (wall, s/step, %solve, Newton totals).
   Diags tuples gained `nl_iters, res_nl, t_solve`.
-* Driver kwargs (both `setup_and_run*`): `nl_iter, nl_tol` (sequential — was hardcoded),
+* Driver kwargs (both `setup_and_run*`): `solver_type=:sdirk` (default; `:theta` for CN),
+  `tableau=:SDIRK_2_2`, `nl_iter=50`, `nl_tol=1e-6` (production; convergence/physical-repro tests
+  pin `1e-8`), distributed `ls_maxiter=2000`/`ls_rtol=1e-9` (GMRES kept accurate),
   `print_every=1` (step-based; legacy `print_dt` still honoured when passed — cluster scripts
-  unchanged), `check_every=50` (0=off), `check_tol=1e-8`.
+  unchanged), `check_every=50` (0=off), `check_tol=1e-8`. Distributed run scripts expose these as
+  `LFEM_SOLVER/TABLEAU/NL_ITER/NL_TOL/LS_MAXITER/LS_RTOL` env vars.
 * Fixed along the way: commit a640ffc had `createvtk(...; cellfields=fields; append=false)` —
   a double-semicolon SYNTAX ERROR in both time loops (HEAD did not even load); now
   `cellfields=fields, append=false`.
@@ -476,6 +483,21 @@ postprocessing: `sigma_basis`+`phi/phi_int/pi3` (analytic Gauss-quad σ-basis, n
 `reconstruct_profile`(`:w`/`:p`/`:pnh`) rebuild the vertical kinematics FROM the stored velocity modes at
 any σ — cross-checked against the solver's own `w_s<σ>` (agree 4–8%, the FD-vs-exact-FE-gradient gap; exact
 `w(0)=0`, `p_nh(1)=0`). 4 example scripts + README + PLAN.
+
+**DEFAULT INTEGRATOR → SDIRK (2026-07-23).** The default time integrator switched from ThetaMethod
+(Crank–Nicolson θ=0.5) to the **fully-implicit `RungeKutta(nls, ls, dt, :SDIRK_2_2)`** (L-stable
+2nd-order DIM; template `../../GridapSWE.jl`) in BOTH `build_ode_solver` and
+`build_ode_solver_distributed`; `solver_type=:theta` still selects CN. Motivation: the 128-rank /
+200k-cell production plane-wave run (kd=5.5) had Newton non-convergence under CN + GMRES/Jacobi, and
+the fixed `nl_tol=1e-10` absolute `‖r‖₂` is unreachable at that DOF count. New defaults: `nl_iter=50`,
+`nl_tol=1e-6` (production) — convergence/physical-repro tests pin `1e-8` — distributed `ls_maxiter=2000`,
+`ls_rtol` kept `1e-9` (GMRES stays accurate; Newton needs good steps). Verified: hand Jacobians drive
+the SDIRK stage solves correctly (2-step run, Newton `r0=5.3e-4→5.7e-13`); the monitor is stage-aware;
+the θ-checker is gated off under SDIRK. **Caveats:** `test_energy` (non-dissipativity, env-drift <3%) is
+in physical tension with L-stable SDIRK's numerical dissipation — RE-RUN and, if it fails, keep it on
+`:theta` or loosen its threshold. `test_mms` is NOT converted (hand-rolled θ Jacobian-recovery harness,
+not the ODE solver). `test_dispersion_curve`/`test_vertical_profile` run no time loop — untouched.
+The full suite has not been re-run under SDIRK yet.
 
 > **Doc/plan relocation:** the derivation docs (`main.tex`, `LFEM_Gridap.md`), the algebraic-project spec/
 > plans (`algebraic_*.md`), and the validation reports (`ValidationTests.md`/`.tex`) now live in

@@ -70,6 +70,9 @@ diags, vert, prob = setup_and_run_distributed(
     y_wall_bc=true, x_wall_bc=false,
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
+    solver_type=solver_sym(), tableau=tableau_sym(),
+    nl_iter=nl_iter_val(), nl_tol=nl_tol_val(),
+    ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(),
     print_every=genv_i("LFEM_PRINT_EVERY", 10))
 
 is_rank0() && @printf("bathymetry_dist done: %d steps, %d snapshots to %s\n",

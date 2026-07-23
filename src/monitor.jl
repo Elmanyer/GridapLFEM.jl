@@ -235,7 +235,8 @@ function print_solver_banner(nl_desc::String, ls_desc::String;
     println(io, "=== Solver configuration ===")
     println(io, "  Nonlinear solver : ", nl_desc)
     println(io, "  Linear solver    : ", ls_desc)
-    tdesc = solver_type == :theta     ? @sprintf("ThetaMethod (θ=%.2f)", theta) :
+    tdesc = solver_type == :sdirk     ? "RungeKutta (SDIRK_2_2, fully implicit)" :
+            solver_type == :theta     ? @sprintf("ThetaMethod (θ=%.2f)", theta) :
             solver_type == :gen_alpha ? "GeneralizedAlpha" : "RungeKutta SDIRK-3"
     @printf(io, "  Time integrator  : %s | dt=%g s | t ∈ [%g, %g] → %d steps\n",
             tdesc, dt, t0, T_final, n_steps)

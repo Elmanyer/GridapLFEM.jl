@@ -165,7 +165,8 @@ function setup_and_run(;
     mu_max       :: Float64 = 5.0,
     T_final      :: Float64 = 12.8,
     dt           :: Float64 = 0.02,
-    solver_type  :: Symbol  = :theta,
+    solver_type  :: Symbol  = :sdirk,     # :sdirk (RungeKutta, default) | :theta | :gen_alpha | :rk3
+    tableau      :: Symbol  = :SDIRK_2_2,  # RK tableau when solver_type == :sdirk
     theta        :: Float64 = 0.5,
     rho_inf      :: Float64 = 0.5,
     output_dir   :: String  = joinpath(@__DIR__, "..", "output", "seq_out"),
@@ -192,8 +193,8 @@ function setup_and_run(;
     use_ad       :: Bool    = false,
     show_trace   :: Bool    = false,
     # Nonlinear solver controls
-    nl_iter      :: Int     = 20,         # max Newton iterations per step
-    nl_tol       :: Float64 = 1e-10,      # Newton ftol (‖r‖∞, NLsolve)
+    nl_iter      :: Int     = 50,         # max Newton iterations per stage
+    nl_tol       :: Float64 = 1e-6,       # Newton ftol (‖r‖∞, NLsolve) — production default
     # Runtime diagnostics
     print_every  :: Int     = 1,          # step report every N steps (1 = every step)
     check_every  :: Int     = 50,         # governing-eq residual check every N steps (0 = off)
@@ -298,7 +299,8 @@ function setup_and_run(;
                   build_ode_operator(prob, U, V, trian, dO)
     monitor = SolverMonitor()
     solver  = build_ode_solver(dt; solver_type=solver_type, theta=theta,
-                                   rho_inf=rho_inf, nl_iter=nl_iter, nl_tol=nl_tol,
+                                   rho_inf=rho_inf, tableau=tableau,
+                                   nl_iter=nl_iter, nl_tol=nl_tol,
                                    show_trace=show_trace, monitor=monitor)
     checker = check_every > 0 ?
               ResidualChecker(prob, U, V, trian, dO, dt, theta,

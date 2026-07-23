@@ -82,7 +82,7 @@ result = with_mpi() do distribute
 
     op      = build_ode_operator(prob, U, V, trian, dO)
     monitor = SolverMonitor()
-    solver  = build_ode_solver_distributed(dt; monitor=monitor)
+    solver  = build_ode_solver_distributed(dt; nl_tol=1e-8, monitor=monitor)
 
     M0 = mass(u0); E0 = energy(u0); L0 = etaL2(u0)
     nsteps = round(Int, Tfinal/dt)

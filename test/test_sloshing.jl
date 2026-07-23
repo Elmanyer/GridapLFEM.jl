@@ -44,7 +44,7 @@ diags, _, _ = setup_and_run(
     T_final=Tf, dt=dt, eta0_func=eta0,
     linearised=true, advection=false,
     y_wall_bc=true, x_wall_bc=true,
-    gauges=[(0.05, Ly/2)], save_every=0)
+    gauges=[(0.05, Ly/2)], save_every=0, nl_tol=1e-8)
 
 ts = [d.t for d in diags]; gs = [d.gauge_vals[1] for d in diags]
 

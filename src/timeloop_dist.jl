@@ -34,20 +34,24 @@ function build_horizontal_model_distributed(ranks, cpu_grid::Tuple,
 end
 
 """
-    build_ode_solver_distributed(dt; theta, nl_iter, nl_tol, ls_rtol,
-                                     ls_maxiter, monitor)
+    build_ode_solver_distributed(dt; solver_type, theta, tableau, nl_iter,
+                                     nl_tol, ls_rtol, ls_maxiter, monitor)
 
-Distributed ODE solver factory: ThetaMethod wrapping NewtonSolver(GMRES with
-Jacobi preconditioner) — the scalable GridapSWE-pattern stack. Pass a
-`SolverMonitor` as `monitor` to collect per-step convergence statistics.
+Distributed ODE solver factory (template: GridapSWE.jl). Wraps
+NewtonSolver(GMRES + Jacobi preconditioner) — the scalable GridapSWE-pattern
+linear stack. Integrators: `:sdirk` (fully-implicit `RungeKutta(nls, ls, dt,
+tableau)`, default; `:SDIRK_2_2` = L-stable 2nd-order, more stable than
+Crank–Nicolson) and `:theta` (Crank–Nicolson). Pass a `SolverMonitor` as
+`monitor` to collect per-step convergence statistics (RK: over the stages).
 """
 function build_ode_solver_distributed(dt::Float64;
-                                          solver_type :: Symbol  = :theta,
+                                          solver_type :: Symbol  = :sdirk,
                                           theta       :: Float64 = 0.5,
-                                          nl_iter     :: Int     = 20,
-                                          nl_tol      :: Float64 = 1e-10,
+                                          tableau     :: Symbol  = :SDIRK_2_2,
+                                          nl_iter     :: Int     = 50,
+                                          nl_tol      :: Float64 = 1e-6,
                                           ls_rtol     :: Float64 = 1e-9,
-                                          ls_maxiter  :: Int     = 800,
+                                          ls_maxiter  :: Int     = 2000,
                                           monitor                = nothing)
     ls  = GMRESSolver(ls_maxiter; Pr=JacobiLinearSolver(), rtol=ls_rtol,
                       atol=1e-14, verbose=false)
@@ -56,10 +60,12 @@ function build_ode_solver_distributed(dt::Float64;
         monitor.inner = nls
         nls = monitor
     end
-    if solver_type == :theta
+    if solver_type == :sdirk
+        return RungeKutta(nls, ls, dt, tableau)
+    elseif solver_type == :theta
         return ThetaMethod(nls, dt, theta)
     else
-        error("Distributed algebraic solver supports :theta (GMRES+Jacobi+Newton).")
+        error("Distributed algebraic solver supports :sdirk (RungeKutta) or :theta.")
     end
 end
 

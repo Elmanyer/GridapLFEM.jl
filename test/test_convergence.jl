@@ -46,7 +46,7 @@ function gauge_run(nx, dt)
         fe_order=2, d_val=d_val, T_wave=T_wave, A_wave=A, x_wm=x_wm, y_wm=nothing,
         sponge_wL=6.0, sponge_wR=6.0, mu_max=30.0, T_final=T_final, dt=dt,
         save_every=0, gauges=[(x_g, y_g)], linearised=true, advection=false,
-        print_every=10_000)
+        nl_tol=1e-8, print_every=10_000)
     return [d.gauge_vals[1] for d in diags]
 end
 

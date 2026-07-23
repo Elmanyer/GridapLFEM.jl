@@ -64,6 +64,8 @@ function setup_and_run_distributed(;
     # Time integration
     T_final      :: Float64 = 12.8,
     dt           :: Float64 = 0.02,
+    solver_type  :: Symbol  = :sdirk,      # :sdirk (RungeKutta, default) | :theta
+    tableau      :: Symbol  = :SDIRK_2_2,  # RK tableau when solver_type == :sdirk
     theta        :: Float64 = 0.5,
     # Output
     output_dir   :: String  = joinpath(@__DIR__, "..", "output", "dist_out"),
@@ -97,10 +99,10 @@ function setup_and_run_distributed(;
     write_pressure :: Bool    = false,
     rho            :: Float64 = 1025.0,
     # Solver tolerances
-    nl_iter      :: Int     = 20,
-    nl_tol       :: Float64 = 1e-10,
-    ls_rtol      :: Float64 = 1e-9,
-    ls_maxiter   :: Int     = 800,
+    nl_iter      :: Int     = 50,          # max Newton iterations per stage
+    nl_tol       :: Float64 = 1e-6,        # Newton atol (‖r‖₂) — production default
+    ls_rtol      :: Float64 = 1e-9,        # GMRES rtol (kept tight: Newton needs accurate steps)
+    ls_maxiter   :: Int     = 2000,
     # Runtime diagnostics
     print_every  :: Int     = 1,          # step report every N steps (print_dt overrides)
     check_every  :: Int     = 50,         # governing-eq residual check every N steps (0 = off)
@@ -207,11 +209,13 @@ function setup_and_run_distributed(;
         # ----- Stage 4: Distributed ODE operator + solver + IC -----
         op      = build_ode_operator(prob, U, V, trian, dO)
         monitor = SolverMonitor()
-        solver  = build_ode_solver_distributed(dt; theta=theta,
+        solver  = build_ode_solver_distributed(dt; solver_type=solver_type,
+                      theta=theta, tableau=tableau,
                       nl_iter=nl_iter, nl_tol=nl_tol,
                       ls_rtol=ls_rtol, ls_maxiter=ls_maxiter, monitor=monitor)
         checker = check_every > 0 ?
-                  ResidualChecker(prob, U, V, trian, dO, dt, theta, true) : nothing
+                  ResidualChecker(prob, U, V, trian, dO, dt, theta,
+                                     solver_type == :theta) : nothing
         # interpolate_everywhere is REQUIRED distributed (FEFunction(U, zeros) fails);
         # space_at evaluates transient trials at t=0 (no-op for static spaces)
         u0 = if wi !== nothing && ic_from_bc
@@ -246,7 +250,7 @@ function setup_and_run_distributed(;
                          nl_iter, nl_tol),
                 @sprintf("GMRES + Jacobi preconditioner | max iters = %d | rtol = %.1e, atol = 1.0e-14",
                          ls_maxiter, ls_rtol);
-                solver_type=:theta, theta=theta, dt=dt, t0=0.0, T_final=T_final,
+                solver_type=solver_type, theta=theta, dt=dt, t0=0.0, T_final=T_final,
                 print_every=print_every, print_dt=print_dt,
                 check_every=check_every, check_tol=check_tol)
             println("\n=== Time loop (algebraic, distributed) ===")

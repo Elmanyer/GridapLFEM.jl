@@ -69,7 +69,7 @@ diags, _, _ = setup_and_run(
     fe_order=2, d_val=d, T_wave=T_wave, A_wave=5e-4, x_wm=x_wm, y_wm=nothing,
     sponge_wL=15.0, sponge_wR=15.0, mu_max=5.0, T_final=Tf, dt=dt, save_every=0,
     gauges=[(x_g1,y_g),(x_g2,y_g)], linearised=false, advection=true,   # ★ full nonlinear
-    print_every=10_000)
+    nl_tol=1e-8, print_every=10_000)
 
 ts = [d.t for d in diags]
 g1 = [d.gauge_vals[1] for d in diags]; g2 = [d.gauge_vals[2] for d in diags]

@@ -8,20 +8,24 @@
 # ==============================================================
 
 """
-    build_ode_solver(dt; solver_type, theta, rho_inf, nl_iter, nl_tol,
+    build_ode_solver(dt; solver_type, theta, rho_inf, tableau, nl_iter, nl_tol,
                          show_trace, monitor)
 
-Gridap ODE solver factory: `:theta` (Crank–Nicolson θ=0.5, recommended),
-`:gen_alpha`, `:rk3` (SDIRK). Nonlinear solve: Newton + LU. Pass a
-`SolverMonitor` as `monitor` to collect per-step convergence statistics
-(the monitor wraps the Newton solver transparently).
+Gridap ODE solver factory (template: GridapSWE.jl `RungeKutta(nls, ls, dt,
+tableau)`). Options: `:sdirk` (fully-implicit diagonally-implicit Runge–Kutta,
+default — more stable than Crank–Nicolson; tableau `:SDIRK_2_2`, L-stable
+2nd-order), `:theta` (Crank–Nicolson θ=0.5, non-dissipative), `:gen_alpha`,
+`:rk3` (SDIRK_3_4). Nonlinear solve: Newton + LU. Pass a `SolverMonitor` as
+`monitor` to collect per-step convergence statistics (the monitor wraps the
+Newton solver transparently; for RK it accumulates over the implicit stages).
 """
 function build_ode_solver(dt::Float64;
-                              solver_type :: Symbol  = :theta,
+                              solver_type :: Symbol  = :sdirk,
                               theta       :: Float64 = 0.5,
                               rho_inf     :: Float64 = 0.5,
-                              nl_iter     :: Int     = 20,
-                              nl_tol      :: Float64 = 1e-10,
+                              tableau     :: Symbol  = :SDIRK_2_2,
+                              nl_iter     :: Int     = 50,
+                              nl_tol      :: Float64 = 1e-6,
                               show_trace  :: Bool    = false,
                               monitor                = nothing)
     ls  = LUSolver()
@@ -31,14 +35,16 @@ function build_ode_solver(dt::Float64;
         monitor.inner = nls
         nls = monitor
     end
-    if solver_type == :theta
+    if solver_type == :sdirk
+        return RungeKutta(nls, ls, dt, tableau)
+    elseif solver_type == :theta
         return ThetaMethod(nls, dt, theta)
     elseif solver_type == :gen_alpha
         return GeneralizedAlpha(nls, dt, rho_inf)
     elseif solver_type == :rk3
         return RungeKutta(nls, ls, dt, :SDIRK_3_4)
     else
-        error("Unknown solver_type; choose :theta, :gen_alpha, or :rk3")
+        error("Unknown solver_type; choose :sdirk, :theta, :gen_alpha, or :rk3")
     end
 end
 

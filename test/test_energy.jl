@@ -66,7 +66,7 @@ E0 = energy(u0)
 
 dt = T_th/80; Tf = 6*T_th
 op     = build_ode_operator(prob, U, V, trian, dO)
-solver = build_ode_solver(dt)
+solver = build_ode_solver(dt; nl_tol=1e-8)
 odesol = solve(solver, op, 0.0, Tf, u0)
 
 xg = VectorValue(0.05, Ly/2)                     # near the x=0 antinode

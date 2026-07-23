@@ -45,7 +45,7 @@ M0 = mass(u0)
 @printf("  Initial mass ∫η = %.8e   (Nσ=%d, %d×%d cells)\n", M0, Nσ, partition...)
 
 op     = build_ode_operator(prob, U, V, trian, dO)
-solver = build_ode_solver(0.02)
+solver = build_ode_solver(0.02; nl_tol=1e-8)
 odesol = solve(solver, op, 0.0, 2.0, u0)
 
 masses = Float64[M0]; emax = 0.0; nst = 0

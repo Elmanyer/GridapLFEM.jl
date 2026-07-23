@@ -102,7 +102,7 @@ result = with_mpi() do distribute
     op = TransientFEOperator(res_f, jac_f, jact_f, U, V)
 
     monitor = SolverMonitor()
-    solver  = build_ode_solver_distributed(dt; monitor=monitor)
+    solver  = build_ode_solver_distributed(dt; nl_tol=1e-8, monitor=monitor)
     u0 = ustar(0.0)
     nlp !== nothing && update_nlp_state!(nlp[1], nlp[2], u0)     # frozen π from u*(0)
 
