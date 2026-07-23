@@ -40,8 +40,9 @@ vertical nodes; velocity modes are 1-based `j=1..Nσ`, one per node. (Do **not**
 | `algebraic_residual_math.md` | ★ Operator simplifications: how to write the §8 residual with native Gridap tensor ops, **no MultiField decomposition, no vertical-index loops**. The `L`/`N` pressure stacks, the leading-pressure `R_P` (§6b), IBP of second-derivative terms, verified Gridap operator table. | **spec — start here** |
 | `algebraic_residual_plan.md` | ★ Phased implementation plan (P1–P6) for the new residual: FE-space redesign, tensor constants, residual skeleton, Jacobian, validation, risks. | **plan — then here** |
 | `src/` (`GridapLFEM.jl` + 10 submodules) | ★★★ **The self-contained SERIAL + DISTRIBUTED algebraic solver PACKAGE** (`module GridapLFEM`): vertical tensors (incl. new `Pcal`), constant-tensor + Operation helpers, stacked spaces (distributed-safe MultiField dispatch), loop-free residual + hand Jacobians (the SAME code runs distributed — Operation is forwarded for `DistributedCellField`), θ time loops (sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…` — old naming) **plus reconstructed `w_s<σ>`/`p_s<σ>` fields** (`reconstruct.jl`, `write_w`/`write_pressure`), drivers `setup_and_run` and `setup_and_run_distributed` (with_mpi; **full nonlinear physics distributed** — no V⊗H loop needed; `eta0_func` IC hook). No dependency on the old solver. | **VALIDATED 2026-07-10** |
-| `test/` (6 tests) | `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` 10/10 (oracle virtual-work, ≤7e-15), `test_basic` 6/6, `test_dispersion` 1/1 (kd=3 err 0.90%), `test_basic_distributed` (4 ranks 2×2, linear + FULLY NONLINEAR, sequential agreement). | **PASS** |
-| `examples/` | `plane_wave.jl`, `ring_wave.jl` (sequential, quick defaults) + `examples/distributed/` — 4 env-configurable cluster scripts (plane wave, ring wave, IC hump closed basin, bathymetry/shoaling) + README with mpiexecjl/SLURM templates. | scripted |
+| `test/` (17 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` 10/10 (oracle virtual-work, ≤7e-15), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` (4 ranks), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_mms` 3/3 (unsteady nonlinear MMS), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, **`test_dispersion_nonlinear` 3/3** (full-NL⇒Airy, robust k-fit, kd=1/3/5 err 0.93/0.36/3.05%), **`test_shallow_water` 6/6** (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. | **PASS** |
+| `examples/` (+ `validation/`, `distributed/`) | `plane_wave.jl`, `ring_wave.jl` (sequential, quick defaults); `examples/distributed/` — 4 env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry) + README; **`examples/validation/`** — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + **`dispersion_sweep.jl`** (full-NL Cm/Ce(kd) curve, robust k-fit) + README. | scripted |
+| `postprocessing/` (`GridapLFEMPost`) | ★ **Self-contained postprocessing library** (its OWN env: ReadVTK, Plots+GR, FFTW, Interpolations — pinned separately from the solver). Reads VTK (`solution.pvd`/`sol_t_*.vtu`) + CSV → `WaveSimulation` (auto-`regularize!`s the duplicated Q2 node cloud to a Cartesian grid). Modules: `io, probes, spectral, diagnostics, reconstruct, plotting`. Gauges/DFT/celerity/harmonics/radial/conservation; heatmap/animation(GIF)/Hovmöller/dispersion/profile plots. **`reconstruct.jl`** rebuilds `w(σ)`/`p_nh(σ)` FROM the stored velocity modes at any σ (analytic σ-basis, Gauss quad, no Gridap; matches solver `w_s` to 4–8%). 4 example scripts + README + PLAN. No dependency on the solver. | **VALIDATED 2026-07-21** |
 | `algebraic_solver_plan.md` | The package port plan (module/test/example map, notation rules) + execution results. | executed |
 | `algebraic_distributed_plan.md` | The distributed-memory port plan (old→new functionality map, GMRES stack conventions, reconstruction port) + validation results. | executed |
 | `algebraic_pressure_completion_plan.md` | The pressure-physics completion plan: ALL eight 𝓝 components in all three blocks (native {3,6,7,8}; ∇h half {1,2,4,5} exact-IBP; ∇H/𝓟 halves {1,2,4,5} frozen L²-projections) + gates (IBP identity 4e-15; scaling 4/8/4; conservation 7.8e-16; sloshing 1.44%; AD ruled out — Gridap 0.19.11 transient-multifield-AD constructor bug). | executed |
@@ -52,6 +53,36 @@ vertical nodes; velocity modes are 1-based `j=1..Nσ`, one per node. (Do **not**
 Notation note: `LFEM_Gridap.md` and `main.tex` use `M^V, 𝓜^V, 𝓖^V, A^V, K^V, 𝓐^V, 𝓚^V, Φ, φ_j`;
 the **solver code** uses different names (`Mmat, Mcal, Gcal, A, K, Acal, Kcal, Phi/D/C`, and stores
 the unit basis as `w_j = −φ_j_int`). The bridge table is in `LFEM_Gridap.md` §9 and §4 below.
+
+---
+
+## Current Implementation Stage
+
+> The algebraic residual described by §2–§8 below is **no longer a plan — it is the shipped, validated
+> package** `src/GridapLFEM.jl`. §2–§10 remain the authoritative explanation of *how* the residual is
+> built and *why*; this block is the at-a-glance status.
+
+**Working and validated (sequential + distributed):**
+- **Solver** (`src/`): stacked `[η,𝖴x,𝖴y]` loop-free residual + hand Jacobians; θ time loops
+  (sequential LU+Newton / distributed GMRES+Jacobi+Newton); full nonlinear physics (advection, full
+  leading pressure `R_P`, all eight 𝓝 nonlinear-pressure components — native {3,6,7,8} + frozen-projection
+  {1,2,4,5}) in **both** serial and distributed; wavemaker/sponge/wall-BC; runtime residual monitoring
+  (`src/monitor.jl`); `w_s`/`p_s` VTK reconstruction.
+- **Tests** (`test/`, 17 + `cluster/`): unit tensors (15/15), stacked primitives (9/9), oracle virtual-work
+  equivalence (10/10, ≤7e-15), dispersion (closed-form curve 9/9 + linear + **full-NL asymptotic
+  consistency 3/3** + **shallow-water limit 6/6**), sloshing, conservation, energy, unsteady nonlinear MMS
+  (3/3), convergence, vertical profile, nonlinear pressure (9/9), distributed agreement (all ≤5e-9),
+  cluster conservation (verified 2 ranks).
+- **Postprocessing** (`postprocessing/`): standalone `GridapLFEMPost` — VTK/CSV → analysis/plots, and
+  from-modes `w(σ)`/`p_nh(σ)` reconstruction. Validated against solver output.
+- **Docs** (`building_files/`): `main.tex` (authoritative derivation, §8 residual incl. `R_P`),
+  `LFEM_Gridap.md`, `ValidationTests.md`/`.tex` (the validation report).
+
+**Under development / open:**
+- At-scale physical benchmarks on the cluster (Stokes harmonics, Dingemans bar) — scripts exist
+  (`examples/validation/`, `examples/distributed/`), quantitative overlays on paper data pending.
+- Run-and-reconstruct **pressure** profile test; distributed-gauge utility.
+- Sheared-current focusing case (paper §4 case 5) — needs an ambient-current term (modelling extension).
 
 ---
 
@@ -389,8 +420,43 @@ distributed.
   a double-semicolon SYNTAX ERROR in both time loops (HEAD did not even load); now
   `cellfields=fields, append=false`.
 
-Remaining (open): physical benchmarks at scale (Stokes harmonics / Dingemans bar on the cluster)
-and a distributed-gauge utility.
+**VALIDATION SUITE + REPORTS (2026-07-18→21).** The validation programme was designed, documented, and
+largely implemented. **Report:** `building_files/ValidationTests.md` (+ `.tex` fragment for `main.tex`)
+— the validation *pyramid* (unit → oracle equivalence → semi-analytical dynamics → MMS/convergence →
+vertical profiles → physical/literature → cluster), with the math, expected numbers, tolerances and run
+procedure for each. **New gated tests** (`test/`): `test_dispersion_curve` (closed-form Cm/Ce(kd),
+kd_app), `test_mms` (unsteady nonlinear residual-based MMS), `test_convergence` (Richardson), `test_energy`
+(non-dissipativity), `test_vertical_profile` (sinh shape vs Airy), and — this batch — **`test_dispersion_
+nonlinear`** and **`test_shallow_water`** (the *asymptotic-consistency pair*: the full production solver
+reduces to Airy across the band and to √(gd) at kd→0). **Physical benchmarks** (`examples/validation/`):
+Stokes bound harmonics, submerged bar, solitary wave, ring spreading, bichromatic/sideband, plus the
+`dispersion_sweep` curve. **Cluster** (`test/cluster/`): `cluster_conservation` (2 ranks, verified),
+`cluster_mms` (full 𝓝 at scale) + SLURM template. Two measurement lessons baked into the code:
+(i) time-domain celerity needs a **robust multi-gauge spatial k-fit** (temporal DFT per gauge → continuous
+k-scan `argmax|Σ Ĉⱼ e^{ik xⱼ}|`), NOT two-gauge λ/2 phase differencing (branch-cut + near-field
+ill-conditioning; read 26% error at kd=5); (ii) the full-NL solver reproduces linear dispersion because the
+H-weighting cancels at O(A) between the effective-mass and gravity blocks (proven, kd=1/3/5 err 0.9/0.4/3.0%).
+
+**POSTPROCESSING LIBRARY (2026-07-21).** New self-contained `postprocessing/GridapLFEMPost` (own env:
+ReadVTK/Plots+GR/FFTW/Interpolations). `load_simulation` → `WaveSimulation`; auto-`regularize!`s the
+duplicated higher-order VTK node cloud into a Cartesian grid (drops the strict `Nx·Ny==n_points` check —
+Gridap writes per-cell nodes). Analysis mirrors the tests (gauge DFT amplitude/phase, robust `celerity`,
+`harmonic_amplitudes`, `radial_profile`, `mass_integral`) + Airy overlays; plots (heatmap, animation→GIF,
+Hovmöller, dispersion band, vertical profile). **`reconstruct.jl`** ports `src/reconstruct.jl` to
+postprocessing: `sigma_basis`+`phi/phi_int/pi3` (analytic Gauss-quad σ-basis, no Gridap) and
+`reconstruct_profile`(`:w`/`:p`/`:pnh`) rebuild the vertical kinematics FROM the stored velocity modes at
+any σ — cross-checked against the solver's own `w_s<σ>` (agree 4–8%, the FD-vs-exact-FE-gradient gap; exact
+`w(0)=0`, `p_nh(1)=0`). 4 example scripts + README + PLAN.
+
+> **Doc/plan relocation:** the derivation docs (`main.tex`, `LFEM_Gridap.md`), the algebraic-project spec/
+> plans (`algebraic_*.md`), and the validation reports (`ValidationTests.md`/`.tex`) now live in
+> **`building_files/`** (the §1 table lists them by basename). `Project.toml`/`Manifest.toml`, `src/`,
+> `test/`, `examples/`, `postprocessing/`, `compile/`, `run/` are at the package root.
+
+Remaining (open): physical benchmarks at scale (Stokes harmonics / Dingemans bar on the cluster), the
+*pressure* run-and-reconstruct profile test, quantitative overlays of the physical benchmarks on the
+paper's data, a distributed-gauge utility, and the sheared-current focusing case (needs an ambient-current
+term — a modelling extension).
 
 ---
 
