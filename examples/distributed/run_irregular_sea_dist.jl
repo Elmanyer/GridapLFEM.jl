@@ -19,7 +19,7 @@
 #    LFEM_D           still-water depth [m]     3.5   (kd_p≈3.6 at Tp=1.6)
 #    LFEM_SPONGE      right-sponge width [m]    40    (≥ 4 peak wavelengths)
 #    LFEM_MUMAX       sponge strength           5
-#    LFEM_PERIODS     run length in Tp units (if LFEM_TFINAL unset)  200
+#    LFEM_PERIODS     run length in Tp units (if LFEM_TFINAL unset)  50
 #
 #  Guidance (see README): keep the spectral band inside the model — fmax such
 #  that kd(fmax) ≲ kd_app(M) — and resolve the shortest component with ≥6
@@ -29,7 +29,7 @@
 
 include(joinpath(@__DIR__, "_dist_common.jl"))
 
-M        = genv_i("LFEM_M", 2)
+M        = genv_i("LFEM_M", 3)
 px, py   = genv_i("LFEM_PX", 32), genv_i("LFEM_PY", 4)
 nx, ny   = genv_i("LFEM_NX", 2000), genv_i("LFEM_NY", 100)
 feord    = genv_i("LFEM_FE_ORDER", 2)
@@ -38,10 +38,10 @@ d        = genv_f("LFEM_D", 3.5)
 sponge   = genv_f("LFEM_SPONGE", 40.0)
 mumax    = genv_f("LFEM_MUMAX", 5.0)
 dt       = genv_f("LFEM_DT", 0.02)
-periods  = genv_f("LFEM_PERIODS", 200.0)
+periods  = genv_f("LFEM_PERIODS", 20.0)
 Tp       = tp_val()
 Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Tp
-save_ev  = genv_i("LFEM_SAVE_EVERY", 40)
+save_ev  = genv_i("LFEM_SAVE_EVERY", 1)     # SAVE A LOT OF SCREENSHOTS FOR VISUALISATION
 outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "irregular_sea_dist_M$(M)"))
 
 state = build_airy_state(d; directional=false)

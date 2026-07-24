@@ -14,11 +14,11 @@
 #        GridapLFEM.jl/examples/distributed/run_directional_sea_dist.jl
 #
 #  Case-specific env vars (sea-state + shared ones in _dist_common.jl):
-#    LFEM_LX,LFEM_LY  domain size [m]              default 400 × 200
+#    LFEM_LX,LFEM_LY  domain size [m]              default 400 × 100
 #    LFEM_D           still-water depth [m]        3.5
 #    LFEM_SPONGE      right/lateral sponge [m]     40
 #    LFEM_MUMAX       sponge strength              5
-#    LFEM_PERIODS     run length in Tp units       100
+#    LFEM_PERIODS     run length in Tp units       20
 #    LFEM_NTHETA      angle samples (bins = n-1)   7 (short-crested default)
 #    LFEM_SPREAD_STD  spreading σθ [deg]           20
 #
@@ -28,19 +28,19 @@
 
 include(joinpath(@__DIR__, "_dist_common.jl"))
 
-M        = genv_i("LFEM_M", 2)
+M        = genv_i("LFEM_M", 3)
 px, py   = genv_i("LFEM_PX", 16), genv_i("LFEM_PY", 8)
 nx, ny   = genv_i("LFEM_NX", 1200), genv_i("LFEM_NY", 600)
 feord    = genv_i("LFEM_FE_ORDER", 2)
-Lx, Ly   = genv_f("LFEM_LX", 400.0), genv_f("LFEM_LY", 200.0)
+Lx, Ly   = genv_f("LFEM_LX", 400.0), genv_f("LFEM_LY", 100.0)
 d        = genv_f("LFEM_D", 3.5)
 sponge   = genv_f("LFEM_SPONGE", 40.0)
 mumax    = genv_f("LFEM_MUMAX", 5.0)
 dt       = genv_f("LFEM_DT", 0.02)
-periods  = genv_f("LFEM_PERIODS", 100.0)
+periods  = genv_f("LFEM_PERIODS", 20.0)
 Tp       = tp_val()
 Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Tp
-save_ev  = genv_i("LFEM_SAVE_EVERY", 40)
+save_ev  = genv_i("LFEM_SAVE_EVERY", 1)  # SAVE A LOT OF SCREENSHOTS FOR VISUALISATION
 outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "directional_sea_dist_M$(M)"))
 
 state = build_airy_state(d; directional=true)
