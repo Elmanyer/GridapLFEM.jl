@@ -2,13 +2,10 @@
 
 A loop-free, serial-and-distributed Gridap implementation of the **LFE-M** (Layer-averaged Finite
 Element Multilayer) depth-integrated, non-hydrostatic wave model of Yang & Liu (2024, *J. Fluid
-Mech.* 999, A32). This is a from-scratch reimplementation of the model already validated in
-`../LFE-M_2D_solver/`, using a **stacked value-type layout** that turns every per-layer sum in the
+Mech.* 999, A32). It uses a **stacked value-type layout** that turns every per-layer sum in the
 governing equations into a native Gridap tensor contraction instead of a Julia `for`-loop.
 
-Repository: `GridapLFEM.jl`. Module: `src/GridapLFEM.jl` → `module GridapLFEM`. Fully
-self-contained (no dependency on the older per-layer solver, which remains the validated oracle
-it was checked against).
+Repository: `GridapLFEM.jl`. Module: `src/GridapLFEM.jl` → `module GridapLFEM`. Fully self-contained.
 
 ---
 
@@ -16,10 +13,10 @@ it was checked against).
 
 The model represents the horizontal velocity as a sum of vertical basis functions,
 `u(x, σ, t) = Σⱼ uⱼ(x, t) φⱼ(σ)`, so every term in the depth-integrated momentum/continuity
-equations carries a sum over the vertical (layer) index `j = 1..Nσ`. The old solver represents
-each layer's velocity components as **separate scalar FE fields** (`1 + 2Nσ` fields total) and
-contracts the layer sums with Julia loops inside the residual. This solver instead **stacks the
-layer index into the FE value type**:
+equations carries a sum over the vertical (layer) index `j = 1..Nσ`. The direct approach — one
+scalar FE field per layer per component (`1 + 2Nσ` fields), with the layer sums contracted by Julia
+loops inside the residual — works but is verbose and slow to assemble. This solver instead **stacks
+the layer index into the FE value type**:
 
 ```
 MultiField = [η, 𝖴x, 𝖴y]        (exactly 3 fields, not 1+2Nσ)
@@ -40,10 +37,12 @@ native Gridap operators on these value types. See `building_files/main.tex` §8 
 subsection) for the full derivation and rationale, and `building_files/algebraic_residual_math.md`
 for the term-by-term operator simplifications.
 
-**Why it's worth doing:** on the fully nonlinear benchmark, the stacked solver reproduces the
-per-layer oracle to machine precision while running **~3.6× faster with ~13× fewer allocations**
-(see `building_files/algebraic_solver_plan.md` §6) — the fused per-layer advection integrand is
-what made the old solver need a matrix-free V⊗H workaround; the stacked residual never needs one.
+**Why it's worth doing:** collapsing the layer sums into single dense contractions keeps the
+residual compact and well-typed, and makes assembly fast — on the fully nonlinear benchmark the
+stacked residual runs **~3.6× faster with ~13× fewer allocations** than a per-layer assembly of the
+same weak form (see `building_files/algebraic_solver_plan.md` §6), because there is no fused
+per-layer advection integrand to expand. The same CellField algebra is forwarded to
+`DistributedCellField`, so the identical residual runs sequentially and across MPI ranks.
 
 ---
 
@@ -54,7 +53,7 @@ The **complete** `building_files/main.tex` §8 global residual, every term:
 - Mass continuity (with internal Gaussian wavemaker source)
 - H-weighted acceleration
 - Nonlinear horizontal + vertical advection (`𝓜`, `𝓖` tensors)
-- Gravity (oracle-matching IBP energy form, rest-state safe)
+- Gravity (integrated-by-parts energy form, rest-state safe)
 - **Leading pressure `R_P`** — the model's entire linear frequency dispersion (flat-bed reduces to
   the classical `d²B` dispersion operator); optional full `P¹L¹+P²L²+P³L³` form (`P_full`)
 - Linear (bed-slope/surface-slope) non-hydrostatic pressure package (`lin_pressure`)
@@ -72,8 +71,8 @@ The **complete** `building_files/main.tex` §8 global residual, every term:
   Hann start-up ramp; optional generation/absorption relaxation zone (`relax_bc`). See
   `building_files/boundary_wave_generation.md`.
 
-Every flag is validated against a hand-derived reference or the per-layer oracle solver; see
-[Validation](#validation) below.
+Every flag is validated against a hand-derived reference or an independent per-layer assembly of the
+same weak form; see [Validation](#validation) below.
 
 ---
 
@@ -97,18 +96,18 @@ GridapLFEM.jl/
 ├── test/                        # 9 test files — see Validation
 ├── examples/                    # sequential examples (plane_wave.jl, ring_wave.jl)
 │   └── distributed/               4 cluster-ready MPI examples + README (mpiexecjl/SLURM)
-├── building_files/              # math derivation, design/implementation plans, superseded prototype
+├── building_files/              # math derivation, design records, prototype
 │   ├── main.tex / main.log        LaTeX derivation (authoritative math reference, §8 = this solver)
 │   ├── LFEM_Gridap.md             clean synthesis of main.tex §1–§8
 │   ├── wavemaker_sponge_BC.tex    wavemaker/sponge boundary-condition derivation
 │   ├── algebraic_residual_math.md   operator simplifications used to write the residual
-│   ├── algebraic_residual_plan.md   P1–P6 implementation plan for the residual
-│   ├── algebraic_solver_plan.md     package port plan (module/test/example structure)
-│   ├── algebraic_distributed_plan.md          distributed-memory port plan + results
-│   ├── algebraic_pressure_completion_plan.md  full nonlinear-pressure implementation plan + results
-│   ├── algebraic_lfem2D.jl        original single-file prototype (superseded by src/)
-│   ├── test_algebraic_lfem2D.jl   prototype's validation script (superseded by test/)
-│   └── test_2HDmodel.ipynb        exploratory notebook predating the package
+│   ├── algebraic_residual_plan.md   design record for the residual (FE layout, tensors, Jacobian)
+│   ├── algebraic_solver_plan.md     package layout reference (module/test/example structure)
+│   ├── algebraic_distributed_plan.md          distributed-memory design reference
+│   ├── algebraic_pressure_completion_plan.md  nonlinear-pressure design reference
+│   ├── algebraic_lfem2D.jl        single-file prototype of the residual
+│   ├── test_algebraic_lfem2D.jl   prototype's validation script
+│   └── test_2HDmodel.ipynb        early exploratory notebook
 ├── output/                      # VTK run output (git-ignored in practice; created on demand)
 └── CLAUDE.md                    # up-to-date status/notes for this folder
 ```
@@ -224,7 +223,7 @@ All gates below are implemented as standalone Julia scripts in `test/`; run with
 |---|---|---|
 | `test_vertical.jl` | vertical tensor identities, dispersion bridge vs Yang & Liu Table 1 | 15/15 PASS |
 | `test_primitives.jl` | tensor-constructor index order, `∂x/∂y` orientation, contraction semantics | 9/9 PASS |
-| `test_equivalence.jl` | virtual-work match vs the per-layer oracle solver, 3 flag configs | 10/10 PASS, rel ≤ 7e-15 |
+| `test_equivalence.jl` | virtual-work match vs an independent per-layer assembly, 3 flag configs | 10/10 PASS, rel ≤ 7e-15 |
 | `test_basic.jl` | smoke run, linearised + fully nonlinear | 6/6 PASS |
 | `test_dispersion.jl` | FEM phase speed vs linear theory at kd=3 | PASS, err 0.90% |
 | `test_conservation.jl` | mass conservation, closed basin, nonlinear advection | PASS, drift 7.8e-16 |
@@ -237,8 +236,9 @@ All gates below are implemented as standalone Julia scripts in `test/`; run with
 | `test_bc_spectrum.jl` | 3-component Dirichlet sea: Goda–Suzuki incident amplitudes, reflection, intermodulation | 8/8 PASS (err ≤ 9.2%, refl ≈ 4%) |
 | `test_bc_generation_distributed.jl` | 4-rank MPI Dirichlet generation vs sequential reference | 4/4 PASS, rel 3.1e-8 |
 
-The oracle for `test_equivalence.jl` is the independently validated per-layer solver in
-`../LFE-M_2D_solver/`. See the `building_files/algebraic_*_plan.md` files for full derivations, implementation
+The reference for `test_equivalence.jl` is an independent per-layer assembly of the same weak form in
+`../LFE-M_2D_solver/`, differently structured, so agreement to machine precision cross-checks the
+stacked residual. See the `building_files/algebraic_*_plan.md` files for full derivations, design
 notes, and detailed results of each validation pass.
 
 ---
@@ -252,8 +252,8 @@ notes, and detailed results of each validation pass.
 - **AD Jacobians are not viable** on this residual under Gridap 0.19.11 — the multifield
   autodiff split cannot dualize through `∂t(u)` (a missing `TransientMultiFieldCellField`
   constructor, not a scale/compile-cost issue). Hand-coded Jacobians (`jacobian_u`,
-  `jacobian_u_t`) are the permanent design, not a workaround; they are exact for everything
-  except the flag-gated `O(A³)` nonlinear-pressure terms, which are quasi-Newton (as in the oracle).
+  `jacobian_u_t`) are the design; they are exact for everything except the flag-gated `O(A³)`
+  nonlinear-pressure terms, which are treated quasi-Newton.
 - **Distributed linear solves must not use `lu()`** — it has no method for a partitioned
   `PSparseMatrix`. Use `GMRESSolver`/`CGSolver` with `JacobiLinearSolver()` from GridapSolvers,
   and always allocate RHS/solution vectors **from the matrix**

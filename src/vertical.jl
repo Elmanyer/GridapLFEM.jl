@@ -1,11 +1,18 @@
 # ==============================================================
-#  vertical.jl — Stage 1: σ-mesh and the full LFE-M vertical tensor set
+#  vertical.jl — Stage 1: the σ-mesh and the full LFE-M vertical tensor set
 #
-#  Port of ../../LFE-M_2D_solver/src/vertical_lfem2D.jl (validated 28/28)
-#  with ONE addition: the nonlinear leading-pressure tensor
+#  This is the "small dense vertical algebra" half of the model. It is run once,
+#  before time stepping, and is independent of the horizontal mesh: given the
+#  number of vertical elements M, their order p, and the optimised node
+#  positions c_bdy, it builds the σ-basis and integrates every vertical tensor
+#  the residual needs (mass, dispersion, advection, and the linear/nonlinear
+#  pressure profiles). Because the layer index is later stacked into the FE
+#  value type, these small arrays become the constant Gridap tensors that turn
+#  each layer sum in the residual into a single contraction.
+#
+#  Among the pressure tensors is the nonlinear leading-pressure tensor
 #      Pcal[i,k,j,c] = ∫₀¹ Θ_kj[c] φᵢ_int dσ
-#  (the first Fubini piece of Kcal, previously discarded), required by the
-#  𝓟-part of the leading pressure term R_P (main.tex §8, corrected).
+#  which supplies the 𝓟-part of the leading (dispersion) term R_P (main.tex §8).
 #
 #  Building blocks (CellFields on the σ-mesh):
 #    φⱼ(σ)      Lagrange basis, degree p                (j = 1..N_dof)
@@ -75,7 +82,7 @@ Full LFE-M vertical static tensor set. Fields:
   P     (N×N×3)    LEADING pressure ∫θⱼφᵢ_int; P[:,:,3] = −B (dispersion)
   Acal  (N×N×N×8)  nonlinear pressure, bed slope  ∫Θₖⱼφᵢ    (index [i,k,j,c])
   Kcal  (N×N×N×8)  nonlinear pressure, surface    ∫Θₖⱼ(φᵢ_int−σφᵢ)
-  Pcal  (N×N×N×8)  nonlinear LEADING pressure ∫Θₖⱼφᵢ_int    (NEW vs old solver)
+  Pcal  (N×N×N×8)  nonlinear LEADING pressure ∫Θₖⱼφᵢ_int    (𝓟-part of R_P)
   B     (N×N)      dispersion matrix −∫φᵢ_int φⱼ_int ≤ 0
   + σ-mesh/FE objects (sigma_model, phi_fns, phi_int_fns, dphi_fns, …)
 """

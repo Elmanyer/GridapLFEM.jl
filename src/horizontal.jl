@@ -1,10 +1,12 @@
 # ==============================================================
 #  horizontal.jl — Stage 2: 2D mesh and the STACKED FE spaces
 #
-#  Stacked layout: MultiFieldFESpace with THREE fields
+#  Builds the horizontal discretisation the time loop solves on: the 2D mesh and
+#  the MultiFieldFESpace with THREE fields
 #      [η, 𝖴x, 𝖴y],   𝖴x,𝖴y ∈ VectorValue{Nσ}
-#  (vs the old solver's 1+2Nσ scalar fields). Solid-wall Dirichlet BCs act on
-#  the WHOLE stacked field (all Nσ components zero at once).
+#  Each velocity field carries all Nσ vertical modes in one vector-valued FE
+#  function, so a solid-wall Dirichlet BC constrains the whole stacked field
+#  (all Nσ components zero at once) with a single condition.
 #
 #  Boundary tags (CartesianDiscreteModel, 2D):
 #    tag_1..tag_4 = corners, tag_5/6 = bottom/top edges, tag_7/8 = left/right.
@@ -125,11 +127,10 @@ function build_fe_spaces(model, fe_order::Int, Nσ::Int;
     # The element type of the space vectors must be an abstract FE-space supertype
     # so that a mixed-type vector (unconstrained + Dirichlet fields) is accepted by
     # the sequential Vector{<:SingleFieldFESpace} resp. distributed
-    # Vector{<:DistributedSingleFieldFESpace} MultiFieldFESpace dispatch (same
-    # runtime-isa trick as the old solver). TransientTrialFESpace is NOT a
-    # SingleFieldFESpace — with an inflow the trial vector is left untyped (the
-    # MultiFieldFESpace constructor promotes it; verified on Gridap 0.19.11, and
-    # the resulting space is callable at t). Keep ConsecutiveMultiFieldStyle —
+    # Vector{<:DistributedSingleFieldFESpace} MultiFieldFESpace dispatch.
+    # TransientTrialFESpace is NOT a SingleFieldFESpace — with an inflow the trial
+    # vector is left untyped so the MultiFieldFESpace constructor can promote it,
+    # and the resulting space is callable at t. Keep ConsecutiveMultiFieldStyle:
     # BlockMultiFieldStyle breaks the distributed Jacobi preconditioner's `diag`.
     if isa(V_eta, GridapDistributed.DistributedSingleFieldFESpace)
         # distributed transient trials ARE DistributedSingleFieldFESpaces

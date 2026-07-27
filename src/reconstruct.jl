@@ -1,13 +1,16 @@
 # ==============================================================
 #  reconstruct.jl — w / total-pressure VTK fields (stacked layout)
 #
-#  Port of ../../LFE-M_2D_solver/src/reconstruct_fields_lfem2D.jl to the
-#  algebraic package. Turns the stacked solution (η, 𝖴x, 𝖴y) into extra 2D
-#  cellfields — the physical vertical velocity w(x,σ_ℓ) and the TOTAL pressure
-#  p(x,σ_ℓ) — at the N_dof vertical Lagrange σ-nodes, appended to VTK snapshots.
+#  Post-processing that recovers the eliminated vertical kinematics for output.
+#  The solved unknowns are only (η, 𝖴x, 𝖴y); the vertical velocity w and the
+#  non-hydrostatic pressure were removed analytically at the modelling stage.
+#  Here they are rebuilt from the horizontal solution as extra 2D cellfields —
+#  the physical vertical velocity w(x,σ_ℓ) and the TOTAL pressure p(x,σ_ℓ) — at
+#  the N_dof vertical Lagrange σ-nodes, and appended to the VTK snapshots so the
+#  full 3D flow field can be visualised.
 #
-#  In the stacked layout the per-mode sums of the old solver collapse to THREE
-#  constant-vector contractions per level (the residual's own building blocks):
+#  With the layer index stacked into the value type, each level reduces to THREE
+#  constant-vector contractions built from the residual's own quantities:
 #
 #     w_ℓ = −(a_ℓ ⋅ 𝖺) + (b_ℓ ⋅ 𝖻) − (c_ℓ ⋅ 𝖲)
 #           a_ℓ = φ(σ_ℓ),  b_ℓ = σ_ℓ φ(σ_ℓ),  c_ℓ = φ_int(σ_ℓ)   ∈ ℝ^{Nσ}

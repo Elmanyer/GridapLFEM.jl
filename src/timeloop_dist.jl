@@ -1,21 +1,26 @@
 # ==============================================================
 #  timeloop_dist.jl — Distributed (MPI) mesh, solver stack and time loop
 #
-#  Port of ../../LFE-M_2D_solver/src/timeloop2D_dist.jl to the algebraic
-#  package. Because the stacked residual/Jacobians are Gridap-native CellField
-#  algebra (Operation is forwarded for DistributedCellField), THE SAME
-#  residual/jacobian_* run distributed unchanged — including the FULL
-#  nonlinear physics (advection, slope pressure, P_full, nl_pressure68). No
-#  owned V⊗H loop is needed, unlike the old solver.
+#  The distributed counterpart of timeloop.jl. Because the stacked
+#  residual/Jacobians are expressed entirely in Gridap CellField algebra
+#  (`Operation` is forwarded for `DistributedCellField`), the very same
+#  `global_residual`/`jacobian_*` run across MPI ranks unchanged — the full
+#  nonlinear physics (advection, slope pressure, P_full, nl_pressure68) is
+#  available distributed with no separate code path. This file provides the
+#  partitioned mesh builder, the scalable Krylov solver stack, and a rank-aware
+#  time loop.
 #
-#  Load-bearing conventions (old solver, revalidated):
-#    * distributed solve = ThetaMethod(NewtonSolver(GMRESSolver(;Pr=Jacobi)))
-#      from GridapSolvers — LU/NLSolver are sequential-only at scale;
-#    * norm(PVector, Inf) is BROKEN (PartitionedArrays 0.3.5) → own_values +
-#      reduce(max, …; init=0.0);
-#    * all I/O behind i_am_main(ranks); mkpath on rank 0 + MPI.Barrier;
-#    * point gauges omitted (inter-rank point search) — diags = (t, eta_max);
-#    * launch with ~/.julia/bin/mpiexecjl (system mpiexec → PMIx mismatch).
+#  Conventions the distributed path relies on:
+#    * the linear systems are solved with GMRESSolver + Jacobi wrapped in
+#      NewtonSolver (GridapSolvers) — a direct LU factorisation does not scale to
+#      the partitioned matrices at cluster size;
+#    * the global max|η| is reduced from own_values (the ∞-norm of a PVector is
+#      not usable here), via reduce(max, …; init=0.0);
+#    * all I/O is guarded by i_am_main(ranks); the output directory is created on
+#      rank 0 behind an MPI.Barrier;
+#    * point gauges are not evaluated (they would need an inter-rank point
+#      search), so diags carry (t, eta_max, …);
+#    * launch with ~/.julia/bin/mpiexecjl so the MPI build matches the runtime.
 # ==============================================================
 
 """
@@ -91,7 +96,7 @@ end
 
 Distributed time loop. Returns `[(t, eta_max, nl_iters, res_nl, t_solve)]`
 (eta_max by MPI reduction; no point gauges; the last three are −1/NaN without
-a `monitor`). VTK: per-σ-node components of the stacked fields under the OLD
+a `monitor`). VTK: per-σ-node components of the stacked fields under readable
 field names (`eta, u1x, u1y, …`), plus the reconstructed `w_s<σ>`/`p_s<σ>`
 fields when `recon` is given (from `build_field_recon` — pure CellField
 algebra, distributed-transparent).
@@ -100,7 +105,7 @@ Runtime diagnostics (printed on rank 0 only; the underlying stats/assemblies
 are computed collectively on ALL ranks — do not rank-guard the calls):
   * `monitor` (SolverMonitor) — Newton iterations, residuals, convergence
     flag, last GMRES iteration count, solve wall time per step;
-  * `print_every` — report every N steps (default 1); a legacy `print_dt`
+  * `print_every` — report every N steps (default 1); an optional `print_dt`
     (simulation seconds) overrides it when given;
   * `checker` (ResidualChecker) + `check_every` — independent reassembly
     of the governing equations, verified against `check_tol`.

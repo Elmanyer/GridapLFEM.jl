@@ -1,10 +1,12 @@
 # ==============================================================
-#  timeloop.jl — ODE solver factory + time loop (stacked layout)
+#  timeloop.jl — ODE solver factory + sequential time loop (stacked layout)
 #
-#  Port of ../../LFE-M_2D_solver/src/timeloop2D.jl. Only VTK output changes:
-#  the stacked VectorValue{Nσ} velocity fields are written per σ-node
-#  component with the OLD solver's field names (eta, u1x, u1y, u2x, …), so
-#  existing ParaView pipelines work unchanged.
+#  This file turns the assembled operator into a running simulation: it builds
+#  the time integrator (`build_ode_solver`), sets the initial state, and marches
+#  the transient problem with Gridap's `solve` iterator, collecting per-step
+#  diagnostics and writing output. On output the stacked VectorValue{Nσ}
+#  velocity fields are split into one scalar field per σ-node (eta, u1x, u1y,
+#  u2x, …) so the VTK/ParaView files carry familiar, human-readable field names.
 # ==============================================================
 
 """
@@ -101,7 +103,7 @@ Runtime diagnostics:
   * `monitor` (SolverMonitor, also passed to `build_ode_solver`) —
     per-step Newton iterations, residuals, convergence flag, solve wall time;
   * `print_every` — report line every N steps (default 1 = every step);
-    a legacy `print_dt` (simulation seconds) overrides it when given;
+    an optional `print_dt` (simulation seconds) overrides it when given;
   * `checker` (ResidualChecker) + `check_every` — every N steps reassemble
     the governing equations independently and verify ‖R‖∞ ≤ `check_tol`.
 Stops early on NaN or eta_max > 1e4.
@@ -112,7 +114,7 @@ function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
                            trian                 = nothing,
                            Nσ         :: Int     = 1,
                            print_every:: Int     = 1,
-                           print_dt              = nothing,   # legacy time-based reporting
+                           print_dt              = nothing,   # optional time-based reporting
                            gauges                = [],
                            recon                 = nothing,
                            trial_space           = nothing,

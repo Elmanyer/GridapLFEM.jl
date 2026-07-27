@@ -12,12 +12,13 @@
 #            → nlp_gradh_contrib, residual-only, serial + distributed.
 #    ∇H half + 𝓟 part, c ∈ {1,2,4,5}  irreducible (∂²η resp. ∂²(test)) →
 #            FROZEN L²-PROJECTIONS: per step project 𝖲 and 𝖻 onto the velocity
-#            FE space (π𝖲, π𝖻; SPD mass solves, factorised once) and use
-#            ∂_a(π𝖲), ∂_a(π𝖻) lagged one step. O(dt) on an O(A³) term.
-#            SEQUENTIAL path (distributed driver rejects the flag).
+#            FE space (π𝖲, π𝖻; SPD mass solves) and use ∂_a(π𝖲), ∂_a(π𝖻) lagged
+#            one step. O(dt) on an O(A³) term. Serial (direct factorisation) and
+#            distributed (CG + Jacobi mass solve) — see `build_nlp_ctx`.
 #
-#  All blocks are O(A²–A³), quasi-Newton (no Jacobian contribution — the
-#  oracle's 𝓝 treatment). Slot bookkeeping (a⊗b)[k,j]=a[k]b[j]:
+#  All blocks are O(A²–A³) and treated quasi-Newton (they add to the residual
+#  but not to the Jacobian — their contribution to convergence is negligible at
+#  these amplitudes). Slot bookkeeping (a⊗b)[k,j]=a[k]b[j]:
 #    N¹,N² carry the differentiated divergence in the k slot (Ψ·U_a),
 #    N³,N⁴,N⁵ carry the velocity in the k slot (U_a·Ψ).
 #  Verified at machine precision by test_nlpressure.jl gate G1.

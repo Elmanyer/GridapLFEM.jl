@@ -1,23 +1,25 @@
 # ==============================================================
 #  GridapLFEM.jl — Algebraic (loop-free) 2D LFE-M Wave Solver
 #
-#  Stacked-layout reimplementation of the LFE-M depth-integrated wave model
-#  (Yang & Liu 2024, JFM 999 A32), following main.tex §8 (corrected: includes
-#  the leading-pressure/dispersion term R_P) and the operator simplifications
-#  of algebraic_residual_math.md.
+#  Depth-integrated, non-hydrostatic free-surface wave solver for the LFE-M
+#  model (Yang & Liu 2024, JFM 999 A32). The water column σ∈[0,1] is resolved
+#  by Nσ vertical finite-element modes; the vertical velocity and the
+#  non-hydrostatic pressure are eliminated analytically into small, precomputed
+#  vertical tensors, leaving a system of 2D PDEs in (H, 𝖴) solved on a
+#  horizontal FE mesh by Gridap. The global residual assembled here is the
+#  virtual-work form of §8 of the accompanying derivation (main.tex), whose
+#  leading-pressure term R_P carries the frequency dispersion.
 #
 #  Layout:  MultiField = [η, 𝖴x, 𝖴y]  with 𝖴x,𝖴y ∈ VectorValue{Nσ}
-#  (3 fields total — NOT 1+2Nσ scalar fields). All vertical (layer) sums are
-#  native constant-tensor contractions; the residual contains no per-layer
-#  loops and no MultiField decomposition beyond u[1],u[2],u[3].
+#  (3 fields total). Stacking the vertical/layer index into the FE value type
+#  turns every layer sum into a native constant-tensor contraction, so the
+#  residual contains no per-layer loops and touches the MultiField only through
+#  u[1]=η, u[2]=𝖴x, u[3]=𝖴y. This keeps the assembly well-typed and compact,
+#  and lets the identical code run sequentially and distributed.
 #
 #  Usage:
 #    include("GridapLFEM.jl/src/GridapLFEM.jl"); using .GridapLFEM
 #    diags, vert, prob = setup_and_run(M=2, T_wave=1.6, A_wave=0.001)
-#
-#  Validated against the per-layer oracle solver (../LFE-M_2D_solver/):
-#  see test/test_equivalence.jl (virtual-work match ~1e-15) and
-#  algebraic_solver_plan.md.
 # ==============================================================
 
 module GridapLFEM
@@ -33,9 +35,9 @@ using Gridap.TensorValues
 using LinearAlgebra
 using SparseArrays
 using Printf
-# Distributed (MPI) stack — same versions/pattern as the old solver:
-#   GridapDistributed 0.4.x, PartitionedArrays 0.3.x, MPI 0.20.x,
-#   GridapSolvers 0.6.x (GMRES + Jacobi + NewtonSolver for the distributed solve).
+# Distributed (MPI) stack: GridapDistributed 0.4.x, PartitionedArrays 0.3.x,
+#   MPI 0.20.x, GridapSolvers 0.6.x (GMRES + Jacobi + NewtonSolver — the scalable
+#   Krylov solve used for the partitioned linear systems on the cluster).
 using GridapDistributed
 using PartitionedArrays
 using MPI

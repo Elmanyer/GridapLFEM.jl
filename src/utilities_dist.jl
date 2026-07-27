@@ -1,125 +1,126 @@
 # ==============================================================
-#  utilities_dist.jl — Distributed driver for the algebraic LFE-M solver
+#  utilities_dist.jl — Distributed (MPI) driver for the LFE-M solver
 #
-#  setup_and_run_distributed: parallel counterpart of setup_and_run,
-#  built on the Gridap-native distributed pattern (as the old solver's
-#  setup_and_run_lfem_distributed / GridapSWE run_distributed):
+#  `setup_and_run_distributed` is the parallel counterpart of `setup_and_run`.
+#  The horizontal mesh, FE spaces, assembly and solve are partitioned across MPI
+#  ranks; the whole run is wrapped in `with_mpi() do distribute … end`, which
+#  gives each rank its slice of the process grid:
 #      with_mpi() do distribute
 #          ranks = distribute(LinearIndices((prod(cpu_grid),)))
 #          model = CartesianDiscreteModel(ranks, cpu_grid, domain, partition)
 #          … TransientFEOperator + GMRES+Jacobi+Newton + solve(…) iterator …
 #      end
 #
-#  ── FULL-PHYSICS SCOPE (the improvement over the old solver) ──
-#  The stacked algebraic residual is cheap and Gridap-native, so this ONE
-#  distributed path carries every physics flag — advection, lin_pressure,
-#  P_full, nl_pressure68 — with the same hand Jacobians as the sequential
-#  driver. (The old solver had to restrict its Gridap distributed path to the
-#  linear core and route the nonlinear advection through an owned V⊗H loop.)
+#  Because the stacked residual and its hand Jacobians are expressed purely in
+#  Gridap CellField algebra, this single distributed path carries every physics
+#  flag — advection, lin_pressure, P_full, nl_pressure68, nl_pressure_full —
+#  using the very same code as the sequential driver; only the linear solver
+#  (GMRES + Jacobi + Newton) and the reductions differ.
 #
-#  Launch with Julia's own launcher (system mpiexec has a PMIx mismatch here):
+#  The vertical pre-computation is tiny and identical on every rank, so it is
+#  simply replicated rather than distributed.
+#
+#  Launch with Julia's own MPI launcher so the runtime matches the MPI build:
 #    ~/.julia/bin/mpiexecjl --project=. -n 4 julia --project=. my_script.jl
-#  with the script calling setup_and_run_distributed(cpu_grid=(2,2), …)
-#  and n == prod(cpu_grid).
+#  with the script calling setup_and_run_distributed(cpu_grid=(2,2), …) and
+#  n == prod(cpu_grid).
 # ==============================================================
 
 """
-    setup_and_run_distributed(; cpu_grid, M, p_vert, c_bdy, domain, partition,
-                                    fe_order, d_val, g, T_wave, A_wave, x_wm, y_wm,
-                                    sponge_*, mu_max, T_final, dt, theta, output_dir,
-                                    save_every, y_wall_bc, x_wall_bc, linearised,
-                                    advection, lin_pressure, P_full, nl_pressure68,
-                                    d_func, eta0_func, write_w, write_pressure, rho,
-                                    nl_iter, nl_tol, ls_rtol, ls_maxiter, print_dt)
+    setup_and_run_distributed(; cpu_grid, kwargs...) → (diags, vert, prob)
 
-Distributed (MPI) driver for the stacked algebraic LFE-M solver. Mirrors
-`setup_and_run` with the horizontal mesh/assembly distributed across
-`cpu_grid = (px, py)` ranks (`px·py == mpiexecjl -n N`); the vertical
-pre-computation is replicated per rank (tiny). ALL physics flags are supported
-in parallel. Returns `(diags, vert, prob)` with `diags = [(t, eta_max)]`
-(eta_max via MPI reduction; point gauges are sequential-only).
+Distributed (MPI) driver for the stacked LFE-M solver. Same physics and workflow
+as [`setup_and_run`](@ref), with the horizontal mesh/assembly/solve partitioned
+across `cpu_grid = (px, py)` ranks (`px·py` must equal `mpiexecjl -n N`). Every
+physics flag is available in parallel. Returns `(diags, vert, prob)` with
+`diags = [(t, eta_max, …)]`; the global `eta_max` is obtained by MPI reduction,
+and point gauges are not evaluated in parallel. The keyword arguments are
+documented inline on the signature below.
 """
 function setup_and_run_distributed(;
-    cpu_grid     :: Tuple   = (2, 2),
-    # Vertical
-    M            :: Int     = 2,
-    p_vert       :: Int     = 1,
-    c_bdy                   = nothing,
-    # Horizontal
-    domain                  = ((0.0, 60.0), (0.0, 20.0)),
-    partition    :: Tuple   = (120, 40),
-    fe_order     :: Int     = 2,
-    # Physics
-    d_val        :: Float64 = 3.5,
-    g            :: Float64 = 9.81,
-    T_wave       :: Float64 = 1.6,
-    A_wave       :: Float64 = 0.001,
-    x_wm         :: Float64 = 12.0,
-    y_wm                    = nothing,     # nothing → line source (plane wave)
-    sponge_wL    :: Float64 = 12.0,
-    sponge_wR    :: Float64 = 12.0,
-    sponge_wB    :: Float64 = 0.0,
-    sponge_wT    :: Float64 = 0.0,
-    mu_max       :: Float64 = 5.0,
-    # Time integration
-    T_final      :: Float64 = 12.8,
-    dt           :: Float64 = 0.02,
-    solver_type  :: Symbol  = :sdirk,      # :sdirk (RungeKutta, default) | :theta
-    tableau      :: Symbol  = :SDIRK_2_2,  # RK tableau when solver_type == :sdirk
-    theta        :: Float64 = 0.5,
-    # Output
-    output_dir   :: String  = joinpath(@__DIR__, "..", "output", "dist_out"),
-    save_every   :: Int     = 0,
-    print_dt                = nothing,
-    # BCs
-    y_wall_bc    :: Bool    = true,
-    x_wall_bc    :: Bool    = false,
-    # Physics flags — ALL supported distributed
-    linearised   :: Bool    = false,
-    advection    :: Bool    = true,
-    lin_pressure :: Bool    = false,
-    P_full       :: Bool    = false,
-    nl_pressure68:: Bool    = false,      # native NL-pressure set c∈{3,6,7,8} — distributed
-    nl_pressure_full :: Bool = false,     # + c∈{1,2,4,5}: frozen L²-projections, distributed
-                                          #   mass solve = CGSolver(JacobiLinearSolver())
-    nlp_cg_rtol  :: Float64 = 1e-10,      # projection-solve tolerance (nl_pressure_full)
-    nlp_cg_maxiter :: Int   = 500,
-    d_func                  = nothing,
-    eta0_func               = nothing,     # η₀(x) initial release (REQUIRES x_wall_bc=true)
-    # Dirichlet boundary wave generation (waveinput.jl) — deterministic per rank
-    wave_bc                 = nothing,     # :regular | WaveInput | WaveSpec AiryState
-    bc_side      :: Symbol  = :left,
-    bc_profile   :: Symbol  = :model,
-    T_ramp                  = nothing,
-    ic_from_bc   :: Bool    = false,
-    relax_bc     :: Bool    = false,
-    relax_width  :: Float64 = 0.0,
-    # Field output
-    write_w        :: Bool    = false,
-    write_pressure :: Bool    = false,
-    rho            :: Float64 = 1025.0,
-    # Solver tolerances
+    cpu_grid     :: Tuple   = (2, 2),      # (px,py) MPI process grid; px·py == mpiexecjl -n N
+    # ---- Vertical discretisation (Stage 1, replicated on every rank) ---------
+    M            :: Int     = 2,           # number of vertical σ-elements (LFE-M order)
+    p_vert       :: Int     = 1,           # σ-element polynomial order (Nσ = M·p_vert+1)
+    c_bdy                   = nothing,     # σ-node positions in [0,1]; nothing → optimised set
+    # ---- Horizontal discretisation (partitioned over cpu_grid) ---------------
+    domain                  = ((0.0, 60.0), (0.0, 20.0)),  # ((x0,x1),(y0,y1)) extent [m]
+    partition    :: Tuple   = (120, 40),   # (nx,ny) cells (ideally nx%px==0, ny%py==0)
+    fe_order     :: Int     = 2,           # horizontal FE order (≥2 required)
+    # ---- Physical parameters -------------------------------------------------
+    d_val        :: Float64 = 3.5,         # still-water depth [m]
+    g            :: Float64 = 9.81,        # gravitational acceleration [m/s²]
+    T_wave       :: Float64 = 1.6,         # forcing wave period [s]
+    A_wave       :: Float64 = 0.001,       # forcing wave amplitude [m]
+    # ---- Internal wavemaker (used only when wave_bc is nothing) ---------------
+    x_wm         :: Float64 = 12.0,        # wavemaker x-position [m]
+    y_wm                    = nothing,     # nothing → line source (plane wave); number → point source
+    # ---- Sponge layers -------------------------------------------------------
+    sponge_wL    :: Float64 = 12.0,        # left-edge sponge width [m]
+    sponge_wR    :: Float64 = 12.0,        # right-edge sponge width [m]
+    sponge_wB    :: Float64 = 0.0,         # bottom-edge sponge width [m]
+    sponge_wT    :: Float64 = 0.0,         # top-edge sponge width [m]
+    mu_max       :: Float64 = 5.0,         # peak sponge / relaxation strength
+    # ---- Time integration ----------------------------------------------------
+    T_final      :: Float64 = 12.8,        # final simulated time [s]
+    dt           :: Float64 = 0.02,        # time step [s]
+    solver_type  :: Symbol  = :sdirk,      # integrator: :sdirk (default) | :theta
+    tableau      :: Symbol  = :SDIRK_2_2,  # Runge–Kutta tableau when solver_type == :sdirk
+    theta        :: Float64 = 0.5,         # θ for :theta (0.5 = Crank–Nicolson)
+    # ---- Output --------------------------------------------------------------
+    output_dir   :: String  = joinpath(@__DIR__, "..", "output", "dist_out"),  # VTK/pvd destination
+    save_every   :: Int     = 0,           # write a VTK snapshot every N steps (0 = no VTK)
+    print_dt                = nothing,     # if set, report every this many simulated seconds instead
+    # ---- Boundary conditions -------------------------------------------------
+    y_wall_bc    :: Bool    = true,        # solid walls on the y-edges (false for directional seas)
+    x_wall_bc    :: Bool    = false,       # solid walls on the x-edges (true for closed-basin IC)
+    # ---- Physics flags (all supported in parallel) ---------------------------
+    linearised   :: Bool    = false,       # linear regime
+    advection    :: Bool    = true,        # nonlinear advection block
+    lin_pressure :: Bool    = false,       # A/K linear slope-pressure package
+    P_full       :: Bool    = false,       # keep all three slope components of R_P
+    nl_pressure68:: Bool    = false,       # nonlinear-pressure native set c∈{3,6,7,8}
+    nl_pressure_full :: Bool = false,      # + c∈{1,2,4,5}; distributed mass solve = CG + Jacobi
+    nlp_cg_rtol  :: Float64 = 1e-10,       # CG tolerance for the frozen-projection solve
+    nlp_cg_maxiter :: Int   = 500,         # CG iteration cap for that solve
+    d_func                  = nothing,     # x → d(x): variable bathymetry (overrides d_val)
+    eta0_func               = nothing,     # x → η₀(x): initial release (REQUIRES x_wall_bc=true)
+    # ---- Dirichlet boundary wave generation (deterministic per rank) ---------
+    wave_bc                 = nothing,     # nothing | :regular | WaveInput | WaveSpec AiryState
+    bc_side      :: Symbol  = :left,       # generation boundary (:left/:right)
+    bc_profile   :: Symbol  = :model,      # vertical polarization (:model/:airy)
+    T_ramp                  = nothing,     # Hann ramp-up time [s]; nothing → 2 peak periods
+    ic_from_bc   :: Bool    = false,       # hot-start from the incident wave (needs T_ramp=0)
+    relax_bc     :: Bool    = false,       # relaxation zone at the inflow
+    relax_width  :: Float64 = 0.0,         # relaxation-zone width [m]; 0 → one peak wavelength
+    # ---- Reconstructed field output ------------------------------------------
+    write_w        :: Bool    = false,     # also write vertical-velocity fields w_s<σ>
+    write_pressure :: Bool    = false,     # also write total-pressure fields p_s<σ>
+    rho            :: Float64 = 1025.0,    # water density [kg/m³] (pressure output)
+    # ---- Solver tolerances / diagnostics -------------------------------------
     nl_iter      :: Int     = 50,          # max Newton iterations per stage
-    nl_tol       :: Float64 = 1e-6,        # Newton atol (‖r‖₂) — production default
-    ls_rtol      :: Float64 = 1e-9,        # GMRES rtol (kept tight: Newton needs accurate steps)
-    ls_maxiter   :: Int     = 2000,
-    # Runtime diagnostics
-    print_every  :: Int     = 1,          # step report every N steps (print_dt overrides)
-    check_every  :: Int     = 50,         # governing-eq residual check every N steps (0 = off)
-    check_tol    :: Float64 = 1e-8,       # ‖R_θ‖∞ verification threshold
+    nl_tol       :: Float64 = 1e-6,        # Newton residual tolerance (‖r‖₂) — production default
+    ls_rtol      :: Float64 = 1e-9,        # GMRES relative tolerance (kept tight for good Newton steps)
+    ls_maxiter   :: Int     = 2000,        # GMRES iteration cap per Newton step
+    print_every  :: Int     = 1,           # print a step report every N steps (print_dt overrides)
+    check_every  :: Int     = 50,          # re-verify the governing equations every N steps (0 = off)
+    check_tol    :: Float64 = 1e-8,        # tolerance for that verification (‖R‖∞)
 )
-    n_procs = prod(cpu_grid)
+    n_procs = prod(cpu_grid)                 # total MPI ranks implied by the process grid
 
+    # Everything runs inside with_mpi: it initialises MPI and hands back a
+    # `distribute` that turns a global index set into this rank's local share.
     result = with_mpi() do distribute
-        ranks = distribute(LinearIndices((n_procs,)))
+        ranks = distribute(LinearIndices((n_procs,)))   # this rank's handle in the grid
 
+        # All console output is guarded by i_am_main so only rank 0 prints.
         if i_am_main(ranks)
             println("=== 2D LFE-M ALGEBRAIC Distributed Solver (stacked [η,𝖴x,𝖴y]) ===")
             println("  cpu_grid: $cpu_grid  ($(n_procs) ranks total)")
             flush(stdout)
         end
 
-        # ----- Stage 1: Vertical pre-computation (all ranks, identical) -----
+        # ----- Stage 1: Vertical pre-computation (identical work on every rank) -
         c_bdy_used = isnothing(c_bdy) ?
             get(DEFAULT_CBDY, M, collect(LinRange(0.0, 1.0, M+1))) : c_bdy
         vert = assemble_vertical_tensors(M, p_vert, c_bdy_used)
@@ -127,7 +128,8 @@ function setup_and_run_distributed(;
             @printf("  Nσ=%d   ΣΦ=%.6f\n", vert.N_dof, sum(vert.Phi))
         end
 
-        # ----- Stage 2: Distributed 2D horizontal mesh + stacked spaces -----
+        # ----- Stage 2: distributed horizontal mesh + stacked spaces -----------
+        # Unpack the domain corners (nested or flat tuple) and cell counts.
         if domain isa Tuple{Tuple,Tuple}
             (x0,x1), (y0,y1) = domain
         else
@@ -136,8 +138,10 @@ function setup_and_run_distributed(;
         dom_flat = (Float64(x0), Float64(x1), Float64(y0), Float64(y1))
         nx, ny   = partition
 
-        # ----- Dirichlet boundary wave generation (deterministic on all ranks:
-        #       the WaveInput snapshots seeded phases into plain arrays) -----
+        # ----- Dirichlet boundary wave generation -----------------------------
+        # Built identically on every rank: the WaveInput snapshots the seeded
+        # phases/amplitudes into plain arrays, so no communication is needed and
+        # every rank prescribes the same boundary data.
         wi = nothing
         if wave_bc !== nothing
             bc_side in (:left, :right) ||
@@ -157,10 +161,13 @@ function setup_and_run_distributed(;
             ic_from_bc && wi.T_ramp > 0.0 &&
                 error("setup_and_run_distributed: ic_from_bc=true requires T_ramp=0.0")
         end
+        # Time-varying Dirichlet data for the inflow (η, 𝖴x, and 𝖴y if directional).
         inflow = wi === nothing ? nothing :
                  (side=bc_side, eta=eta_bc(wi), ux=ux_bc(wi),
                   uy=wi.directional ? uy_bc(wi) : nothing)
 
+        # Partition the Cartesian mesh over the process grid, build the quadrature
+        # measure, and create the stacked FE spaces (with wall/inflow BCs).
         model, trian = build_horizontal_model_distributed(ranks, cpu_grid,
                                                               dom_flat, (nx, ny))
         dO   = Measure(trian, 2*fe_order + 2)
@@ -175,20 +182,22 @@ function setup_and_run_distributed(;
                     string(nl_pressure_full))
         end
 
-        # ----- Stage 3: Physics setup (all ranks) -----
+        # ----- Stage 3: forcing setup (identical on every rank) ----------------
+        # Forcing frequency + wavenumber (also used for the reported CFL number).
         omega  = 2.0 * pi / T_wave
         k_wave = find_wavenumber(omega, d_val, g)
         if i_am_main(ranks)
             @printf("  Wave: λ=%.2f m, kd=%.2f   CFL_x ~ %.3f\n",
                     2pi/k_wave, k_wave*d_val, sqrt(g*d_val)*dt/((x1-x0)/nx))
         end
+        # Sponge profile; internal source (none/line/point) as in the sequential driver.
         sponge = make_sponge(dom_flat, sponge_wL, sponge_wR, sponge_wB, sponge_wT, mu_max)
         wm = wi !== nothing ? ((x, t) -> 0.0) :
              isnothing(y_wm) ? make_wavemaker_line(x_wm, A_wave, T_wave, k_wave) :
                                make_wavemaker_point(x_wm, Float64(y_wm), A_wave, T_wave)
-        dfn = isnothing(d_func) ? (x -> d_val) : d_func
+        dfn = isnothing(d_func) ? (x -> d_val) : d_func   # bathymetry
 
-        # generation/absorption relaxation zone adjacent to the inflow
+        # Optional relaxation zone next to the inflow (generation + absorption).
         relax_mu_fn = x -> 0.0
         relax_tg    = nothing
         use_relax   = wi !== nothing && relax_bc
@@ -200,15 +209,17 @@ function setup_and_run_distributed(;
             relax_tg = incident_fields(wi)
         end
 
+        # Same problem bundle as the sequential driver — identical residual.
         prob = build_problem(vert; g=g, d_func=dfn,
             linearised=linearised, advection=advection, lin_pressure=lin_pressure,
             P_full=P_full, nl_pressure68=nl_pressure68, nl_pressure_full=nl_pressure_full,
             mu_sponge=sponge, wm_src=wm,
             relax_bc=use_relax, relax_mu=relax_mu_fn, relax_tg=relax_tg)
 
-        # ----- Stage 4: Distributed ODE operator + solver + IC -----
-        op      = build_ode_operator(prob, U, V, trian, dO)
+        # ----- Stage 4: distributed operator + solver stack + initial state ----
+        op      = build_ode_operator(prob, U, V, trian, dO)   # same hand Jacobians
         monitor = SolverMonitor()
+        # Distributed integrator: Newton + GMRES/Jacobi (the scalable linear solve).
         solver  = build_ode_solver_distributed(dt; solver_type=solver_type,
                       theta=theta, tableau=tableau,
                       nl_iter=nl_iter, nl_tol=nl_tol,
@@ -216,8 +227,8 @@ function setup_and_run_distributed(;
         checker = check_every > 0 ?
                   ResidualChecker(prob, U, V, trian, dO, dt, theta,
                                      solver_type == :theta) : nothing
-        # interpolate_everywhere is REQUIRED distributed (FEFunction(U, zeros) fails);
-        # space_at evaluates transient trials at t=0 (no-op for static spaces)
+        # Initial state via interpolate_everywhere (required for distributed spaces);
+        # space_at evaluates a transient trial at t=0 (a no-op for static spaces).
         u0 = if wi !== nothing && ic_from_bc
             inc = incident_fields(wi)
             make_initial_conditions(space_at(U, 0.0), vert.N_dof;
@@ -228,14 +239,15 @@ function setup_and_run_distributed(;
             make_initial_conditions(space_at(U, 0.0), vert.N_dof; eta0_func=eta0_func)
         end
 
-        # nl_pressure_full: frozen-projection context (CG+Jacobi mass solve, distributed=true —
-        # base `lu` has no method for a partitioned PSparseMatrix, see nlpressure.jl)
+        # For nl_pressure_full, the frozen-projection mass solve uses CG + Jacobi
+        # here (a partitioned matrix has no direct-factorisation method).
         nlp = nl_pressure_full ?
               (prob, build_nlp_ctx(model, fe_order, vert.N_dof, trian, dO;
                                    distributed=true, cg_rtol=nlp_cg_rtol,
                                    cg_maxiter=nlp_cg_maxiter)) : nothing
 
-        # ----- Stage 5: Time loop -----
+        # ----- Stage 5: time loop ---------------------------------------------
+        # Reconstruction context for optional w/p VTK output.
         recon = build_field_recon(vert, dfn, g; rho=rho,
                                       write_w=write_w, write_pressure=write_pressure)
         if recon !== nothing && i_am_main(ranks)
@@ -256,6 +268,8 @@ function setup_and_run_distributed(;
             println("\n=== Time loop (algebraic, distributed) ===")
             flush(stdout)
         end
+        # March the transient problem; run_time_loop_dist reduces eta_max across
+        # ranks and writes distributed VTK. Returns the per-step diagnostics.
         diags = run_time_loop_dist(ranks, op, solver, u0, 0.0, T_final;
                     output_dir  = output_dir,
                     save_every  = save_every,

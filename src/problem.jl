@@ -1,29 +1,35 @@
 # ==============================================================
-#  problem.jl — LFEMProblem problem + loop-free residual + hand Jacobians
+#  problem.jl — the LFEMProblem bundle + the loop-free residual + hand Jacobians
 #
-#  Implements the corrected main.tex §8 global residual (INCLUDING the
-#  leading-pressure/dispersion term R_P) in the stacked layout. Terms match
-#  the oracle `residual_lfem` (../../LFE-M_2D_solver/src/problem_lfem2D.jl)
-#  flag by flag; validated to machine precision (test_equivalence.jl).
+#  This file assembles the single scalar residual of §8 of the derivation — the
+#  total virtual work ∫_Ω R·v that Gridap's MultiField solver drives to zero at
+#  each stage. `LFEMProblem` gathers the precomputed vertical tensors (as Gridap
+#  constants) and the physics flags; `global_residual` evaluates the weak form;
+#  `jacobian_u`/`jacobian_u_t` provide the exact spatial and effective-mass
+#  Jacobians so Newton needs no finite differencing or automatic differentiation.
 #
-#  Sign/form conventions (load-bearing):
-#    * gravity: oracle IBP energy form  −∫(g/2)(H²−d²)(𝚽⋅DW)  — the (H²−d²)
-#      baseline subtraction keeps the discrete rest state force-free at open
-#      walls (old-solver finding #6);
+#  Sign/form conventions (load-bearing — the assembly relies on them):
+#    * gravity uses the integrated-by-parts energy form −∫(g/2)(H²−d²)(𝚽⋅DW);
+#      subtracting the still-water baseline (H²−d²) makes the discrete rest state
+#      exactly force-free, so an undisturbed surface at an open wall stays at rest;
 #    * dispersion R_P: −∫ d²(𝗕⋅DUt)⋅DW (linearised) / −∫ H²(𝗕⋅∇·(Hu̇))⋅DW
-#      (nonlinear, P_full=false = oracle) / full P¹L¹+P²L²+P³L³ (P_full=true);
-#      𝗕 = B_stored ≤ 0 and the (−1) factors are load-bearing;
-#    * wavemaker enters continuity with a MINUS: −∫ q·S(x,t);
-#    * pressure slope packages are subtracted (they sit on the momentum RHS).
+#      (nonlinear) / the full P¹L¹+P²L²+P³L³ slope decomposition (P_full=true);
+#      𝗕 ≤ 0 (the stored dispersion tensor) and the explicit (−1) factors give the
+#      term its correct sign — this term IS the frequency dispersion of the model;
+#    * the wavemaker enters continuity with a minus, −∫ q·S(x,t);
+#    * the pressure slope packages sit on the momentum right-hand side (subtracted).
 # ==============================================================
 
 """
     LFEMProblem
 
-Coefficient bundle for the stacked algebraic residual. All vertical tensors
-are constant `TensorValue`/`ThirdOrderTensorValue` (index order `[i,k,j]` =
-[test layer, u_k layer, u_j layer] — matches `assemble_vertical_tensors`
-storage directly, no remap).
+Coefficient bundle carried through the time loop and consumed by the residual.
+It holds the vertical tensors as Gridap constants (built once by
+`assemble_vertical_tensors`, reshaped in `build_problem`), the still-water depth
+`d(x,y)`, the source/sponge/relaxation profiles, and the physics flags that
+switch individual residual terms on or off. Third-order tensors use the index
+order `[i,k,j]` = [test layer, u_k layer, u_j layer], so contraction over the
+trailing two indices directly yields the mode-i momentum contribution.
 """
 struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
     g            :: Float64
@@ -39,16 +45,17 @@ struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
     G3           :: G3T               # ThirdOrderTensorValue  advection 𝓖
     A3           :: A3T               # NTuple{8,ThirdOrderTensorValue}  NL pressure 𝓐
     K3           :: K3T               # NTuple{8,ThirdOrderTensorValue}  NL pressure 𝓚
-    P3           :: P3T               # NTuple{8,ThirdOrderTensorValue}  NL leading 𝓟 (reserved)
-    linearised   :: Bool              # drop H-weights; d²B dispersion (validated baseline)
+    P3           :: P3T               # NTuple{8,ThirdOrderTensorValue}  NL leading 𝓟
+    linearised   :: Bool              # linear regime: drop H-weights, use d²B dispersion
     advection    :: Bool              # nonlinear advection block
-    lin_pressure :: Bool              # A/K slope pressure package
-    P_full       :: Bool              # full P¹L¹+P²L²+P³L³ in R_P (false = oracle's P³L³)
-    nl_pressure68:: Bool              # nonlinear pressure, NATIVE first-order set c∈{3,6,7,8}
+    lin_pressure :: Bool              # A/K linear slope-pressure package (needs a sloped bed)
+    P_full       :: Bool              # keep all three slope components P¹L¹+P²L²+P³L³ in R_P
+                                      #   (false = the P³L³ dispersion carrier alone)
+    nl_pressure68:: Bool              # nonlinear pressure, native first-order set c∈{3,6,7,8}
                                       #   (𝓐/𝓚 slope halves + 𝓟 leading part; all paths)
-    nl_pressure_full :: Bool          # + comps c∈{1,2,4,5}: 𝓐 half exact-IBP; 𝓚/𝓟 halves via
-                                      #   frozen L²-projections (sequential loop; O(A³))
-    nlp_state    :: Base.RefValue{Any} # frozen (π𝖲, π𝖻) FEFunctions; nothing before step 1
+    nl_pressure_full :: Bool          # + comps c∈{1,2,4,5}: 𝓐 half by exact IBP; 𝓚/𝓟 halves via
+                                      #   per-step frozen L²-projections (finite-amplitude, O(A³))
+    nlp_state    :: Base.RefValue{Any} # frozen (π𝖲, π𝖻) FEFunctions; nothing before the first step
     mu_sponge    :: Function
     wm_src       :: Function
     relax_bc     :: Bool              # generation/absorption relaxation zone (Dirichlet inflow)
@@ -130,7 +137,7 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
     r = lin ? r + ∫( (Wx ⋅ accx) + (Wy ⋅ accy) ) * dO :
               r + ∫( H*(Wx ⋅ accx) + H*(Wy ⋅ accy) ) * dO
 
-    # ---- gravity (oracle IBP form; hydrostatic baseline subtracted) ------------
+    # ---- gravity (integrated-by-parts energy form; rest-state baseline removed) -
     PhiDW = alg_dot(prob.Φ, DW)
     r = lin ? r + ∫( (-g)*η*PhiDW ) * dO :
               r + ∫( (-0.5*g)*(H*H - d_cf*d_cf)*PhiDW ) * dO
@@ -224,8 +231,12 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
 end
 
 # ----------------------------------------------------------
-#  Hand Jacobians (oracle-matching quasi-Newton choices: H frozen in the
-#  u̇ terms; lin_pressure and nl_pressure68 omitted; advection FULL Newton)
+#  Hand Jacobians. Splitting ∂R/∂u̇ (effective mass) from ∂R/∂u (spatial) lets
+#  the time integrator form its per-stage system J = ∂R/∂u + (1/aΔt)∂R/∂u̇
+#  directly. The advection block is differentiated in full (quadratic Newton);
+#  the slope-pressure packages are linearised with H frozen in the u̇-carrying
+#  terms — a quasi-Newton choice that keeps the Jacobian sparse while retaining
+#  fast, robust convergence.
 # ----------------------------------------------------------
 
 "∂R/∂u̇ — effective mass operator (acceleration + R_P dispersion)."
@@ -337,8 +348,10 @@ function build_ode_operator(prob::LFEMProblem, U, V, trian, dO)
     return TransientFEOperator(r, j, jt, U, V)
 end
 
-"AD-Jacobian variant (experimental; the 3-field stacked residual has a much
-smaller expression tree than the old per-layer fused residual)."
+"Operator variant that lets Gridap build the Jacobians by automatic
+differentiation of `global_residual` instead of using the hand Jacobians —
+useful for cross-checking. The three-field stacked residual keeps the AD
+expression tree small enough to be practical."
 function build_ode_operator_ad(prob::LFEMProblem, U, V, trian, dO)
     r = (t, u, v) -> global_residual(t, u, v, prob, trian, dO)
     return TransientFEOperator(r, U, V)
