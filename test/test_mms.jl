@@ -59,7 +59,7 @@ check(name, cond, extra="") = (global n_pass, n_fail;
 g = 9.81; Lx, Ly = 2.0, 1.0; d0 = 1.0
 vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0]); Nσ = vert.N_dof
 model, trian = build_horizontal_model(((0.0,Lx),(0.0,Ly)), (6,4)); feo = 2
-dO = Measure(trian, 2*feo + 2)
+dΩh = Measure(trian, 2*feo + 2)
 U, V = build_fe_spaces(model, feo, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed basin
 h_bathy(x) = d0 - 0.15*x[1] - 0.05*x[1]^2 + 0.08*x[1]*x[2]                # ∇h,∇²h ≠ 0
 
@@ -82,7 +82,7 @@ prob = build_problem(vert; g=g, h_bathy=h_bathy,
     linearised=false, advection=true, lin_pressure=true, P_full=true,
     nl_pressure68=true, nl_pressure_full=FULL,
     mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)
-ctx = FULL ? build_nlp_ctx(model, feo, Nσ, trian, dO) : nothing
+ctx = FULL ? build_nlp_ctx(model, feo, Nσ, trian, dΩh) : nothing
 
 dt = 0.06; θ = 0.5; N = 12                            # unsteady CN march (≈0.36 period)
 TCF(vec, dvec) = TransientCellField(FEFunction(U, vec), (FEFunction(U, dvec),))
@@ -99,14 +99,14 @@ for n in 0:N-1
     us1 = ustar_dofs(tn + dt)
     umid_star = un .+ θ.*(us1 .- un)                  # θ-point of the manufactured soln
     udot_star = (us1 .- un) ./ dt                     # scheme-consistent u̇* ⇒ exact recovery
-    f = assemble_vector(v -> global_residual(tθ, TCF(umid_star, udot_star), v, prob, trian, dO), V)
+    f = assemble_vector(v -> global_residual(tθ, TCF(umid_star, udot_star), v, prob, trian, dΩh), V)
     u1 = copy(un)
     for it in 1:15
         umid = un .+ θ.*(u1 .- un); udot = (u1 .- un)./dt
         tu = TCF(umid, udot)
-        r  = assemble_vector(v -> global_residual(tθ, tu, v, prob, trian, dO), V) .- f
-        Ju = assemble_matrix((du,v) -> jacobian_u(  tθ, tu, du, v, prob, trian, dO), U, V)
-        Jt = assemble_matrix((du,v) -> jacobian_u_t(tθ, tu, du, v, prob, trian, dO), U, V)
+        r  = assemble_vector(v -> global_residual(tθ, tu, v, prob, trian, dΩh), V) .- f
+        Ju = assemble_matrix((du,v) -> jacobian_u(  tθ, tu, du, v, prob, trian, dΩh), U, V)
+        Jt = assemble_matrix((du,v) -> jacobian_u_t(tθ, tu, du, v, prob, trian, dΩh), U, V)
         δ  = (θ .* Ju .+ (1.0/dt) .* Jt) \ (-r)
         u1 = u1 .+ δ; nl_iters_tot += 1
         norm(δ)/max(norm(us1),1e-14) < 1e-12 && break
@@ -128,11 +128,11 @@ println("\n-- nonlinearity diagnostics (on u* at t=T/2) --")
 tm = 0.5*N*dt; um = ustar_dofs(tm)
 udm = (ustar_dofs(tm + 1e-4) .- ustar_dofs(tm - 1e-4)) ./ 2e-4     # ∂ₜu* (FD)
 tu_m = TCF(um, udm)
-R_full = assemble_vector(v -> global_residual(tm, tu_m, v, prob, trian, dO), V)
+R_full = assemble_vector(v -> global_residual(tm, tu_m, v, prob, trian, dΩh), V)
 
 prob_lin = build_problem(vert; g=g, h_bathy=h_bathy, linearised=true, advection=false,
                          mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)
-R_lin = assemble_vector(v -> global_residual(tm, tu_m, v, prob_lin, trian, dO), V)
+R_lin = assemble_vector(v -> global_residual(tm, tu_m, v, prob_lin, trian, dΩh), V)
 nl_frac = norm(R_full .- R_lin) / norm(R_full)
 @printf("  ‖R_full − R_linear‖ / ‖R_full‖ = %.1f%%  (nonlinear content of the residual)\n",
         100*nl_frac)
@@ -147,7 +147,7 @@ DUm = alg_dx(Uxm) + alg_dy(Uym); afm = dhx*Uxm + dhy*Uym; bfm = dHx*Uxm + dHy*Uy
 Sm  = Hm*DUm + bfm
 r_nat = assemble_vector(v -> nlp_native_contrib(prob, dcf, ηm, Hm, dhx, dhy, dHx, dHy,
                              Uxm, Uym, v[2], v[3], alg_dx(v[2])+alg_dy(v[3]),
-                             afm, bfm, Sm, DUm, dO), V)
+                             afm, bfm, Sm, DUm, dΩh), V)
 @printf("  native nonlinear-pressure block ‖·‖ = %.3e  (𝓝 comps {3,6,7,8} active)\n", norm(r_nat))
 check("native nonlinear-pressure block is computed (nonzero)", norm(r_nat) > 1e-9)
 

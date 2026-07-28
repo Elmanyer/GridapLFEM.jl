@@ -104,12 +104,12 @@ function build_problem(vert;
 end
 
 """
-    global_residual(t, u, v, prob, trian, dO)
+    global_residual(t, u, v, prob, trian, dΩh)
 
 Single scalar Gridap residual, stacked layout. `u` is a TransientCellField
 (`∂t(u)` available); `u[1]=η`, `u[2]=𝖴x`, `u[3]=𝖴y`. No per-layer loops.
 """
-function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
+function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
     ut = ∂t(u)
     η,  Ux,  Uy  = u[1], u[2], u[3]
     ηt, Uxt, Uyt = ut[1], ut[2], ut[3]
@@ -130,21 +130,21 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
     ub  = alg_vec2(alg_dot(prob.Φ, Ux), alg_dot(prob.Φ, Uy))   # depth-averaged velocity
 
     # ---- mass continuity + wavemaker source ----------------------------------
-    r = ∫( q*ηt - H*(∇(q) ⋅ ub) - q*src_cf ) * dO
+    r = ∫( q*ηt - H*(∇(q) ⋅ ub) - q*src_cf ) * dΩh
 
     # ---- acceleration ----------------------------------------------------------
     accx = alg_mul(prob.Mv, Uxt); accy = alg_mul(prob.Mv, Uyt)
-    r = lin ? r + ∫( (Wx ⋅ accx) + (Wy ⋅ accy) ) * dO :
-              r + ∫( H*(Wx ⋅ accx) + H*(Wy ⋅ accy) ) * dO
+    r = lin ? r + ∫( (Wx ⋅ accx) + (Wy ⋅ accy) ) * dΩh :
+              r + ∫( H*(Wx ⋅ accx) + H*(Wy ⋅ accy) ) * dΩh
 
     # ---- gravity (integrated-by-parts energy form; rest-state baseline removed) -
     PhiDW = alg_dot(prob.Φ, DW)
-    r = lin ? r + ∫( (-g)*η*PhiDW ) * dO :
-              r + ∫( (-0.5*g)*(H*H - d_cf*d_cf)*PhiDW ) * dO
+    r = lin ? r + ∫( (-g)*η*PhiDW ) * dΩh :
+              r + ∫( (-0.5*g)*(H*H - d_cf*d_cf)*PhiDW ) * dΩh
 
     # ---- leading pressure R_P (dispersion — MANDATORY) -------------------------
     if lin
-        r = r + ∫( (-1.0)*(d_cf*d_cf)*((alg_mul(prob.Bv, DUt)) ⋅ DW) ) * dO
+        r = r + ∫( (-1.0)*(d_cf*d_cf)*((alg_mul(prob.Bv, DUt)) ⋅ DW) ) * dΩh
     else
         UgHt = dHx*Uxt + dHy*Uyt                               # u̇ⱼ·∇H stacked
         if prob.P_full
@@ -152,14 +152,14 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
             L2 = UgHt
             L3 = (-1.0)*(H*DUt + UgHt)
             sP = alg_mul(prob.P[1], L1) + alg_mul(prob.P[2], L2) + alg_mul(prob.P[3], L3)
-            r  = r + ∫( (-1.0)*(H*H)*(sP ⋅ DW) ) * dO
+            r  = r + ∫( (-1.0)*(H*H)*(sP ⋅ DW) ) * dΩh
         else
-            r = r + ∫( (-1.0)*(H*H)*((alg_mul(prob.Bv, H*DUt + UgHt)) ⋅ DW) ) * dO
+            r = r + ∫( (-1.0)*(H*H)*((alg_mul(prob.Bv, H*DUt + UgHt)) ⋅ DW) ) * dΩh
         end
     end
 
     # ---- sponge -----------------------------------------------------------------
-    r = r + ∫( mu_cf*((Wx ⋅ alg_mul(prob.Mv, Ux)) + (Wy ⋅ alg_mul(prob.Mv, Uy))) ) * dO
+    r = r + ∫( mu_cf*((Wx ⋅ alg_mul(prob.Mv, Ux)) + (Wy ⋅ alg_mul(prob.Mv, Uy))) ) * dΩh
 
     # ---- generation/absorption relaxation zone (Dirichlet inflow) ---------------
     #  Relax the state toward the incident wave in a zone adjacent to the
@@ -173,7 +173,7 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
         uy_i   = CellField(x -> tg.uy(x, t),  trian)
         r = r + ∫( mug_cf*q*(η - eta_i)
                  + mug_cf*((Wx ⋅ alg_mul(prob.Mv, Ux - ux_i))
-                         + (Wy ⋅ alg_mul(prob.Mv, Uy - uy_i))) ) * dO
+                         + (Wy ⋅ alg_mul(prob.Mv, Uy - uy_i))) ) * dΩh
     end
 
     # ---- nonlinear advection (𝓜/𝓖 block) ---------------------------------------
@@ -186,7 +186,7 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
         advx = alg_dc3(prob.M3, TMx);  advy = alg_dc3(prob.M3, TMy)
         gvx  = alg_dc3(prob.G3, alg_outer(S, Ux))
         gvy  = alg_dc3(prob.G3, alg_outer(S, Uy))
-        r = r + ∫( H*(advx ⋅ Wx) + H*(advy ⋅ Wy) + (gvx ⋅ Wx) + (gvy ⋅ Wy) ) * dO
+        r = r + ∫( H*(advx ⋅ Wx) + H*(advy ⋅ Wy) + (gvx ⋅ Wx) + (gvy ⋅ Wy) ) * dΩh
     end
 
     # ---- linear non-hydrostatic pressure (A/K slope package) --------------------
@@ -198,7 +198,7 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
         LA = alg_mul(prob.Av[1], L1) + alg_mul(prob.Av[2], L2) + alg_mul(prob.Av[3], L3)
         LK = alg_mul(prob.Kv[1], L1) + alg_mul(prob.Kv[2], L2) + alg_mul(prob.Kv[3], L3)
         r = r + ∫( (-1.0)*H*( dhx*(Wx ⋅ LA) + dHx*(Wx ⋅ LK)
-                            + dhy*(Wy ⋅ LA) + dHy*(Wy ⋅ LK) ) ) * dO
+                            + dhy*(Wy ⋅ LA) + dHy*(Wy ⋅ LK) ) ) * dΩh
     end
 
     # ---- nonlinear pressure (nlpressure.jl) ---------------------------------
@@ -213,16 +213,16 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
         Ugh = dhx*Ux + dhy*Uy
         S   = H*DU + UgH
         r = r + nlp_native_contrib(prob, d_cf, η, H, dhx, dhy, dHx, dHy,
-                                   Ux, Uy, Wx, Wy, DW, Ugh, UgH, S, DU, dO)
+                                   Ux, Uy, Wx, Wy, DW, Ugh, UgH, S, DU, dΩh)
         if prob.nl_pressure_full
             r = r + nlp_gradh_contrib(prob, d_cf, η, H, dhx, dhy,
-                                      Ux, Uy, Wx, Wy, Ugh, UgH, S, DU, dO)
+                                      Ux, Uy, Wx, Wy, Ugh, UgH, S, DU, dΩh)
             st = prob.nlp_state[]
             if st !== nothing
                 N1, N2, N4, N5 = nlp_frozen_N(Ux, Uy, S, DU, st.piS, st.pib)
                 r = r + nlp_gradH_frozen_contrib(prob, H, dHx, dHy, Wx, Wy,
-                                                 N1, N2, N4, N5, dO)
-                r = r + nlp_P_frozen_contrib(prob, H, DW, N1, N2, N4, N5, dO)
+                                                 N1, N2, N4, N5, dΩh)
+                r = r + nlp_P_frozen_contrib(prob, H, DW, N1, N2, N4, N5, dΩh)
             end
         end
     end
@@ -240,7 +240,7 @@ end
 # ----------------------------------------------------------
 
 "∂R/∂u̇ — effective mass operator (acceleration + R_P dispersion)."
-function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dO)
+function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dΩh)
     η = u[1]
     dηt, dUxt, dUyt = dut[1], dut[2], dut[3]
     q, Wx, Wy = v[1], v[2], v[3]
@@ -248,15 +248,15 @@ function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dO)
     d_cf = CellField(prob.h_bathy, trian)
     H = d_cf + η
 
-    r = ∫( q*dηt ) * dO
+    r = ∫( q*dηt ) * dΩh
     accx = alg_mul(prob.Mv, dUxt); accy = alg_mul(prob.Mv, dUyt)
-    r = lin ? r + ∫( (Wx ⋅ accx) + (Wy ⋅ accy) ) * dO :
-              r + ∫( H*(Wx ⋅ accx) + H*(Wy ⋅ accy) ) * dO
+    r = lin ? r + ∫( (Wx ⋅ accx) + (Wy ⋅ accy) ) * dΩh :
+              r + ∫( H*(Wx ⋅ accx) + H*(Wy ⋅ accy) ) * dΩh
 
     DW   = alg_dx(Wx) + alg_dy(Wy)
     dDUt = alg_dx(dUxt) + alg_dy(dUyt)
     if lin
-        r = r + ∫( (-1.0)*(d_cf*d_cf)*((alg_mul(prob.Bv, dDUt)) ⋅ DW) ) * dO
+        r = r + ∫( (-1.0)*(d_cf*d_cf)*((alg_mul(prob.Bv, dDUt)) ⋅ DW) ) * dΩh
     else
         dhx = alg_dx(d_cf); dhy = alg_dy(d_cf)
         dHx = dhx + alg_dx(η); dHy = dhy + alg_dy(η)
@@ -266,16 +266,16 @@ function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dO)
             dL2 = dUgHt
             dL3 = (-1.0)*(H*dDUt + dUgHt)
             sP  = alg_mul(prob.P[1], dL1) + alg_mul(prob.P[2], dL2) + alg_mul(prob.P[3], dL3)
-            r   = r + ∫( (-1.0)*(H*H)*(sP ⋅ DW) ) * dO
+            r   = r + ∫( (-1.0)*(H*H)*(sP ⋅ DW) ) * dΩh
         else
-            r = r + ∫( (-1.0)*(H*H)*((alg_mul(prob.Bv, H*dDUt + dUgHt)) ⋅ DW) ) * dO
+            r = r + ∫( (-1.0)*(H*H)*((alg_mul(prob.Bv, H*dDUt + dUgHt)) ⋅ DW) ) * dΩh
         end
     end
     return r
 end
 
 "∂R/∂u — continuity + gravity + sponge + (nonlinear Acc η-term) + FULL advection derivative."
-function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dO)
+function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dΩh)
     η,  Ux,  Uy  = u[1], u[2], u[3]
     dη, dUx, dUy = du[1], du[2], du[3]
     q,  Wx,  Wy  = v[1], v[2], v[3]
@@ -288,29 +288,29 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dO)
     dub = alg_vec2(alg_dot(prob.Φ, dUx), alg_dot(prob.Φ, dUy))
 
     # continuity
-    r = ∫( (-1.0)*( (∇(q) ⋅ ub)*dη + H*(∇(q) ⋅ dub) ) ) * dO
+    r = ∫( (-1.0)*( (∇(q) ⋅ ub)*dη + H*(∇(q) ⋅ dub) ) ) * dΩh
 
     # gravity
     DW = alg_dx(Wx) + alg_dy(Wy)
     PhiDW = alg_dot(prob.Φ, DW)
-    r = lin ? r + ∫( (-g)*dη*PhiDW ) * dO :
-              r + ∫( (-g)*H*dη*PhiDW ) * dO
+    r = lin ? r + ∫( (-g)*dη*PhiDW ) * dΩh :
+              r + ∫( (-g)*H*dη*PhiDW ) * dΩh
 
     # nonlinear-Acc η derivative (needs current u̇)
     if !lin
         ut = ∂t(u)
-        r = r + ∫( dη*(Wx ⋅ alg_mul(prob.Mv, ut[2])) + dη*(Wy ⋅ alg_mul(prob.Mv, ut[3])) ) * dO
+        r = r + ∫( dη*(Wx ⋅ alg_mul(prob.Mv, ut[2])) + dη*(Wy ⋅ alg_mul(prob.Mv, ut[3])) ) * dΩh
     end
 
     # sponge
-    r = r + ∫( mu_cf*((Wx ⋅ alg_mul(prob.Mv, dUx)) + (Wy ⋅ alg_mul(prob.Mv, dUy))) ) * dO
+    r = r + ∫( mu_cf*((Wx ⋅ alg_mul(prob.Mv, dUx)) + (Wy ⋅ alg_mul(prob.Mv, dUy))) ) * dΩh
 
     # relaxation zone (linear in u — exact derivative)
     if prob.relax_bc
         mug_cf = CellField(prob.relax_mu, trian)
         r = r + ∫( mug_cf*q*dη
                  + mug_cf*((Wx ⋅ alg_mul(prob.Mv, dUx))
-                         + (Wy ⋅ alg_mul(prob.Mv, dUy))) ) * dO
+                         + (Wy ⋅ alg_mul(prob.Mv, dUy))) ) * dΩh
     end
 
     # full advection derivative
@@ -334,17 +334,17 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dO)
 
         r = r + ∫( dη*((alg_dc3(prob.M3, TMx)) ⋅ Wx) + dη*((alg_dc3(prob.M3, TMy)) ⋅ Wy)
                  + H*((alg_dc3(prob.M3, dTMx)) ⋅ Wx) + H*((alg_dc3(prob.M3, dTMy)) ⋅ Wy)
-                 + ((alg_dc3(prob.G3, dTGx)) ⋅ Wx) + ((alg_dc3(prob.G3, dTGy)) ⋅ Wy) ) * dO
+                 + ((alg_dc3(prob.G3, dTGx)) ⋅ Wx) + ((alg_dc3(prob.G3, dTGy)) ⋅ Wy) ) * dΩh
     end
 
     return r
 end
 
 "TransientFEOperator with the hand Jacobians (default; fast)."
-function build_ode_operator(prob::LFEMProblem, U, V, trian, dO)
-    r  = (t, u, v)      -> global_residual(t, u, v, prob, trian, dO)
-    j  = (t, u, du, v)  -> jacobian_u(t, u, du, v, prob, trian, dO)
-    jt = (t, u, dut, v) -> jacobian_u_t(t, u, dut, v, prob, trian, dO)
+function build_ode_operator(prob::LFEMProblem, U, V, trian, dΩh)
+    r  = (t, u, v)      -> global_residual(t, u, v, prob, trian, dΩh)
+    j  = (t, u, du, v)  -> jacobian_u(t, u, du, v, prob, trian, dΩh)
+    jt = (t, u, dut, v) -> jacobian_u_t(t, u, dut, v, prob, trian, dΩh)
     return TransientFEOperator(r, j, jt, U, V)
 end
 
@@ -352,7 +352,7 @@ end
 differentiation of `global_residual` instead of using the hand Jacobians —
 useful for cross-checking. The three-field stacked residual keeps the AD
 expression tree small enough to be practical."
-function build_ode_operator_ad(prob::LFEMProblem, U, V, trian, dO)
-    r = (t, u, v) -> global_residual(t, u, v, prob, trian, dO)
+function build_ode_operator_ad(prob::LFEMProblem, U, V, trian, dΩh)
+    r = (t, u, v) -> global_residual(t, u, v, prob, trian, dΩh)
     return TransientFEOperator(r, U, V)
 end

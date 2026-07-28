@@ -61,7 +61,7 @@ result = with_mpi() do distribute
     Nσ = vert.N_dof
     model, trian = build_horizontal_model_distributed(ranks, (px,py),
                        (0.0,Lx,0.0,Ly), (nx,ny))
-    dO = Measure(trian, 2*feord + 2)
+    dΩh = Measure(trian, 2*feord + 2)
     U, V = build_fe_spaces(model, feord, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed basin
     h_bathy(x) = d0 - 0.15*x[1] - 0.05*x[1]^2 + 0.08*x[1]*x[2]                  # ∇h,∇²h ≠ 0
 
@@ -92,13 +92,13 @@ result = with_mpi() do distribute
         linearised=false, advection=true, lin_pressure=true, P_full=true,
         nl_pressure68=true, nl_pressure_full=nlpfull,
         mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)
-    nlp = nlpfull ? (prob, build_nlp_ctx(model, feord, Nσ, trian, dO; distributed=true)) : nothing
+    nlp = nlpfull ? (prob, build_nlp_ctx(model, feord, Nσ, trian, dΩh; distributed=true)) : nothing
 
     # forced residual (manufactured), same hand Jacobians (forcing indep of u)
-    res_f(t,u,v) = global_residual(t,u,v,prob,trian,dO) -
-                   global_residual(t, forcing_tcf(t), v, prob, trian, dO)
-    jac_f(t,u,du,v)  = jacobian_u(t,u,du,v,prob,trian,dO)
-    jact_f(t,u,dut,v)= jacobian_u_t(t,u,dut,v,prob,trian,dO)
+    res_f(t,u,v) = global_residual(t,u,v,prob,trian,dΩh) -
+                   global_residual(t, forcing_tcf(t), v, prob, trian, dΩh)
+    jac_f(t,u,du,v)  = jacobian_u(t,u,du,v,prob,trian,dΩh)
+    jact_f(t,u,dut,v)= jacobian_u_t(t,u,dut,v,prob,trian,dΩh)
     op = TransientFEOperator(res_f, jac_f, jact_f, U, V)
 
     monitor = SolverMonitor()
@@ -117,8 +117,8 @@ result = with_mpi() do distribute
     function relerr(u, t)
         us = ustar(t)
         e = sqrt(abs(sum(∫( (u[1]-us[1])*(u[1]-us[1])
-                          + (u[2]-us[2])⋅(u[2]-us[2]) + (u[3]-us[3])⋅(u[3]-us[3]) )*dO)))
-        n = sqrt(abs(sum(∫( us[1]*us[1] + us[2]⋅us[2] + us[3]⋅us[3] )*dO)))
+                          + (u[2]-us[2])⋅(u[2]-us[2]) + (u[3]-us[3])⋅(u[3]-us[3]) )*dΩh)))
+        n = sqrt(abs(sum(∫( us[1]*us[1] + us[2]⋅us[2] + us[3]⋅us[3] )*dΩh)))
         return e/max(n,1e-30)
     end
 

@@ -43,7 +43,7 @@ T_th = 2π/(k*sqrt(g*h_val*dot(vert.Phi, Meff \ vert.Phi)))
 
 domain = ((0.0, L), (0.0, Ly)); partition = (24, 4); p_horizontal = 2
 model, trian = build_horizontal_model(domain, partition)
-dO = Measure(trian, 2*p_horizontal + 2)
+dΩh = Measure(trian, 2*p_horizontal + 2)
 U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed basin
 
 prob = build_problem(vert; g=g, h_bathy=x -> h_val, linearised=true, advection=false,
@@ -57,15 +57,15 @@ u0 = make_initial_conditions(U, Nσ; eta0_func=eta0)
 #   K = ½∫(𝖴x·M𝖴x + 𝖴y·M𝖴y) − ½d²∫(𝖣·B𝖣),   𝖣=∇·𝖴 stacked (B⪯0 ⇒ −term ≥0)
 function energy(uh)
     η = uh[1]; Ux = uh[2]; Uy = uh[3]; DU = alg_dx(Ux) + alg_dy(Uy)
-    pe = 0.5*g*sum(∫( η*η )*dO)
-    ke = 0.5*sum(∫( (Ux ⋅ alg_mul(Mt, Ux)) + (Uy ⋅ alg_mul(Mt, Uy)) )*dO) -
-         0.5*h_val^2*sum(∫( DU ⋅ alg_mul(Bt, DU) )*dO)
+    pe = 0.5*g*sum(∫( η*η )*dΩh)
+    ke = 0.5*sum(∫( (Ux ⋅ alg_mul(Mt, Ux)) + (Uy ⋅ alg_mul(Mt, Uy)) )*dΩh) -
+         0.5*h_val^2*sum(∫( DU ⋅ alg_mul(Bt, DU) )*dΩh)
     return pe + ke
 end
 E0 = energy(u0)
 
 dt = T_th/80; Tf = 6*T_th
-op     = build_ode_operator(prob, U, V, trian, dO)
+op     = build_ode_operator(prob, U, V, trian, dΩh)
 solver = build_ode_solver(dt; nl_tol=1e-8)
 odesol = solve(solver, op, 0.0, Tf, u0)
 

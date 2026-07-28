@@ -29,7 +29,7 @@ Nσ = vert.N_dof
 
 domain = ((0.0, 10.0), (0.0, 2.0)); partition = (20, 4); p_horizontal = 2
 model, trian = build_horizontal_model(domain, partition)
-dO = Measure(trian, 2*p_horizontal + 2)
+dΩh = Measure(trian, 2*p_horizontal + 2)
 U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=true)
 
 prob = build_problem(vert; g=g, h_bathy=x -> h_val,
@@ -40,11 +40,11 @@ A0 = 0.01; xc = 5.0; wd = 1.0
 eta0(x) = A0 * exp(-((x[1] - xc)^2) / wd^2)
 u0 = make_initial_conditions(U, Nσ; eta0_func=eta0)
 
-mass(uh) = sum(∫(uh[1]) * dO)
+mass(uh) = sum(∫(uh[1]) * dΩh)
 M0 = mass(u0)
 @printf("  Initial mass ∫η = %.8e   (Nσ=%d, %d×%d cells)\n", M0, Nσ, partition...)
 
-op     = build_ode_operator(prob, U, V, trian, dO)
+op     = build_ode_operator(prob, U, V, trian, dΩh)
 solver = build_ode_solver(0.02; nl_tol=1e-8)
 odesol = solve(solver, op, 0.0, 2.0, u0)
 

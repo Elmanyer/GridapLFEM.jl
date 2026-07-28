@@ -48,7 +48,7 @@ vert = assemble_vertical_tensors(M, 1, c_bdy); Nσ = vert.N_dof
 p_horizontal = 2
 model, trian = build_horizontal_model(((0.0,Lx),(0.0,Ly)),
                                       (round(Int, Lx/(lam/12)), 2))
-dO = Measure(trian, 2*p_horizontal + 2)
+dΩh = Measure(trian, 2*p_horizontal + 2)
 U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=false)
 
 # custom bichromatic Gaussian mass source (two frequencies superposed)
@@ -60,7 +60,7 @@ prob = build_problem(vert; g=g, h_bathy=x -> d, linearised=false, advection=true
 
 x_g = x_wm + 6lam
 u0 = make_initial_conditions(U, Nσ)
-op     = build_ode_operator(prob, U, V, trian, dO)
+op     = build_ode_operator(prob, U, V, trian, dΩh)
 solver = build_ode_solver(0.02)
 diags  = run_time_loop(op, solver, u0, 0.0, 25*max(T1,T2);
                        trian=trian, Nσ=Nσ, gauges=[(x_g, Ly/2)], dt=0.02,

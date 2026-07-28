@@ -170,12 +170,12 @@ relaxation zone adjacent to the inflow, strength `mu_max`).
 function setup_and_run(;
     # ---- Vertical discretisation ---------------------------------------------
     M            :: Int     = 2,          # number of vertical σ-elements (LFE-M order: 2/3/4)
-    p_vertical       :: Int     = 1,          # polynomial order of each σ-element (Nσ = M·p_vertical+1)
+    p_vertical   :: Int     = 1,          # polynomial order of each σ-element (Nσ = M·p_vertical+1)
     c_bdy                   = nothing,    # σ-node boundary positions in [0,1]; nothing → optimised set
     # ---- Horizontal discretisation -------------------------------------------
     domain                  = ((0.0, 60.0), (0.0, 10.0)),  # ((x0,x1),(y0,y1)) extent [m]
     partition    :: Tuple   = (120, 20),  # (nx,ny) number of horizontal cells
-    p_horizontal     :: Int     = 2,          # horizontal FE order (must be ≥2: Q1 zeroes the dispersion)
+    p_horizontal :: Int     = 2,          # horizontal FE order (must be ≥2: Q1 zeroes the dispersion)
     # ---- Physical parameters -------------------------------------------------
     h_val        :: Float64 = 3.5,        # still-water depth [m] (flat bed unless h_bathy given)
     g            :: Float64 = g,       # gravitational acceleration [m/s²]
@@ -211,7 +211,7 @@ function setup_and_run(;
     P_full       :: Bool    = false,      # keep all three slope components of R_P (else P³L³ only)
     nl_pressure68:: Bool    = false,      # nonlinear-pressure native set c∈{3,6,7,8} (all blocks)
     nl_pressure_full :: Bool = false,     # + c∈{1,2,4,5}: ∇h exact-IBP; ∇H/𝓟 via frozen projections
-    h_bathy                  = nothing,    # x → d(x): variable bathymetry (overrides h_val)
+    h_bathy                 = nothing,    # x → d(x): variable bathymetry (overrides h_val)
     eta0_func               = nothing,    # x → η₀(x): initial free surface (IC release: set x_wall_bc=true)
     # ---- Dirichlet boundary wave generation (waveinput.jl) --------------------
     wave_bc                 = nothing,    # nothing | :regular | WaveInput | WaveSpec AiryState
@@ -265,7 +265,7 @@ function setup_and_run(;
     # quadrature degree = 2·p_horizontal+2 integrates the nonlinear (product) terms exactly enough.
     # `y_periodic` glues the top/bottom edges when y_wall_bc == :periodic.
     model, trian = build_horizontal_model(domain, partition; y_periodic=y_periodic)
-    dO = Measure(trian, 2*p_horizontal + 2)
+    dΩh = Measure(trian, 2*p_horizontal + 2)
 
     # Forcing frequency and the matching wavenumber from the Airy relation
     # ω² = g k tanh(kd) (used to size the wavemaker and report kd).
@@ -376,8 +376,8 @@ function setup_and_run(;
 
     # Wrap the residual (+ Jacobians) into a Gridap TransientFEOperator. `use_ad`
     # swaps the hand Jacobians for AD-generated ones (cross-checking only).
-    op = use_ad ? build_ode_operator_ad(prob, U, V, trian, dO) :
-                  build_ode_operator(prob, U, V, trian, dO)
+    op = use_ad ? build_ode_operator_ad(prob, U, V, trian, dΩh) :
+                  build_ode_operator(prob, U, V, trian, dΩh)
     # The monitor transparently wraps the Newton solver to harvest per-step stats.
     monitor = SolverMonitor()
     # Build the time integrator (SDIRK by default) around a Newton+LU nonlinear solve.
@@ -388,7 +388,7 @@ function setup_and_run(;
     # Optional independent re-assembly of the governing equations for verification
     # (its θ-scheme self-check is meaningful only for the :theta integrator).
     checker = check_every > 0 ?
-              ResidualChecker(prob, U, V, trian, dO, dt, theta,
+              ResidualChecker(prob, U, V, trian, dΩh, dt, theta,
                                  solver_type == :theta) : nothing
     # Initial condition. Four cases: hot-start from the incident wave; rest state
     # for a generated sea; rest state (default); or a prescribed η₀(x) release.
@@ -409,7 +409,7 @@ function setup_and_run(;
     # For nl_pressure_full, build the frozen-projection context (mass matrix
     # factorised once) used to evaluate the irreducible ∇H/𝓟 pressure halves.
     nlp = nl_pressure_full ?
-          (prob, build_nlp_ctx(model, p_horizontal, vert.N_dof, trian, dO)) : nothing
+          (prob, build_nlp_ctx(model, p_horizontal, vert.N_dof, trian, dΩh)) : nothing
 
     # Reconstruction context for optional w/p VTK output (nothing if both off).
     recon = build_field_recon(vert, dfn, g; rho=rho,

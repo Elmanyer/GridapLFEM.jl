@@ -40,7 +40,7 @@ vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
 Nσ   = vert.N_dof                      # = 3
 Lx, Ly = 4.0, 2.0
 model, trian = build_horizontal_model(((0.0,Lx),(0.0,Ly)), (8,4))
-dO = Measure(trian, 14)                # integrates every polynomial term exactly
+dΩh = Measure(trian, 14)                # integrates every polynomial term exactly
 U, V = build_fe_spaces(model, 2, Nσ; y_wall_bc=:open)
 nq = num_free_dofs(V[1])               # continuity-row count
 
@@ -113,11 +113,11 @@ N5_an = (-1.0)*(alg_outer(Ux_an, dxS_an) + alg_outer(Uy_an, dyS_an))
 NA_an = alg_dc3(vert_prob.A3[1], N1_an) + alg_dc3(vert_prob.A3[2], N2_an) +
         alg_dc3(vert_prob.A3[4], N4_an) + alg_dc3(vert_prob.A3[5], N5_an)
 r_direct = assemble_vector(v -> ∫( (-1.0)*H_an*( dhx_an*(v[2] ⋅ NA_an)
-                                               + dhy_an*(v[3] ⋅ NA_an) ) )*dO, V)
+                                               + dhy_an*(v[3] ⋅ NA_an) ) )*dΩh, V)
 
 # IBP form (the implemented residual block) on the interpolated FE state
 r_ibp = assemble_block((d_cf,η,Ux,Uy,H,dhx,dhy,dHx,dHy,DU,af,bf,S,q,Wx,Wy,DW) ->
-            nlp_gradh_contrib(vert_prob, d_cf, η, H, dhx, dhy, Ux, Uy, Wx, Wy, af, bf, S, DU, dO),
+            nlp_gradh_contrib(vert_prob, d_cf, η, H, dhx, dhy, Ux, Uy, Wx, Wy, af, bf, S, DU, dΩh),
         uh, d_fun)
 
 rel = norm(r_direct - r_ibp) / norm(r_direct)
@@ -132,14 +132,14 @@ d_flat = x -> 3.5
 
 # ∇h half vanishes identically on a flat bed
 r_flat = assemble_block((d_cf,η,Ux,Uy,H,dhx,dhy,dHx,dHy,DU,af,bf,S,q,Wx,Wy,DW) ->
-            nlp_gradh_contrib(vert_prob, d_cf, η, H, dhx, dhy, Ux, Uy, Wx, Wy, af, bf, S, DU, dO),
+            nlp_gradh_contrib(vert_prob, d_cf, η, H, dhx, dhy, Ux, Uy, Wx, Wy, af, bf, S, DU, dΩh),
         uh, d_flat)
 check("G2: ∇h-IBP block ≡ 0 on flat bed", norm(r_flat) < 1e-13)
 
 # continuity rows untouched by every block
 r_nat = assemble_block((d_cf,η,Ux,Uy,H,dhx,dhy,dHx,dHy,DU,af,bf,S,q,Wx,Wy,DW) ->
             nlp_native_contrib(vert_prob, d_cf, η, H, dhx, dhy, dHx, dHy, Ux, Uy, Wx, Wy, DW,
-                               af, bf, S, DU, dO),
+                               af, bf, S, DU, dΩh),
         uh, d_fun)
 check("G2: continuity rows zero (native block)",  norm(r_nat[1:nq]) < 1e-14)
 check("G2: continuity rows zero (∇h-IBP block)",  norm(r_ibp[1:nq]) < 1e-14)
@@ -150,24 +150,24 @@ function scaled_state(s)
                             stackf([x -> s*ujx(j)(x) for j in 1:Nσ]),
                             stackf([x -> s*ujy(j)(x) for j in 1:Nσ])], U)
 end
-ctx = build_nlp_ctx(model, 2, Nσ, trian, dO)
+ctx = build_nlp_ctx(model, 2, Nσ, trian, dΩh)
 
 function block_norms(s, dfun)
     uh_s = scaled_state(s)
     update_nlp_state!(vert_prob, ctx, uh_s)
     st = vert_prob.nlp_state[]
     r_h = assemble_block((d_cf,η,Ux,Uy,H,dhx,dhy,dHx,dHy,DU,af,bf,S,q,Wx,Wy,DW) ->
-            nlp_gradh_contrib(vert_prob, d_cf, η, H, dhx, dhy, Ux, Uy, Wx, Wy, af, bf, S, DU, dO),
+            nlp_gradh_contrib(vert_prob, d_cf, η, H, dhx, dhy, Ux, Uy, Wx, Wy, af, bf, S, DU, dΩh),
           uh_s, dfun)
     r_K = assemble_block((d_cf,η,Ux,Uy,H,dhx,dhy,dHx,dHy,DU,af,bf,S,q,Wx,Wy,DW) ->
             begin
                 N1,N2,N4,N5 = nlp_frozen_N(Ux, Uy, S, DU, st.piS, st.pib)
-                nlp_gradH_frozen_contrib(vert_prob, H, dHx, dHy, Wx, Wy, N1,N2,N4,N5, dO)
+                nlp_gradH_frozen_contrib(vert_prob, H, dHx, dHy, Wx, Wy, N1,N2,N4,N5, dΩh)
             end, uh_s, dfun)
     r_P = assemble_block((d_cf,η,Ux,Uy,H,dhx,dhy,dHx,dHy,DU,af,bf,S,q,Wx,Wy,DW) ->
             begin
                 N1,N2,N4,N5 = nlp_frozen_N(Ux, Uy, S, DU, st.piS, st.pib)
-                nlp_P_frozen_contrib(vert_prob, H, DW, N1,N2,N4,N5, dO)
+                nlp_P_frozen_contrib(vert_prob, H, DW, N1,N2,N4,N5, dΩh)
             end, uh_s, dfun)
     return norm(r_h), norm(r_K), norm(r_P)
 end

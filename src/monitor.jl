@@ -130,7 +130,7 @@ function _norminf(v::PVector)
 end
 
 """
-    ResidualChecker(prob, U, V, trian, dO, dt, theta, is_theta)
+    ResidualChecker(prob, U, V, trian, dΩh, dt, theta, is_theta)
 
 Reassembles the residual of the governing equations from the accepted time
 steps (independently of the ODE solver's own assembly). See
@@ -141,7 +141,7 @@ struct ResidualChecker
     U        :: Any
     V        :: Any
     trian    :: Any
-    dO       :: Any
+    dΩh       :: Any
     dt       :: Float64
     theta    :: Float64
     is_theta :: Bool      # θ-scheme verification only valid for ThetaMethod
@@ -194,13 +194,13 @@ function check_residuals(chk::ResidualChecker, t_n::Float64, u_n, prev_vals)
         uth = FEFunction(Uat(tth), vth)
         udot_th = transient ? FEFunction(Udat(tth), vdot) : udot
         tu  = Gridap.ODEs.TransientCellField(uth, (udot_th,))
-        rv  = assemble_vector(v -> global_residual(tth, tu, v, chk.prob, chk.trian, chk.dO),
+        rv  = assemble_vector(v -> global_residual(tth, tu, v, chk.prob, chk.trian, chk.dΩh),
                               chk.V)
         res_th, res_th_inf = _norm2(rv), _norminf(rv)
     end
 
     tu2 = Gridap.ODEs.TransientCellField(u_n, (udot,))
-    rv2 = assemble_vector(v -> global_residual(t_n, tu2, v, chk.prob, chk.trian, chk.dO),
+    rv2 = assemble_vector(v -> global_residual(t_n, tu2, v, chk.prob, chk.trian, chk.dΩh),
                           chk.V)
     return (res_theta=res_th, res_theta_inf=res_th_inf,
             res_pde=_norm2(rv2), res_pde_inf=_norminf(rv2))

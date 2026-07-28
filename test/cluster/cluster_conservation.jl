@@ -58,7 +58,7 @@ result = with_mpi() do distribute
 
     model, trian = build_horizontal_model_distributed(ranks, (px,py),
                        (0.0,Lx,0.0,Ly), (nx,ny))
-    dO = Measure(trian, 2*feord + 2)
+    dΩh = Measure(trian, 2*feord + 2)
     U, V = build_fe_spaces(model, feord, Nσ; y_wall_bc=:wall, x_wall_bc=true)  # closed basin
 
     prob = build_problem(vert; g=g, h_bathy=x -> d0,
@@ -71,16 +71,16 @@ result = with_mpi() do distribute
     eta0(x) = A0*exp(-(((x[1]-xc)^2 + (x[2]-yc)^2))/wd^2)
     u0 = make_initial_conditions(U, Nσ; eta0_func=eta0)
 
-    mass(u)   = sum(∫( u[1] )*dO)                                     # ∫η  (exact invariant)
-    etaL2(u)  = sqrt(abs(sum(∫( u[1]*u[1] )*dO)))                     # stability indicator
+    mass(u)   = sum(∫( u[1] )*dΩh)                                     # ∫η  (exact invariant)
+    etaL2(u)  = sqrt(abs(sum(∫( u[1]*u[1] )*dΩh)))                     # stability indicator
     function energy(u)
         DU = alg_dx(u[2]) + alg_dy(u[3])
-        0.5*g*sum(∫( u[1]*u[1] )*dO) +
-        0.5*sum(∫( (u[2] ⋅ alg_mul(Mt,u[2])) + (u[3] ⋅ alg_mul(Mt,u[3])) )*dO) -
-        0.5*d0^2*sum(∫( DU ⋅ alg_mul(Bt,DU) )*dO)
+        0.5*g*sum(∫( u[1]*u[1] )*dΩh) +
+        0.5*sum(∫( (u[2] ⋅ alg_mul(Mt,u[2])) + (u[3] ⋅ alg_mul(Mt,u[3])) )*dΩh) -
+        0.5*d0^2*sum(∫( DU ⋅ alg_mul(Bt,DU) )*dΩh)
     end
 
-    op      = build_ode_operator(prob, U, V, trian, dO)
+    op      = build_ode_operator(prob, U, V, trian, dΩh)
     monitor = SolverMonitor()
     solver  = build_ode_solver_distributed(dt; nl_tol=1e-8, monitor=monitor)
 

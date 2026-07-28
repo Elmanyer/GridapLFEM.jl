@@ -54,7 +54,7 @@ domain    = ((0.0, 10.0), (0.0, 5.0))
 partition = (6, 4)
 p_horizontal  = 2
 model, trian = build_horizontal_model_2D(domain, partition)
-dO = Measure(trian, 2*p_horizontal + 2)
+dΩh = Measure(trian, 2*p_horizontal + 2)
 
 # unconstrained spaces → all DOFs free, interpolated states identical
 U_lay, V_lay = build_fe_spaces_2D(model, p_horizontal, Nσ; y_wall_bc=false)   # old solver: Bool
@@ -117,8 +117,8 @@ for cfg in configs
         linearised=cfg.lin, advection=cfg.adv, lin_pressure=cfg.linp,
         P_full=false, nl_pressure68=false, mu_sponge=sponge, wm_src=wm)
 
-    r_lay = assemble_vector(v -> residual_lfem(t_eval, tu_lay, v, prob_lay, trian, dO), V_lay)
-    r = assemble_vector(v -> ALG.global_residual(t_eval, tu, v, prob, trian, dO), V)
+    r_lay = assemble_vector(v -> residual_lfem(t_eval, tu_lay, v, prob_lay, trian, dΩh), V_lay)
+    r = assemble_vector(v -> ALG.global_residual(t_eval, tu, v, prob, trian, dΩh), V)
 
     for s in 1:3
         v_fields = Any[q_fs[s]]

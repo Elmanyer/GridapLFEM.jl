@@ -41,7 +41,7 @@ end
 
 """
     nlp_native_contrib(prob, d_cf, η, H, dhx, dhy, dHx, dHy, Ux, Uy, Wx, Wy, DW,
-                       af, bf, S, DU, dO)
+                       af, bf, S, DU, dΩh)
 
 First-order (native) nonlinear-pressure components c ∈ {3,6,7,8} in ALL THREE
 blocks. `af = u·∇h`, `bf = u·∇H`, `S = ∇·(Hu)`, `DU = ∇·u` (stacked). The 1/H
@@ -51,7 +51,7 @@ of c ∈ {6,7,8} is cancelled analytically against one prefactor H (M_c ≡ H·N
 Every term is subtracted (momentum RHS).
 """
 function nlp_native_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy, dHx, dHy,
-                            Ux, Uy, Wx, Wy, DW, af, bf, S, DU, dO)
+                            Ux, Uy, Wx, Wy, DW, af, bf, S, DU, dΩh)
     # M_c = H·N_c for c = 6,7,8 (first slot carries k = the u_k-type factor)
     M6 = (-1.0)*alg_outer(af, S)
     M7 = alg_outer(bf, S)
@@ -68,20 +68,20 @@ function nlp_native_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy, dHx, dHy,
     NA3  = alg_dc3(prob.A3[3], N3)
     NK3  = alg_dc3(prob.K3[3], N3)
     r = ∫( (-1.0)*( dhx*(Wx ⋅ NA68) + dHx*(Wx ⋅ NK68)
-                  + dhy*(Wy ⋅ NA68) + dHy*(Wy ⋅ NK68) ) ) * dO
+                  + dhy*(Wy ⋅ NA68) + dHy*(Wy ⋅ NK68) ) ) * dΩh
     r = r + ∫( (-1.0)*H*( dhx*(Wx ⋅ NA3) + dHx*(Wx ⋅ NK3)
-                        + dhy*(Wy ⋅ NA3) + dHy*(Wy ⋅ NK3) ) ) * dO
+                        + dhy*(Wy ⋅ NA3) + dHy*(Wy ⋅ NK3) ) ) * dΩh
 
     # leading 𝓟 part: −∫H²(𝗣3[c]⊡N_c)·D_W ; with M_c = H·N_c → −∫H(𝗣3⊡M_c)·D_W
     NP68 = alg_dc3(prob.P3[6], M6) + alg_dc3(prob.P3[7], M7) + alg_dc3(prob.P3[8], M8)
     NP3  = alg_dc3(prob.P3[3], N3)
-    r = r + ∫( (-1.0)*H*(NP68 ⋅ DW) ) * dO
-    r = r + ∫( (-1.0)*(H*H)*(NP3 ⋅ DW) ) * dO
+    r = r + ∫( (-1.0)*H*(NP68 ⋅ DW) ) * dΩh
+    r = r + ∫( (-1.0)*(H*H)*(NP3 ⋅ DW) ) * dΩh
     return r
 end
 
 """
-    nlp_gradh_contrib(prob, d_cf, η, H, dhx, dhy, Ux, Uy, Wx, Wy, af, bf, S, DU, dO)
+    nlp_gradh_contrib(prob, d_cf, η, H, dhx, dhy, Ux, Uy, Wx, Wy, af, bf, S, DU, dΩh)
 
 Bed-slope (𝓐, ∇h-prefactored) half of components c ∈ {1,2,4,5} via the EXACT
 integration by parts onto the test function (main.tex §8):
@@ -105,7 +105,7 @@ enters every q) / behind sponges — dropped. Vanishes identically on a flat
 bed. Residual-only (no per-step state) → works serial AND distributed.
 """
 function nlp_gradh_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy,
-                           Ux, Uy, Wx, Wy, af, bf, S, DU, dO)
+                           Ux, Uy, Wx, Wy, af, bf, S, DU, dΩh)
     hxx, hxy, hyy = alg_bed_hessian(d_cf)
     ddx = dhx + alg_dx(η)                       # ∂_x H
     ddy = dhy + alg_dy(η)                       # ∂_y H
@@ -137,7 +137,7 @@ function nlp_gradh_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy,
         t = ∫( (-1.0)*(S ⋅ dq1)
              + (S ⋅ dq2) - Hs*(C2 ⊙ SD)
              + (bf ⋅ dq4)
-             + (-1.0)*(S ⋅ dq5) ) * dO
+             + (-1.0)*(S ⋅ dq5) ) * dΩh
         r = r === nothing ? t : r + t
     end
     return r
@@ -163,28 +163,28 @@ function nlp_frozen_N(Ux, Uy, S, DU, piS, pib)
 end
 
 """
-    nlp_gradH_frozen_contrib(prob, H, dHx, dHy, Wx, Wy, N1, N2, N4, N5, dO)
+    nlp_gradH_frozen_contrib(prob, H, dHx, dHy, Wx, Wy, N1, N2, N4, N5, dΩh)
 
 Surface-slope (𝓚, ∇H-prefactored) half of c ∈ {1,2,4,5} using the frozen
 projections (irreducible ∂²η — IBP does not help here).
 """
 function nlp_gradH_frozen_contrib(prob::LFEMProblem, H, dHx, dHy,
-                                  Wx, Wy, N1, N2, N4, N5, dO)
+                                  Wx, Wy, N1, N2, N4, N5, dΩh)
     NK = alg_dc3(prob.K3[1], N1) + alg_dc3(prob.K3[2], N2) +
          alg_dc3(prob.K3[4], N4) + alg_dc3(prob.K3[5], N5)
-    return ∫( (-1.0)*H*( dHx*(Wx ⋅ NK) + dHy*(Wy ⋅ NK) ) ) * dO
+    return ∫( (-1.0)*H*( dHx*(Wx ⋅ NK) + dHy*(Wy ⋅ NK) ) ) * dΩh
 end
 
 """
-    nlp_P_frozen_contrib(prob, H, DW, N1, N2, N4, N5, dO)
+    nlp_P_frozen_contrib(prob, H, DW, N1, N2, N4, N5, dΩh)
 
 Leading-pressure (𝓟) part of c ∈ {1,2,4,5} using the frozen projections
 (IBP unusable — it would need second TEST derivatives through D_W).
 """
-function nlp_P_frozen_contrib(prob::LFEMProblem, H, DW, N1, N2, N4, N5, dO)
+function nlp_P_frozen_contrib(prob::LFEMProblem, H, DW, N1, N2, N4, N5, dΩh)
     NP = alg_dc3(prob.P3[1], N1) + alg_dc3(prob.P3[2], N2) +
          alg_dc3(prob.P3[4], N4) + alg_dc3(prob.P3[5], N5)
-    return ∫( (-1.0)*(H*H)*(NP ⋅ DW) ) * dO
+    return ∫( (-1.0)*(H*H)*(NP ⋅ DW) ) * dΩh
 end
 
 # ----------------------------------------------------------
@@ -192,7 +192,7 @@ end
 # ----------------------------------------------------------
 
 """
-    build_nlp_ctx(model, p_horizontal, Nσ, trian, dO; distributed=false,
+    build_nlp_ctx(model, p_horizontal, Nσ, trian, dΩh; distributed=false,
                   cg_rtol=1e-10, cg_maxiter=500)
 
 Projection context for `nl_pressure_full`: an UNCONSTRAINED VectorValue{Nσ}
@@ -215,13 +215,13 @@ exact partition equality. `allocate_in_range`/`allocate_in_domain` are the
 matrix-derived vector types that are *guaranteed* compatible with `A` on both
 paths.
 """
-function build_nlp_ctx(model, p_horizontal::Int, Nσ::Int, trian, dO;
+function build_nlp_ctx(model, p_horizontal::Int, Nσ::Int, trian, dΩh;
                        distributed::Bool = false,
                        cg_rtol::Float64 = 1e-10, cg_maxiter::Int = 500)
     reffe = ReferenceFE(lagrangian, VectorValue{Nσ,Float64}, p_horizontal)
     Vp = FESpace(model, reffe; conformity=:H1)
     Up = TrialFESpace(Vp)
-    a(u, v) = ∫( u ⋅ v ) * dO
+    a(u, v) = ∫( u ⋅ v ) * dΩh
     Mmass = assemble_matrix(a, Up, Vp)
     if distributed
         ls = CGSolver(JacobiLinearSolver(); rtol=cg_rtol, atol=1e-14, maxiter=cg_maxiter)
@@ -231,7 +231,7 @@ function build_nlp_ctx(model, p_horizontal::Int, Nσ::Int, trian, dO;
         Mlu = lu(Mmass)
         solvefun = (x, r) -> ldiv!(x, Mlu, r)
     end
-    return (Vp=Vp, Up=Up, dO=dO, trian=trian, Mmass=Mmass, solve=solvefun)
+    return (Vp=Vp, Up=Up, dΩh=dΩh, trian=trian, Mmass=Mmass, solve=solvefun)
 end
 
 """
@@ -255,8 +255,8 @@ function update_nlp_state!(prob::LFEMProblem, ctx, u_n)
 
     rS = allocate_in_range(ctx.Mmass); fill!(rS, zero(eltype(rS)))
     rb = allocate_in_range(ctx.Mmass); fill!(rb, zero(eltype(rb)))
-    assemble_vector!(v -> ∫( S ⋅ v ) * ctx.dO, rS, ctx.Vp)
-    assemble_vector!(v -> ∫( b ⋅ v ) * ctx.dO, rb, ctx.Vp)
+    assemble_vector!(v -> ∫( S ⋅ v ) * ctx.dΩh, rS, ctx.Vp)
+    assemble_vector!(v -> ∫( b ⋅ v ) * ctx.dΩh, rb, ctx.Vp)
 
     piS_vec = allocate_in_domain(ctx.Mmass); fill!(piS_vec, zero(eltype(piS_vec)))
     pib_vec = allocate_in_domain(ctx.Mmass); fill!(pib_vec, zero(eltype(pib_vec)))

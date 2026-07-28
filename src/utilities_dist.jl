@@ -182,7 +182,7 @@ function setup_and_run_distributed(;
         model, trian = build_horizontal_model_distributed(ranks, cpu_grid,
                                                               dom_flat, (nx, ny);
                                                               y_periodic=y_periodic)
-        dO   = Measure(trian, 2*p_horizontal + 2)
+        dΩh   = Measure(trian, 2*p_horizontal + 2)
         U, V = build_fe_spaces(model, p_horizontal, vert.N_dof;
                                    y_wall_bc=y_wall_bc, x_wall_bc=x_wall_bc,
                                    inflow=inflow)
@@ -229,7 +229,7 @@ function setup_and_run_distributed(;
             relax_bc=use_relax, relax_mu=relax_mu_fn, relax_tg=relax_tg)
 
         # ----- Stage 4: distributed operator + solver stack + initial state ----
-        op      = build_ode_operator(prob, U, V, trian, dO)   # same hand Jacobians
+        op      = build_ode_operator(prob, U, V, trian, dΩh)   # same hand Jacobians
         monitor = SolverMonitor()
         # Distributed integrator: Newton + GMRES/Jacobi (the scalable linear solve).
         solver  = build_ode_solver_distributed(dt; solver_type=solver_type,
@@ -237,7 +237,7 @@ function setup_and_run_distributed(;
                       nl_iter=nl_iter, nl_tol=nl_tol,
                       ls_rtol=ls_rtol, ls_maxiter=ls_maxiter, monitor=monitor)
         checker = check_every > 0 ?
-                  ResidualChecker(prob, U, V, trian, dO, dt, theta,
+                  ResidualChecker(prob, U, V, trian, dΩh, dt, theta,
                                      solver_type == :theta) : nothing
         # Initial state via interpolate_everywhere (required for distributed spaces);
         # space_at evaluates a transient trial at t=0 (a no-op for static spaces).
@@ -254,7 +254,7 @@ function setup_and_run_distributed(;
         # For nl_pressure_full, the frozen-projection mass solve uses CG + Jacobi
         # here (a partitioned matrix has no direct-factorisation method).
         nlp = nl_pressure_full ?
-              (prob, build_nlp_ctx(model, p_horizontal, vert.N_dof, trian, dO;
+              (prob, build_nlp_ctx(model, p_horizontal, vert.N_dof, trian, dΩh;
                                    distributed=true, cg_rtol=nlp_cg_rtol,
                                    cg_maxiter=nlp_cg_maxiter)) : nothing
 

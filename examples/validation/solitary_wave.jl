@@ -37,7 +37,7 @@ c_th = sqrt(g*(d + A))                       # solitary-wave celerity
 vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0]); Nσ = vert.N_dof
 domain = ((0.0, 50.0), (0.0, 2.0)); p_horizontal = 2
 model, trian = build_horizontal_model(domain, (120, 4))     # ~12 cells across the soliton
-dO = Measure(trian, 2*p_horizontal + 2)
+dΩh = Measure(trian, 2*p_horizontal + 2)
 U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed x!
 
 sponge = make_sponge(domain, 0.0, 12.0, 0.0, 0.0, 8.0)          # absorb at the far end
@@ -54,7 +54,7 @@ u0 = interpolate_everywhere([etaf, x -> VectorValue(ntuple(_->uxf(x), Nσ)...),
 
 xg = collect(3.0:0.5:40.0); gauges = [(xx, 1.0) for xx in xg]
 dt = 0.025; T_final = 4.0                                    # fully nonlinear ⇒ multi-minute run
-op     = build_ode_operator(prob, U, V, trian, dO)
+op     = build_ode_operator(prob, U, V, trian, dΩh)
 solver = build_ode_solver(dt)
 diags  = run_time_loop(op, solver, u0, 0.0, T_final;
                        trian=trian, Nσ=Nσ, gauges=gauges, dt=dt,
