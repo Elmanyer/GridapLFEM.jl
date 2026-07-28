@@ -25,6 +25,15 @@ export LFEM_PY=8            # 16*8 = 128 ranks; mesh 1200x600 -> 75x75 cells/ran
 # export LFEM_THETA_MAX=60    # angular truncation +/- [deg]
 # export LFEM_SEED=20260723   # phase seed (reproducible, rank-deterministic)
 
+# --- Inflow relaxation zone (generation/absorption) -------------------------
+#     ON for directional runs: the oblique :model boundary data is not an exact
+#     discrete 2D eigenmode, so a bare clamped Dirichlet inflow reflects the
+#     residual mismatch and it resonates into an exponential instability. The
+#     relaxation zone absorbs that mismatch at the inflow (relaxes toward the
+#     incident field). Width 0 -> one peak wavelength.
+export LFEM_RELAX=1
+export LFEM_RELAX_W=8       # relaxation-zone width [m] (~2 peak wavelengths); 0 -> 1 peak λ
+
 # --- Domain / run length ----------------------------------------------------
 # export LFEM_LX=400; export LFEM_LY=200  # domain size [m] (Ly wide: oblique paths)
 # export LFEM_D=3.5           # still-water depth [m]
