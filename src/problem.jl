@@ -33,7 +33,7 @@ trailing two indices directly yields the mode-i momentum contribution.
 """
 struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
     g            :: Float64
-    d_func       :: Function          # still-water depth d(x,y)
+    h_bathy       :: Function          # still-water depth d(x,y)
     Nσ           :: Int
     Φ            :: PV                # VectorValue{Nσ}   depth weights
     Mv           :: MV                # TensorValue       vertical mass
@@ -64,14 +64,14 @@ struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
 end
 
 """
-    build_problem(vert; g, d_func, flags..., mu_sponge, wm_src) → LFEMProblem
+    build_problem(vert; g, h_bathy, flags..., mu_sponge, wm_src) → LFEMProblem
 
 Reshape the `assemble_vertical_tensors` NamedTuple into constant Gridap
 tensors and bundle the runtime flags.
 """
 function build_problem(vert;
-        g            :: Float64  = 9.81,
-        d_func       :: Function = (x -> 3.5),
+        g            :: Float64  = g,
+        h_bathy       :: Function = (x -> 3.5),
         linearised   :: Bool     = false,
         advection    :: Bool     = true,
         lin_pressure :: Bool     = false,
@@ -96,7 +96,7 @@ function build_problem(vert;
     P3 = ntuple(c -> alg_to_tensor3(vert.Pcal[:, :, :, c]), 8)
     relax_bc && relax_tg === nothing &&
         error("build_problem: relax_bc=true requires relax_tg (incident_fields NamedTuple)")
-    return LFEMProblem(g, d_func, vert.N_dof, Φ, Mv, Bv, P, Av, Kv, M3, G3,
+    return LFEMProblem(g, h_bathy, vert.N_dof, Φ, Mv, Bv, P, Av, Kv, M3, G3,
                          A3, K3, P3, linearised, advection, lin_pressure,
                          P_full, nl_pressure68, nl_pressure_full,
                          Ref{Any}(nothing), mu_sponge, wm_src,
@@ -117,7 +117,7 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dO)
 
     g   = prob.g
     lin = prob.linearised
-    d_cf   = CellField(prob.d_func, trian)
+    d_cf   = CellField(prob.h_bathy, trian)
     src_cf = CellField(x -> prob.wm_src(x, t), trian)
     mu_cf  = CellField(prob.mu_sponge, trian)
     H = d_cf + η
@@ -245,7 +245,7 @@ function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dO)
     dηt, dUxt, dUyt = dut[1], dut[2], dut[3]
     q, Wx, Wy = v[1], v[2], v[3]
     lin  = prob.linearised
-    d_cf = CellField(prob.d_func, trian)
+    d_cf = CellField(prob.h_bathy, trian)
     H = d_cf + η
 
     r = ∫( q*dηt ) * dO
@@ -280,7 +280,7 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dO)
     dη, dUx, dUy = du[1], du[2], du[3]
     q,  Wx,  Wy  = v[1], v[2], v[3]
     g = prob.g; lin = prob.linearised
-    d_cf  = CellField(prob.d_func, trian)
+    d_cf  = CellField(prob.h_bathy, trian)
     mu_cf = CellField(prob.mu_sponge, trian)
     H = d_cf + η
 

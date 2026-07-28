@@ -23,16 +23,16 @@ println("=" ^ 60)
 println("  test_conservation.jl — mass conservation (closed basin)")
 println("=" ^ 60)
 
-g = 9.81; d_val = 1.0
+g = 9.81; h_val = 1.0
 vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
 Nσ = vert.N_dof
 
-domain = ((0.0, 10.0), (0.0, 2.0)); partition = (20, 4); fe_order = 2
+domain = ((0.0, 10.0), (0.0, 2.0)); partition = (20, 4); p_horizontal = 2
 model, trian = build_horizontal_model(domain, partition)
-dO = Measure(trian, 2*fe_order + 2)
-U, V = build_fe_spaces(model, fe_order, Nσ; y_wall_bc=true, x_wall_bc=true)
+dO = Measure(trian, 2*p_horizontal + 2)
+U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=true)
 
-prob = build_problem(vert; g=g, d_func=x -> d_val,
+prob = build_problem(vert; g=g, h_bathy=x -> h_val,
     linearised=true, advection=true,
     mu_sponge=x -> 0.0, wm_src=(x, t) -> 0.0)
 

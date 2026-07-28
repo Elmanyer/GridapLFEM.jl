@@ -33,8 +33,8 @@ check(name, cond, extra="") = (global n_pass, n_fail;
     cond ? (println("  PASS  $name $extra"); n_pass += 1) :
            (println("  FAIL  $name $extra"); n_fail += 1))
 
-g = 9.81; d_val = 3.5; T_wave = 1.6; A = 5e-4
-omega = 2π/T_wave; k = find_wavenumber(omega, d_val, g); lam = 2π/k
+g = 9.81; h_val = 3.5; T_wave = 1.6; A = 5e-4
+omega = 2π/T_wave; k = find_wavenumber(omega, h_val, g); lam = 2π/k
 x_wm = 6.0; Lx = x_wm + 5lam + 6.0; Ly = 1.0
 x_g = x_wm + 2lam; y_g = Ly/2
 T_final = 6*T_wave
@@ -43,7 +43,7 @@ T_final = 6*T_wave
 function gauge_run(nx, dt)
     diags, _, _ = setup_and_run(
         M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,2),
-        fe_order=2, d_val=d_val, T_wave=T_wave, A_wave=A, x_wm=x_wm, y_wm=nothing,
+        p_horizontal=2, h_val=h_val, T_wave=T_wave, A_wave=A, x_wm=x_wm, y_wm=nothing,
         sponge_wL=6.0, sponge_wR=6.0, mu_max=30.0, T_final=T_final, dt=dt,
         save_every=0, gauges=[(x_g, y_g)], linearised=true, advection=false,
         nl_tol=1e-8, print_every=10_000)

@@ -42,7 +42,7 @@ x_g = x_wm + 4lam; y_g = Ly/2
 
 diags, _, _ = setup_and_run(
     M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,ny),
-    fe_order=2, d_val=d, T_wave=T, A_wave=A, x_wm=x_wm, y_wm=nothing,
+    p_horizontal=2, h_val=d, T_wave=T, A_wave=A, x_wm=x_wm, y_wm=nothing,
     sponge_wL=12.0, sponge_wR=12.0, mu_max=20.0, T_final=T_final, dt=dt,
     save_every=0, gauges=[(x_g, y_g)],
     linearised=false, advection=true,

@@ -67,12 +67,12 @@ Ts     = [2.0, 1.6, 4/3]                       # f = 0.500, 0.625, 0.750 Hz
 omegas = 2π ./ Ts
 amps   = [0.0004, 0.0005, 0.0003]
 phases = [0.3, 1.1, 2.5]
-d_val  = 2.387                                 # kd ≈ 2.2 / 3.0 / 3.9 — in-band
+h_val  = 2.387                                 # kd ≈ 2.2 / 3.0 / 3.9 — in-band
 
 vert0 = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
-wi = WaveInput(vert0, amps, omegas; d=d_val, g=g, phases=phases,
+wi = WaveInput(vert0, amps, omegas; d=h_val, g=g, phases=phases,
                T_ramp=4.0, profile=:model)
-kds = wi.ks .* d_val
+kds = wi.ks .* h_val
 @printf("\n  components: f=%s Hz, kd=%s\n",
         string(round.(1 ./ Ts; digits=3)), string(round.(kds; digits=2)))
 
@@ -90,7 +90,7 @@ x_g1 = 2*lam_max; x_g2 = x_g1 + 0.9; y_g = Ly/2
 
 diags, _, _ = setup_and_run(
     M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,ny),
-    fe_order=2, d_val=d_val, T_wave=Ts[2], A_wave=maximum(amps),
+    p_horizontal=2, h_val=h_val, T_wave=Ts[2], A_wave=maximum(amps),
     wave_bc=wi, bc_side=:left, sponge_wL=0.0, sponge_wR=10.0,
     sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0, T_final=Tf, dt=dt,
     save_every=0, gauges=[(x_g1, y_g), (x_g2, y_g)], linearised=true,

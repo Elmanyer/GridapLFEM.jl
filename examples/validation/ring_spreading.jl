@@ -35,7 +35,7 @@ push!(gauges, (x_wm + 14/sqrt(2), y_wm + 14/sqrt(2)))       # diagonal at r=14
 
 diags, _, _ = setup_and_run(
     M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,L),(0.0,L)), partition=(n_side,n_side),
-    fe_order=2, d_val=d, T_wave=T, A_wave=A, x_wm=x_wm, y_wm=y_wm,
+    p_horizontal=2, h_val=d, T_wave=T, A_wave=A, x_wm=x_wm, y_wm=y_wm,
     sponge_wL=12.0, sponge_wR=12.0, sponge_wB=12.0, sponge_wT=12.0, mu_max=10.0,
     T_final=8*T, dt=T/30, save_every=0, gauges=gauges,
     linearised=true, advection=false, print_every=40)

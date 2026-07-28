@@ -107,13 +107,13 @@ relax_flag()     = genv_b("LFEM_RELAX", 0)
 relax_w_val()    = genv_f("LFEM_RELAX_W", 0.0)
 
 """
-    build_airy_state(d_val; directional=false) → WaveSpec.AiryWaves.AiryState
+    build_airy_state(h_val; directional=false) → WaveSpec.AiryWaves.AiryState
 
 Env-configured stochastic sea state: JONSWAP spectrum, uniform-frequency (or
 equal-energy) bins, optional cosine-power angular spreading, seeded phases.
 `directional=true` switches the default spreading on (`LFEM_NTHETA` ≥ 2).
 """
-function build_airy_state(d_val; directional::Bool=false)
+function build_airy_state(h_val; directional::Bool=false)
     Hs, Tp = hs_val(), tp_val()
     γ      = genv_f("LFEM_GAMMA", 3.3)
     nf     = genv_i("LFEM_NFREQ", 21)
@@ -132,7 +132,7 @@ function build_airy_state(d_val; directional::Bool=false)
                  :cosinepow, 0.0, genv_f("LFEM_SPREAD_STD", 20.0)*pi/180,
                  -genv_f("LFEM_THETA_MAX", 60.0)*pi/180,
                   genv_f("LFEM_THETA_MAX", 60.0)*pi/180, nθ)
-    state = WaveSpec.AiryWaves.AiryState(dspec, spread, d_val)
+    state = WaveSpec.AiryWaves.AiryState(dspec, spread, h_val)
     return WaveSpec.AiryWaves.change_seed!(state, genv_i("LFEM_SEED", 20260723))
 end
 

@@ -1,15 +1,15 @@
 # ==============================================================
-#  run_plane_wave_dist.jl — DISTRIBUTED long-crested plane wave (algebraic)
+#  run_periodic_plane_wave_dist.jl — DISTRIBUTED plane wave, PERIODIC y edges
 #
-#  Gaussian LINE-source wavemaker → plane waves down a long flume, absorbed by
-#  sponge layers at both x-ends. Writes η, per-node u/v components AND the
-#  reconstructed vertical velocity (w_s*) and total pressure (p_s*) fields.
-#  Runs the FULL nonlinear physics distributed (one Gridap path).
+#  Long-crested plane wave (Gaussian LINE source, y-invariant) in a flume whose
+#  lateral (y) boundaries are PERIODIC (y_wall_bc=:periodic) — the numerical
+#  infinite-width flume. The top/bottom edges are identified in the mesh, so no
+#  lateral walls and no lateral sponges are used; the x-ends keep sponges.
 #
 #  LAUNCH (px·py MUST equal -n):
 #    LFEM_M=2 LFEM_PX=8 LFEM_PY=1 \
 #    ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-#        GridapLFEM.jl/examples/distributed/run_plane_wave_dist.jl
+#        GridapLFEM.jl/examples/distributed/run_periodic_plane_wave_dist.jl
 #
 #  Case-specific env vars (shared ones in _dist_common.jl):
 #    LFEM_LX,LFEM_LY  domain size [m]         default 400 × 20
@@ -17,9 +17,9 @@
 #    LFEM_TWAVE       wave period [s]         1.6   (→ kd≈5.5 at d=3.5)
 #    LFEM_AWAVE       wave amplitude [m]      0.001
 #    LFEM_XWM         wavemaker x-position    40
-#    LFEM_SPONGE      sponge width [m]        40
+#    LFEM_SPONGE      x-end sponge width [m]  40
 #    LFEM_MUMAX       sponge strength         5
-#    LFEM_PERIODS     run length in wave periods (if LFEM_TFINAL unset)  50
+#    LFEM_PERIODS     run length in periods   50
 # ==============================================================
 
 include(joinpath(@__DIR__, "_dist_common.jl"))
@@ -39,9 +39,10 @@ dt       = genv_f("LFEM_DT", 0.02)
 periods  = genv_f("LFEM_PERIODS", 50.0)
 Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
 save_ev  = genv_i("LFEM_SAVE_EVERY", 10)
-outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "plane_wave_dist_M$(M)"))
+outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "periodic_plane_wave_dist_M$(M)"))
 
-banner("PLANE WAVE (line source) — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
+banner("PERIODIC PLANE WAVE (line source, periodic y) — distributed",
+       M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
@@ -51,7 +52,7 @@ diags, vert, prob = setup_and_run_distributed(
     T_final=Tfinal, dt=dt,
     linearised=lin_flag(), advection=adv_flag(),
     P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
-    y_wall_bc=:wall, x_wall_bc=false,
+    y_wall_bc=:periodic, x_wall_bc=false,   # ★ periodic lateral (y) boundaries
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
     solver_type=solver_sym(), tableau=tableau_sym(),
@@ -59,5 +60,5 @@ diags, vert, prob = setup_and_run_distributed(
     ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(),
     print_every=genv_i("LFEM_PRINT_EVERY", 10))
 
-is_rank0() && @printf("plane_wave_dist done: %d steps, %d snapshots to %s\n",
+is_rank0() && @printf("periodic_plane_wave_dist done: %d steps, %d snapshots to %s\n",
                       length(diags), length(diags) ÷ max(save_ev,1), outdir)

@@ -17,11 +17,12 @@ components 6–8).
 | Script | Physics |
 |--------|---------|
 | `run_plane_wave_dist.jl` | long-crested plane wave, line-source wavemaker, long flume |
+| `run_periodic_plane_wave_dist.jl` | plane wave in a **periodic-width flume** (`y_wall_bc=:periodic` — top/bottom edges identified, no lateral sponges) |
 | `run_ring_wave_dist.jl`  | radial ring wave, point-source wavemaker, square basin, 4-side sponge |
 | `run_ic_hump_dist.jl`    | Gaussian hump released from rest, **closed basin** (`x_wall_bc=true` — mandatory for IC problems) |
 | `run_bathymetry_dist.jl` | shoaling of a plane wave over a smooth submerged bar (variable `d(x)`, slope-pressure package on) |
 | `run_irregular_sea_dist.jl` | **long-crested JONSWAP sea via Dirichlet boundary generation** (WaveSpec.jl, no wavemaker; seeded phases → rank-identical component table) |
-| `run_directional_sea_dist.jl` | **short-crested JONSWAP × cosine-power spreading via Dirichlet BCs** (η, 𝖴x AND 𝖴y prescribed; `y_wall_bc=false` + lateral sponges) |
+| `run_directional_sea_dist.jl` | **short-crested JONSWAP × cosine-power spreading via Dirichlet BCs** (η, 𝖴x AND 𝖴y prescribed; `y_wall_bc=:open` + lateral sponges) |
 
 Each runs at **any** vertical resolution (`LFEM_M`) and any core count. All knobs are
 environment variables with sensible defaults — see `_dist_common.jl` (shared) and each

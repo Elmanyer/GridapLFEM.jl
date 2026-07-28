@@ -73,7 +73,7 @@ function run_kd(kd)
             kd, d, lam, Ce, Lx, nx)
     diags, _, _ = setup_and_run(
         M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,ny),
-        fe_order=2, d_val=d, T_wave=T_wave, A_wave=A_wave, x_wm=x_wm, y_wm=nothing,
+        p_horizontal=2, h_val=d, T_wave=T_wave, A_wave=A_wave, x_wm=x_wm, y_wm=nothing,
         sponge_wL=6.0, sponge_wR=8.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0,
         T_final=Tf, dt=dt, save_every=0, gauges=[(x, Ly/2) for x in xg],
         linearised=false, advection=true, nl_tol=1e-8, print_every=10_000)

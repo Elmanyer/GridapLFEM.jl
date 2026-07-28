@@ -11,7 +11,7 @@
 """
     find_wavenumber(omega, d, g)
 
-Newton iteration for the linear dispersion relation ω² = g k tanh(kd).
+Newton iteration for the linear (Airy) dispersion relation ω² = g k tanh(kd).
 """
 function find_wavenumber(omega::Float64, d::Float64, g::Float64)
     k = omega^2 / g
@@ -27,6 +27,11 @@ end
 
 """
     dispersion_ratio(vert, g, d, kd_vals)
+
+- vert:    the vertical tensor bundle from `assemble_vertical_tensors`.
+- g:       gravitational acceleration [m/s²].
+- d:       still-water depth [m].
+- kd_vals: vector of kd values to evaluate.
 
 Model-to-exact phase speed ratio Cm/Ce per kd:
   Ce = √(g tanh(kd)/k),   Cm² = g·d · Φᵀ (Mmat − B·kd²)⁻¹ Φ
@@ -65,6 +70,13 @@ end
 
 """
     make_sponge(domain, wL, wR, wB, wT, mu_max)
+
+- domain: ((x0,x1),(y0,y1)) or (x0,x1,y0,y1) rectangle.
+- wL:     width of the LEFT sponge layer.
+- wR:     width of the RIGHT sponge layer.
+- wB:     width of the BOTTOM sponge layer.
+- wT:     width of the TOP sponge layer.
+- mu_max: maximum sponge strength.
 
 Quadratic sponge μ(x) on up to four boundaries; corner regions clamp at
 mu_max (max of the contributions, not the sum).
@@ -156,17 +168,17 @@ requires `T_ramp=0.0`), `relax_bc`+`relax_width` (generation/absorption
 relaxation zone adjacent to the inflow, strength `mu_max`).
 """
 function setup_and_run(;
-    # ---- Vertical discretisation (Stage 1) -----------------------------------
+    # ---- Vertical discretisation ---------------------------------------------
     M            :: Int     = 2,          # number of vertical σ-elements (LFE-M order: 2/3/4)
-    p_vert       :: Int     = 1,          # polynomial order of each σ-element (Nσ = M·p_vert+1)
+    p_vertical       :: Int     = 1,          # polynomial order of each σ-element (Nσ = M·p_vertical+1)
     c_bdy                   = nothing,    # σ-node boundary positions in [0,1]; nothing → optimised set
-    # ---- Horizontal discretisation (Stage 2) ---------------------------------
+    # ---- Horizontal discretisation -------------------------------------------
     domain                  = ((0.0, 60.0), (0.0, 10.0)),  # ((x0,x1),(y0,y1)) extent [m]
     partition    :: Tuple   = (120, 20),  # (nx,ny) number of horizontal cells
-    fe_order     :: Int     = 2,          # horizontal FE order (must be ≥2: Q1 zeroes the dispersion)
+    p_horizontal     :: Int     = 2,          # horizontal FE order (must be ≥2: Q1 zeroes the dispersion)
     # ---- Physical parameters -------------------------------------------------
-    d_val        :: Float64 = 3.5,        # still-water depth [m] (flat bed unless d_func given)
-    g            :: Float64 = 9.81,       # gravitational acceleration [m/s²]
+    h_val        :: Float64 = 3.5,        # still-water depth [m] (flat bed unless h_bathy given)
+    g            :: Float64 = g,       # gravitational acceleration [m/s²]
     T_wave       :: Float64 = 1.6,        # forcing wave period [s]
     A_wave       :: Float64 = 0.001,      # forcing wave amplitude [m] (keep small for stability)
     # ---- Internal wavemaker (used only when wave_bc is nothing) ---------------
@@ -188,9 +200,9 @@ function setup_and_run(;
     # ---- Output --------------------------------------------------------------
     output_dir   :: String  = joinpath(@__DIR__, "..", "output", "seq_out"),  # VTK/pvd destination
     save_every   :: Int     = 0,          # write a VTK snapshot every N steps (0 = no VTK)
-    gauges                  = [],          # list of (x,y) probe points; η is sampled there each step
+    gauges                  = [],         # list of (x,y) probe points; η is sampled there each step
     # ---- Boundary conditions -------------------------------------------------
-    y_wall_bc    :: Bool    = true,       # solid walls on the y-edges (𝖴y=0); false for directional seas
+    y_wall_bc    :: Symbol  = :wall,      # y-edge BC: :wall (𝖴y=0) | :open (natural) | :periodic (y-periodic)
     x_wall_bc    :: Bool    = false,      # solid walls on the x-edges (𝖴x=0); true for closed-basin IC
     # ---- Physics flags (switch individual residual terms on/off) --------------
     linearised   :: Bool    = false,      # linear regime (drop H-weights, d²B dispersion)
@@ -199,7 +211,7 @@ function setup_and_run(;
     P_full       :: Bool    = false,      # keep all three slope components of R_P (else P³L³ only)
     nl_pressure68:: Bool    = false,      # nonlinear-pressure native set c∈{3,6,7,8} (all blocks)
     nl_pressure_full :: Bool = false,     # + c∈{1,2,4,5}: ∇h exact-IBP; ∇H/𝓟 via frozen projections
-    d_func                  = nothing,    # x → d(x): variable bathymetry (overrides d_val)
+    h_bathy                  = nothing,    # x → d(x): variable bathymetry (overrides h_val)
     eta0_func               = nothing,    # x → η₀(x): initial free surface (IC release: set x_wall_bc=true)
     # ---- Dirichlet boundary wave generation (waveinput.jl) --------------------
     wave_bc                 = nothing,    # nothing | :regular | WaveInput | WaveSpec AiryState
@@ -220,7 +232,7 @@ function setup_and_run(;
     # ---- Reconstructed field output (at the Nσ vertical σ-nodes) --------------
     write_w        :: Bool    = false,    # also write vertical-velocity fields w_s<σ> to VTK
     write_pressure :: Bool    = false,    # also write total-pressure fields p_s<σ> to VTK
-    rho            :: Float64 = 1025.0,   # water density [kg/m³] (used for the pressure output)
+    rho            :: Float64 = rho,   # water density [kg/m³] (used for the pressure output)
 )
     # Choose the σ-node positions: the paper's optimised set for this M when
     # available, otherwise a uniform split of [0,1] into M+1 nodes.
@@ -231,20 +243,35 @@ function setup_and_run(;
     # --- Stage 1: vertical pre-computation (mesh-independent, done once) -------
     # Build the σ-basis and integrate every vertical tensor the residual needs.
     println("=== Vertical FE problem (algebraic LFE-M) ===")
-    vert = assemble_vertical_tensors(M, p_vert, c_bdy)
+    vert = assemble_vertical_tensors(M, p_vertical, c_bdy)
     @printf("  Nσ=%d   ΣΦ=%.6f\n", vert.N_dof, sum(vert.Phi))   # ΣΦ=1 sanity check
 
-    # --- Stage 2 setup: horizontal mesh + integration measure -----------------
-    # `trian` is the triangulation the weak form integrates over; the quadrature
-    # degree 2·fe_order+2 integrates the nonlinear (product) terms exactly enough.
-    model, trian = build_horizontal_model(domain, partition)
-    dO = Measure(trian, 2*fe_order + 2)
+    # Lateral (y) boundary condition: :wall / :open / :periodic.
+    y_wall_bc in (:wall, :open, :periodic) ||
+        error("setup_and_run: y_wall_bc must be :wall, :open or :periodic (got :$y_wall_bc)")
+    y_periodic = y_wall_bc == :periodic  # set y_periodic = true   when  y_wall_bc == :periodic
+    if y_periodic
+        # Check for bottom/top sponge layers, incompatible with y-periodic BCs (they are redundant).
+        (sponge_wB > 0 || sponge_wT > 0) &&
+            @warn "y_wall_bc=:periodic — lateral sponges (sponge_wB/wT) are redundant on a " *
+                  "periodic domain; set them to 0"
+        # Check for a point source wavemaker, which is not y-periodic (the periodic image array is not a point source).
+        !isnothing(y_wm) &&
+            @warn "y_wall_bc=:periodic with a point source is not y-periodic (periodic image " *
+                  "array); use a line source (y_wm=nothing)"
+    end
+
+    # --- Stage 2 setup: horizontal mesh + integration measure ----------------- 
+    # quadrature degree = 2·p_horizontal+2 integrates the nonlinear (product) terms exactly enough.
+    # `y_periodic` glues the top/bottom edges when y_wall_bc == :periodic.
+    model, trian = build_horizontal_model(domain, partition; y_periodic=y_periodic)
+    dO = Measure(trian, 2*p_horizontal + 2)
 
     # Forcing frequency and the matching wavenumber from the Airy relation
     # ω² = g k tanh(kd) (used to size the wavemaker and report kd).
     omega  = 2.0*pi/T_wave
-    k_wave = find_wavenumber(omega, d_val, g)
-    dfn    = isnothing(d_func) ? (x -> d_val) : d_func    # bathymetry: constant d_val or user d(x)
+    k_wave = find_wavenumber(omega, h_val, g)
+    dfn    = isnothing(h_bathy) ? (x -> h_val) : h_bathy    # bathymetry: constant h_val or user d(x)
     # Unpack the domain corners (accept either nested or flat tuple form).
     if domain isa Tuple{Tuple,Tuple}
         (x0d, x1d), (y0d, y1d) = domain
@@ -265,10 +292,10 @@ function setup_and_run(;
         # accept a prebuilt WaveInput, or convert a WaveSpec AiryState sea state.
         wi = wave_bc isa WaveInput ? wave_bc :
              wave_bc === :regular ?
-                 WaveInput(vert; A=A_wave, T=T_wave, d=d_val, g=g,
+                 WaveInput(vert; A=A_wave, T=T_wave, d=h_val, g=g,
                            T_ramp=(Tr === nothing ? 2.0*T_wave : Tr),
                            profile=bc_profile) :
-                 WaveInput(vert, wave_bc; d=d_val, g=g, T_ramp=Tr,
+                 WaveInput(vert, wave_bc; d=h_val, g=g, T_ramp=Tr,
                            profile=bc_profile)
         println()
         waveinput_summary(wi)                 # print Hs/Tp/components of the generated sea
@@ -279,10 +306,13 @@ function setup_and_run(;
         all(v -> isapprox(v, wi.d; rtol=1e-8), dsamp) ||
             @warn "wave_bc: depth along the generation boundary is not constant " *
                   "(or differs from the WaveInput depth $(wi.d) m)"
-        # A directional (θ≠0) sea needs open lateral boundaries, not solid walls.
-        wi.directional && y_wall_bc &&
+        # A directional (θ≠0) sea needs open/periodic lateral boundaries, not walls.
+        wi.directional && y_wall_bc == :wall &&
             error("setup_and_run: a directional sea (θ≠0 components) requires " *
-                  "y_wall_bc=false and lateral sponges (sponge_wB/wT)")
+                  "y_wall_bc=:open (lateral sponges) or :periodic")
+        wi.directional && y_periodic &&
+            @warn "y_wall_bc=:periodic with a directional sea requires each component's " *
+                  "transverse wavenumber k·sinθ to be a box harmonic 2π/Ly (not enforced)"
         # A hot start supplies the field at t=0, so it is incompatible with a ramp.
         ic_from_bc && wi.T_ramp > 0.0 &&
             error("setup_and_run: ic_from_bc=true requires T_ramp=0.0 " *
@@ -305,12 +335,12 @@ function setup_and_run(;
     inflow = wi === nothing ? nothing :
              (side=bc_side, eta=eta_bc(wi), ux=ux_bc(wi),
               uy=wi.directional ? uy_bc(wi) : nothing)
-    U, V = build_fe_spaces(model, fe_order, vert.N_dof;
+    U, V = build_fe_spaces(model, p_horizontal, vert.N_dof;
                                y_wall_bc=y_wall_bc, x_wall_bc=x_wall_bc,
                                inflow=inflow)
     @printf("  Fields: 3 (η + 2 stacked VectorValue{%d})   free DOFs: %d\n",
             vert.N_dof, num_free_dofs(U(0.0)))
-    @printf("  Wave: λ=%.2f m, kd=%.2f\n", 2pi/k_wave, k_wave*d_val)
+    @printf("  Wave: λ=%.2f m, kd=%.2f\n", 2pi/k_wave, k_wave*h_val)
 
     # --- Forcing: sponge profile + internal wavemaker source ------------------
     # Sponge damping μ(x,y) grows quadratically toward the flagged boundaries.
@@ -338,7 +368,7 @@ function setup_and_run(;
 
     # --- Assemble the problem bundle: vertical tensors → Gridap constants +
     #     the depth, forcing, and physics flags that define the residual. -------
-    prob = build_problem(vert; g=g, d_func=dfn,
+    prob = build_problem(vert; g=g, h_bathy=dfn,
         linearised=linearised, advection=advection, lin_pressure=lin_pressure,
         P_full=P_full, nl_pressure68=nl_pressure68, nl_pressure_full=nl_pressure_full,
         mu_sponge=sponge, wm_src=wm,
@@ -379,7 +409,7 @@ function setup_and_run(;
     # For nl_pressure_full, build the frozen-projection context (mass matrix
     # factorised once) used to evaluate the irreducible ∇H/𝓟 pressure halves.
     nlp = nl_pressure_full ?
-          (prob, build_nlp_ctx(model, fe_order, vert.N_dof, trian, dO)) : nothing
+          (prob, build_nlp_ctx(model, p_horizontal, vert.N_dof, trian, dO)) : nothing
 
     # Reconstruction context for optional w/p VTK output (nothing if both off).
     recon = build_field_recon(vert, dfn, g; rho=rho,

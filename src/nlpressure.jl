@@ -192,7 +192,7 @@ end
 # ----------------------------------------------------------
 
 """
-    build_nlp_ctx(model, fe_order, Nσ, trian, dO; distributed=false,
+    build_nlp_ctx(model, p_horizontal, Nσ, trian, dO; distributed=false,
                   cg_rtol=1e-10, cg_maxiter=500)
 
 Projection context for `nl_pressure_full`: an UNCONSTRAINED VectorValue{Nσ}
@@ -215,10 +215,10 @@ exact partition equality. `allocate_in_range`/`allocate_in_domain` are the
 matrix-derived vector types that are *guaranteed* compatible with `A` on both
 paths.
 """
-function build_nlp_ctx(model, fe_order::Int, Nσ::Int, trian, dO;
+function build_nlp_ctx(model, p_horizontal::Int, Nσ::Int, trian, dO;
                        distributed::Bool = false,
                        cg_rtol::Float64 = 1e-10, cg_maxiter::Int = 500)
-    reffe = ReferenceFE(lagrangian, VectorValue{Nσ,Float64}, fe_order)
+    reffe = ReferenceFE(lagrangian, VectorValue{Nσ,Float64}, p_horizontal)
     Vp = FESpace(model, reffe; conformity=:H1)
     Up = TrialFESpace(Vp)
     a(u, v) = ∫( u ⋅ v ) * dO
@@ -246,7 +246,7 @@ they are exactly compatible with `ctx.Mmass`'s partition on both paths.
 """
 function update_nlp_state!(prob::LFEMProblem, ctx, u_n)
     η  = u_n[1];  Ux = u_n[2];  Uy = u_n[3]
-    d_cf = CellField(prob.d_func, ctx.trian)
+    d_cf = CellField(prob.h_bathy, ctx.trian)
     H  = d_cf + η
     dHx = alg_dx(d_cf) + alg_dx(η);  dHy = alg_dy(d_cf) + alg_dy(η)
     DU = alg_dx(Ux) + alg_dy(Uy)

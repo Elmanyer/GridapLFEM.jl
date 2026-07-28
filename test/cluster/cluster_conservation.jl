@@ -59,9 +59,9 @@ result = with_mpi() do distribute
     model, trian = build_horizontal_model_distributed(ranks, (px,py),
                        (0.0,Lx,0.0,Ly), (nx,ny))
     dO = Measure(trian, 2*feord + 2)
-    U, V = build_fe_spaces(model, feord, Nσ; y_wall_bc=true, x_wall_bc=true)  # closed basin
+    U, V = build_fe_spaces(model, feord, Nσ; y_wall_bc=:wall, x_wall_bc=true)  # closed basin
 
-    prob = build_problem(vert; g=g, d_func=x -> d0,
+    prob = build_problem(vert; g=g, h_bathy=x -> d0,
         linearised=lin_flag(), advection=adv_flag(),
         lin_pressure=false, P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
         mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)

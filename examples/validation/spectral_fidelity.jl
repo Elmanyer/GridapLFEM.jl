@@ -32,7 +32,7 @@ println("  spectral_fidelity.jl — Dirichlet sea-state generation fidelity")
 println("=" ^ 64)
 
 # ── Sea state ─────────────────────────────────────────────────
-d_val = 3.5
+h_val = 3.5
 Hs    = 0.002
 Tp    = 1.6
 g     = 9.81
@@ -51,11 +51,11 @@ dspec = WaveSpec.SpectralSpreading.DiscreteSpectralSpreading(
             1.0/(2.5*Tp), 1.0/(0.75*Tp), nfreq;
             domain=WaveSpec.SpectralSampling.Frequency)
 spread = WaveSpec.AngularSpreading.DiscreteAngularSpreading(0.0)
-state  = WaveSpec.AiryWaves.AiryState(dspec, spread, d_val)
+state  = WaveSpec.AiryWaves.AiryState(dspec, spread, h_val)
 state  = WaveSpec.AiryWaves.change_seed!(state, seed)   # reproducible phases
 
 vert0 = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
-wi    = WaveInput(vert0, state; d=d_val, g=g, profile=:model)
+wi    = WaveInput(vert0, state; d=h_val, g=g, profile=:model)
 
 # ── Domain / numerics ─────────────────────────────────────────
 Lx, Ly  = 100.0, 6.0
@@ -69,7 +69,7 @@ gauges  = [(x_g1, Ly/2), (x_g1b, Ly/2), (x_g2, Ly/2)]
 
 diags, vert, prob = setup_and_run(
     M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,ny),
-    fe_order=2, d_val=d_val, g=g, T_wave=Tp, A_wave=Hs/2,
+    p_horizontal=2, h_val=h_val, g=g, T_wave=Tp, A_wave=Hs/2,
     wave_bc=wi, bc_side=:left, bc_profile=:model,
     sponge_wL=0.0, sponge_wR=25.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=5.0,
     T_final=T_final, dt=dt, linearised=true, advection=false,
@@ -94,7 +94,7 @@ csv_rows = String[]
 n_amp_ok = 0; n_amp_tot = 0; n_k_ok = 0
 E_meas = 0.0
 for c in sort(1:wi.ncomp; by=i->wi.omegas[i])
-    ω = wi.omegas[c]; k = wi.ks[c]; kd = k*d_val
+    ω = wi.omegas[c]; k = wi.ks[c]; kd = k*h_val
     C1 = dftat(v1, ω); C1b = dftat(v1b, ω); C2 = dftat(v2, ω)
     # Goda–Suzuki incident/reflected split on the close pair (g1, g1b)
     s  = 2*abs(sin(k*dxb))

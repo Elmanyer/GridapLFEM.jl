@@ -4,7 +4,7 @@
 #
 #  JONSWAP × cosine-power angular spreading: every (ωᵢ,θⱼ) bin is a plane-wave
 #  component with its own direction. The left Dirichlet boundary prescribes
-#  η, 𝖴x AND 𝖴y (directional seas REQUIRE y_wall_bc=false — the lateral
+#  η, 𝖴x AND 𝖴y (directional seas REQUIRE y_wall_bc=:open — the lateral
 #  boundaries are sponge-absorbed instead of solid walls). Result: a genuinely
 #  2D short-crested sea surface evolving under the LFE-M dynamics.
 #
@@ -53,9 +53,9 @@ is_rank0() && @printf("#   Hs=%.4g m Tp=%.3g s | nθ=%d σθ=%.1f° | bc=%s/%s s
                       string(bc_profile_sym()), genv_i("LFEM_SEED", 20260723))
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), fe_order=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
-    d_val=d, T_wave=Tp, A_wave=hs_val()/2,
+    h_val=d, T_wave=Tp, A_wave=hs_val()/2,
     wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
     T_ramp=tramp_val(), relax_bc=relax_flag(), relax_width=relax_w_val(),
     sponge_wL=0.0, sponge_wR=sponge, sponge_wB=sponge, sponge_wT=sponge,
@@ -63,7 +63,7 @@ diags, vert, prob = setup_and_run_distributed(
     T_final=Tfinal, dt=dt,
     linearised=lin_flag(), advection=adv_flag(),
     P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
-    y_wall_bc=false, x_wall_bc=false,       # REQUIRED: v ≠ 0 at the inflow
+    y_wall_bc=:open, x_wall_bc=false,       # REQUIRED: v ≠ 0 at the inflow
     output_dir=outdir, save_every=save_ev,
     write_w=genv_b("LFEM_WRITE_W", 0), write_pressure=genv_b("LFEM_WRITE_PRESSURE", 0),
     rho=rho_val(),

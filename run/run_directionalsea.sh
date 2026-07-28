@@ -15,7 +15,7 @@ export LFEM_PX=16
 export LFEM_PY=8            # 16*8 = 128 ranks; mesh 1200x600 -> 75x75 cells/rank
 
 # --- Sea state (WaveSpec JONSWAP x cosine-power spreading — short-crested) ---
-#     directional seas force y_wall_bc=false inside the example (lateral sponges)
+#     directional seas force y_wall_bc=:open inside the example (lateral sponges)
 # export LFEM_HS=0.002        # significant wave height [m]
 # export LFEM_TP=1.6          # peak period [s]
 # export LFEM_GAMMA=3.3       # JONSWAP peakedness

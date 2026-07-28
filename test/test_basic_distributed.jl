@@ -31,8 +31,8 @@ results = Dict{String,Bool}()
 function run_mode(linflag, advflag, label, ref)
     diags, vert, prob = setup_and_run_distributed(
         cpu_grid=(2,2),
-        M=2, d_val=3.5, T_wave=T_wave, A_wave=A_wave,
-        domain=((0.0,16.0),(0.0,2.0)), partition=(16,2), fe_order=2,
+        M=2, h_val=3.5, T_wave=T_wave, A_wave=A_wave,
+        domain=((0.0,16.0),(0.0,2.0)), partition=(16,2), p_horizontal=2,
         x_wm=4.0, y_wm=nothing,
         sponge_wL=4.0, sponge_wR=4.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=50.0,
         T_final=4.8, dt=0.04, linearised=linflag, advection=advflag,

@@ -41,15 +41,15 @@ outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "ring_wave_dist_M$(M)"))
 banner("RING WAVE (point source) — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), fe_order=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,L,0.0,L), partition=(nx,ny),
-    d_val=d, T_wave=Twave, A_wave=Awave,
+    h_val=d, T_wave=Twave, A_wave=Awave,
     x_wm=L/2, y_wm=L/2,                                   # point source → ring waves
     sponge_wL=sponge, sponge_wR=sponge, sponge_wB=sponge, sponge_wT=sponge, mu_max=mumax,
     T_final=Tfinal, dt=dt,
     linearised=lin_flag(), advection=adv_flag(),
     P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
-    y_wall_bc=true, x_wall_bc=false,
+    y_wall_bc=:wall, x_wall_bc=false,
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
     solver_type=solver_sym(), tableau=tableau_sym(),

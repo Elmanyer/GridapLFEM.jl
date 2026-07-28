@@ -25,7 +25,7 @@ println("  plane_wave.jl — long-crested plane wave (LFE-2, algebraic)")
 println("=" ^ 60)
 
 # ── Physical parameters ──────────────────────────────────────
-d_val  = 3.5
+h_val  = 3.5
 T_wave = 1.6
 A_wave = 0.001
 g      = 9.81
@@ -52,8 +52,8 @@ diags, vert, prob = setup_and_run(
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
     partition   = (nx, ny),
-    fe_order    = 2,
-    d_val       = d_val,
+    p_horizontal    = 2,
+    h_val       = h_val,
     g           = g,
     T_wave      = T_wave,
     A_wave      = A_wave,

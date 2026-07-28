@@ -53,21 +53,21 @@ use_linp = genv_b("LFEM_LINP", 1)
 # smooth submerged bar: d(x) = d0 − (h_bar/2)·[tanh((x−x_L)/s) − tanh((x−x_R)/s)]
 # (difference → 2 on the bar top ⇒ d = d0 − h_bar there; analytic ⇒ exact ∇h, ∇²h)
 sramp   = wbar / 3.0
-d_func(x) = d0 - 0.5*hbar*(tanh((x[1]-(xbar-wbar))/sramp) - tanh((x[1]-(xbar+wbar))/sramp))
+h_bathy(x) = d0 - 0.5*hbar*(tanh((x[1]-(xbar-wbar))/sramp) - tanh((x[1]-(xbar+wbar))/sramp))
 
 banner("SHOALING OVER SUBMERGED BAR — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), fe_order=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
-    d_val=d0, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=nothing,
+    h_val=d0, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=nothing,
     sponge_wL=sponge, sponge_wR=sponge, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
     T_final=Tfinal, dt=dt,
-    d_func=d_func,                                   # ★ variable bathymetry
+    h_bathy=h_bathy,                                   # ★ variable bathymetry
     linearised=lin_flag(), advection=adv_flag(),
     lin_pressure=use_linp,                           # ★ slope-pressure package on the bar
     P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
-    y_wall_bc=true, x_wall_bc=false,
+    y_wall_bc=:wall, x_wall_bc=false,
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
     solver_type=solver_sym(), tableau=tableau_sym(),

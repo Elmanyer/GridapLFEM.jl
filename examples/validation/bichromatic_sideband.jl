@@ -45,16 +45,16 @@ c_bdy = M == 3 ? [0.0,0.726,0.925,1.0] : [0.0,0.728,1.0]
 
 x_wm = 12.0; Lx = x_wm + 12lam + 15.0; Ly = 2.0; σ_wm = 1.5
 vert = assemble_vertical_tensors(M, 1, c_bdy); Nσ = vert.N_dof
-fe_order = 2
+p_horizontal = 2
 model, trian = build_horizontal_model(((0.0,Lx),(0.0,Ly)),
                                       (round(Int, Lx/(lam/12)), 2))
-dO = Measure(trian, 2*fe_order + 2)
-U, V = build_fe_spaces(model, fe_order, Nσ; y_wall_bc=true, x_wall_bc=false)
+dO = Measure(trian, 2*p_horizontal + 2)
+U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=false)
 
 # custom bichromatic Gaussian mass source (two frequencies superposed)
 bwm(x, t) = 2*exp(-((x[1]-x_wm)/σ_wm)^2)*(A1*ω1*cos(ω1*t) + A2*ω2*cos(ω2*t))
 sponge = make_sponge(((0.0,Lx),(0.0,Ly)), 15.0, 15.0, 0.0, 0.0, 8.0)
-prob = build_problem(vert; g=g, d_func=x -> d, linearised=false, advection=true,
+prob = build_problem(vert; g=g, h_bathy=x -> d, linearised=false, advection=true,
                      lin_pressure=true, P_full=true, nl_pressure68=true,
                      mu_sponge=sponge, wm_src=bwm)
 

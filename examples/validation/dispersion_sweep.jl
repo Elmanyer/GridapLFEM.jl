@@ -56,8 +56,8 @@ for kd in kd_list
     Lx = last(xg) + 8.0
     nx = max(24, round(Int, Lx/(lam/6)))
     diags,_,_ = setup_and_run(
-        M=M, c_bdy=c_bdy, domain=((0.0,Lx),(0.0,Ly)), partition=(nx,2), fe_order=2,
-        d_val=d, T_wave=T_wave, A_wave=A_wave, x_wm=x_wm, y_wm=nothing,
+        M=M, c_bdy=c_bdy, domain=((0.0,Lx),(0.0,Ly)), partition=(nx,2), p_horizontal=2,
+        h_val=d, T_wave=T_wave, A_wave=A_wave, x_wm=x_wm, y_wm=nothing,
         sponge_wL=6.0, sponge_wR=8.0, mu_max=30.0, T_final=14*T_wave, dt=T_wave/24,
         save_every=0, gauges=[(x,Ly/2) for x in xg],
         linearised=false, advection=true, print_every=10_000)

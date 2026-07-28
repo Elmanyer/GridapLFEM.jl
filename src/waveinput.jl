@@ -151,7 +151,7 @@ Regular (monochromatic) wave of amplitude `A` [m], period `T` [s],
 propagation direction `theta` [rad] (vs +x).
 """
 function WaveInput(vert;
-                   A::Float64, T::Float64, d::Float64, g::Float64=9.81,
+                   A::Float64, T::Float64, d::Float64, g::Float64=g,
                    theta::Float64=0.0, phase::Float64=0.0,
                    T_ramp::Float64=2.0*T, profile::Symbol=:model)
     return _build_waveinput(vert, [A], [2.0*pi/T], [theta], [phase],
@@ -167,7 +167,7 @@ multichromatic seas, hand-built spectra, tests). `T_ramp` defaults to twice
 the peak (largest-amplitude) period.
 """
 function WaveInput(vert, amps::Vector{Float64}, omegas::Vector{Float64};
-                   d::Float64, g::Float64=9.81,
+                   d::Float64, g::Float64=g,
                    thetas::Vector{Float64}=zeros(length(amps)),
                    phases::Vector{Float64}=zeros(length(amps)),
                    T_ramp=nothing, profile::Symbol=:model)
@@ -190,7 +190,7 @@ depth `d` (`:airy`) or the model dispersion (`:model`). Warns when
 `amp_tol` drops bins with `A_c ≤ amp_tol · max(A)`.
 """
 function WaveInput(vert, state::WaveSpec.AiryWaves.AiryState;
-                   d::Float64, g::Float64=9.81, T_ramp=nothing,
+                   d::Float64, g::Float64=g, T_ramp=nothing,
                    profile::Symbol=:model, amp_tol::Float64=0.0)
     if !isapprox(state.h, d; rtol=1e-6)
         @warn "WaveInput: AiryState depth h=$(state.h) m ≠ boundary depth d=$(d) m — " *

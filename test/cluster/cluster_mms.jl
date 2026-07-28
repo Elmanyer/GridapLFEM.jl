@@ -62,8 +62,8 @@ result = with_mpi() do distribute
     model, trian = build_horizontal_model_distributed(ranks, (px,py),
                        (0.0,Lx,0.0,Ly), (nx,ny))
     dO = Measure(trian, 2*feord + 2)
-    U, V = build_fe_spaces(model, feord, Nσ; y_wall_bc=true, x_wall_bc=true)   # closed basin
-    d_func(x) = d0 - 0.15*x[1] - 0.05*x[1]^2 + 0.08*x[1]*x[2]                  # ∇h,∇²h ≠ 0
+    U, V = build_fe_spaces(model, feord, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed basin
+    h_bathy(x) = d0 - 0.15*x[1] - 0.05*x[1]^2 + 0.08*x[1]*x[2]                  # ∇h,∇²h ≠ 0
 
     # finite-amplitude unsteady manufactured solution (velocity → 0 on walls)
     ax = amp .* [0.30, -0.12, 0.20, 0.15, -0.08, 0.11][1:Nσ]
@@ -88,7 +88,7 @@ result = with_mpi() do distribute
         return TransientCellField(umid, (udot,))
     end
 
-    prob = build_problem(vert; g=g, d_func=d_func,
+    prob = build_problem(vert; g=g, h_bathy=h_bathy,
         linearised=false, advection=true, lin_pressure=true, P_full=true,
         nl_pressure68=true, nl_pressure_full=nlpfull,
         mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)

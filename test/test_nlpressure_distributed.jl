@@ -26,10 +26,10 @@ bar(x) = 3.5 - 0.5*1.5*(tanh((x[1]-20.0)/4.0) - tanh((x[1]-32.0)/4.0))
 
 diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(2,2),
-    M=2, d_val=3.5, T_wave=2.0, A_wave=0.001,
-    domain=((0.0,60.0),(0.0,2.0)), partition=(60,2), fe_order=2,
+    M=2, h_val=3.5, T_wave=2.0, A_wave=0.001,
+    domain=((0.0,60.0),(0.0,2.0)), partition=(60,2), p_horizontal=2,
     x_wm=8.0, sponge_wL=8.0, sponge_wR=8.0, mu_max=30.0,
-    T_final=2.0, dt=0.05, d_func=bar,
+    T_final=2.0, dt=0.05, h_bathy=bar,
     linearised=false, advection=true,
     lin_pressure=true, P_full=true, nl_pressure68=true, nl_pressure_full=true,
     save_every=0, print_dt=0.4)

@@ -43,16 +43,16 @@ eta0(x) = A0 * exp(-((x[1]-xc)^2 + (x[2]-yc)^2) / sig0^2)
 banner("IC HUMP RELEASE (closed basin) — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), fe_order=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,L,0.0,L), partition=(nx,ny),
-    d_val=d, T_wave=1.6, A_wave=0.0,                 # no wavemaker (A=0 → zero source)
+    h_val=d, T_wave=1.6, A_wave=0.0,                 # no wavemaker (A=0 → zero source)
     x_wm=-1e6, y_wm=nothing,
     sponge_wL=0.0, sponge_wR=0.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=0.0,
     T_final=Tfinal, dt=dt,
     eta0_func=eta0,                                  # ★ initial condition release
     linearised=lin_flag(), advection=adv_flag(),
     P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
-    y_wall_bc=true, x_wall_bc=true,                  # ★ CLOSED basin (mandatory for IC)
+    y_wall_bc=:wall, x_wall_bc=true,                  # ★ CLOSED basin (mandatory for IC)
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
     solver_type=solver_sym(), tableau=tableau_sym(),

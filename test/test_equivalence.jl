@@ -52,13 +52,13 @@ check("vertical tensors match oracle (Mmat,Phi,B,Mcal,Gcal,A,K,P,Acal,Kcal)",
 
 domain    = ((0.0, 10.0), (0.0, 5.0))
 partition = (6, 4)
-fe_order  = 2
+p_horizontal  = 2
 model, trian = build_horizontal_model_2D(domain, partition)
-dO = Measure(trian, 2*fe_order + 2)
+dO = Measure(trian, 2*p_horizontal + 2)
 
 # unconstrained spaces → all DOFs free, interpolated states identical
-U_lay, V_lay = build_fe_spaces_2D(model, fe_order, Nσ; y_wall_bc=false)
-U, V = ALG.build_fe_spaces(model, fe_order, Nσ; y_wall_bc=false)
+U_lay, V_lay = build_fe_spaces_2D(model, p_horizontal, Nσ; y_wall_bc=false)   # old solver: Bool
+U, V = ALG.build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:open)
 
 # ---- analytic states / test functions -----------------------------------------
 eta_f  = x -> 0.02*cos(0.4*x[1])*cos(0.5*x[2]) + 0.005*x[1]/10.0
@@ -113,7 +113,7 @@ for cfg in configs
     prob_lay = LFEMProblemLFEM(g_phys, cfg.dfn,
         vert_o.Mmat, vert_o.Phi, vert_o.B, vert_o.Mcal, vert_o.Gcal, vert_o.A, vert_o.K,
         Nσ, cfg.lin, cfg.linp, cfg.adv, sponge, wm)
-    prob = ALG.build_problem(vert_a; g=g_phys, d_func=cfg.dfn,
+    prob = ALG.build_problem(vert_a; g=g_phys, h_bathy=cfg.dfn,
         linearised=cfg.lin, advection=cfg.adv, lin_pressure=cfg.linp,
         P_full=false, nl_pressure68=false, mu_sponge=sponge, wm_src=wm)
 

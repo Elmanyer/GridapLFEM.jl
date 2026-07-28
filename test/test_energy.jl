@@ -32,21 +32,21 @@ check(name, cond, extra="") = (global n_pass, n_fail;
     cond ? (println("  PASS  $name $extra"); n_pass += 1) :
            (println("  FAIL  $name $extra"); n_fail += 1))
 
-g = 9.81; d_val = 1.0; L = 2.0; Ly = 0.5
+g = 9.81; h_val = 1.0; L = 2.0; Ly = 0.5
 vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0]); Nσ = vert.N_dof
 Mt = alg_to_tensor2(vert.Mmat); Bt = alg_to_tensor2(vert.B)
 
-k = π/L; kd = k*d_val
+k = π/L; kd = k*h_val
 Meff = vert.Mmat .- (kd^2).*vert.B
-T_th = 2π/(k*sqrt(g*d_val*dot(vert.Phi, Meff \ vert.Phi)))
+T_th = 2π/(k*sqrt(g*h_val*dot(vert.Phi, Meff \ vert.Phi)))
 @printf("  standing wave: T_th=%.4f s  (basin %.1f×%.1f m)\n", T_th, L, Ly)
 
-domain = ((0.0, L), (0.0, Ly)); partition = (24, 4); fe_order = 2
+domain = ((0.0, L), (0.0, Ly)); partition = (24, 4); p_horizontal = 2
 model, trian = build_horizontal_model(domain, partition)
-dO = Measure(trian, 2*fe_order + 2)
-U, V = build_fe_spaces(model, fe_order, Nσ; y_wall_bc=true, x_wall_bc=true)   # closed basin
+dO = Measure(trian, 2*p_horizontal + 2)
+U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed basin
 
-prob = build_problem(vert; g=g, d_func=x -> d_val, linearised=true, advection=false,
+prob = build_problem(vert; g=g, h_bathy=x -> h_val, linearised=true, advection=false,
                      mu_sponge=x -> 0.0, wm_src=(x, t) -> 0.0)
 
 A0 = 0.005
@@ -59,7 +59,7 @@ function energy(uh)
     η = uh[1]; Ux = uh[2]; Uy = uh[3]; DU = alg_dx(Ux) + alg_dy(Uy)
     pe = 0.5*g*sum(∫( η*η )*dO)
     ke = 0.5*sum(∫( (Ux ⋅ alg_mul(Mt, Ux)) + (Uy ⋅ alg_mul(Mt, Uy)) )*dO) -
-         0.5*d_val^2*sum(∫( DU ⋅ alg_mul(Bt, DU) )*dO)
+         0.5*h_val^2*sum(∫( DU ⋅ alg_mul(Bt, DU) )*dO)
     return pe + ke
 end
 E0 = energy(u0)

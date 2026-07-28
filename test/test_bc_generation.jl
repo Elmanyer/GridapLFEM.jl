@@ -65,20 +65,20 @@ for _ in 1:50
     f = g*k*tanh(k*d_try) - omega^2; df = g*tanh(k*d_try)
     dk = f/df; global k -= dk; abs(dk) < 1e-12*abs(k) && break
 end
-d_val = kd_target/k; Ce = omega/k; lam = 2π/k
+h_val = kd_target/k; Ce = omega/k; lam = 2π/k
 
 vert0  = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
-k_mod  = model_wavenumber(vert0, omega, d_val, g)
+k_mod  = model_wavenumber(vert0, omega, h_val, g)
 Cm_th  = omega/k_mod
 @printf("\n  kd=%.1f  d=%.3f m  λ=%.2f m  Ce=%.3f m/s  Cm(model)=%.3f m/s\n",
-        kd_target, d_val, lam, Ce, Cm_th)
+        kd_target, h_val, lam, Ce, Cm_th)
 
 Lx = 6lam + 8.0; Ly = 2.0
 nx = round(Int, Lx/(lam/6)); ny = 2
 dt = T_wave/24; Tf = 12*T_wave
 x_g1 = 2lam; x_g2 = x_g1 + lam/2; y_g = Ly/2
 common = (M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)),
-          partition=(nx,ny), fe_order=2, d_val=d_val, T_wave=T_wave,
+          partition=(nx,ny), p_horizontal=2, h_val=h_val, T_wave=T_wave,
           A_wave=A_wave, sponge_wR=8.0, sponge_wB=0.0, sponge_wT=0.0,
           mu_max=30.0, dt=dt, save_every=0,
           gauges=[(x_g1,y_g),(x_g2,y_g)], check_every=0, print_every=50)

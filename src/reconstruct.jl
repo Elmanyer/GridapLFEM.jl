@@ -28,15 +28,15 @@
 recon_level_str(σ::Float64) = replace(@sprintf("%.3f", σ), "." => "_")
 
 """
-    build_field_recon(vert, d_func, g; rho=1025.0, write_w=false, write_pressure=false)
+    build_field_recon(vert, h_bathy, g; rho=1025.0, write_w=false, write_pressure=false)
 
 Precompute the per-level constant contraction vectors from the vertical stage
 (`assemble_vertical_tensors` NamedTuple). σ-levels = the N_dof vertical
 Lagrange nodes (one per velocity mode). Returns `nothing` if both switches are
 off; else a NamedTuple consumed by `extra_field_cellfields`.
 """
-function build_field_recon(vert, d_func, g::Float64;
-                               rho::Float64 = 1025.0,
+function build_field_recon(vert, h_bathy, g::Float64;
+                               rho::Float64 = rho,
                                write_w::Bool = false,
                                write_pressure::Bool = false)
     (write_w || write_pressure) || return nothing
@@ -97,7 +97,7 @@ function build_field_recon(vert, d_func, g::Float64;
 
     return (levels = levels, L = L, N_dof = N_dof,
             avec = avec, bvec = bvec, cvec = cvec, pivec = pivec,
-            d_func = d_func, g = g, rho = rho,
+            h_bathy = h_bathy, g = g, rho = rho,
             write_w = write_w, write_pressure = write_pressure)
 end
 
@@ -114,7 +114,7 @@ function extra_field_cellfields(u_n, u_prev, dt::Float64, recon, trian)
     fields = Pair{String,Any}[]
     recon === nothing && return fields
 
-    d_cf = CellField(recon.d_func, trian)
+    d_cf = CellField(recon.h_bathy, trian)
     η    = u_n[1]
     Ux   = u_n[2]
     Uy   = u_n[3]

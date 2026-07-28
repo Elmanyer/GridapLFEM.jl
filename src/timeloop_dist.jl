@@ -24,16 +24,19 @@
 # ==============================================================
 
 """
-    build_horizontal_model_distributed(ranks, cpu_grid, domain, partition)
+    build_horizontal_model_distributed(ranks, cpu_grid, domain, partition; y_periodic=false)
 
 Partitioned 2D Cartesian mesh across MPI ranks. `cpu_grid=(px,py)` is the
 process topology (`px·py == mpiexec -n`); `domain=(x0,x1,y0,y1)` (flat 4-tuple);
-`partition=(nx,ny)` cells (nx divisible by px, ny by py). Returns `(model, trian)`.
+`partition=(nx,ny)` cells (nx divisible by px, ny by py). `y_periodic=true` glues
+the top/bottom edges (the `:periodic` lateral BC). Returns `(model, trian)`.
 """
 function build_horizontal_model_distributed(ranks, cpu_grid::Tuple,
                                                 domain::NTuple{4,Float64},
-                                                partition::Tuple)
-    model = CartesianDiscreteModel(ranks, cpu_grid, domain, partition)
+                                                partition::Tuple;
+                                                y_periodic::Bool=false)
+    model = CartesianDiscreteModel(ranks, cpu_grid, domain, partition;
+                                       isperiodic=(false, y_periodic))
     trian = Triangulation(model)
     return model, trian
 end

@@ -52,6 +52,12 @@ const Ex     = VectorValue(1.0, 0.0)
 const Ey     = VectorValue(0.0, 1.0)
 const E1_sig = VectorValue(1.0)
 
+# Global physical constants. `g` and `rho` are declared once here and used as the
+# default for every `g`/`rho` keyword argument in the module (a single source of
+# truth); the kwargs remain overridable per call.
+const g   = 9.81      # gravitational acceleration [m/s²]
+const rho = 1025.0    # water density [kg/m³]
+
 include("vertical.jl")       # Stage 1: σ-mesh + full vertical tensor set (incl. P, Pcal)
 include("tensors.jl")        # constant-tensor constructors + pointwise Operation helpers
 include("horizontal.jl")     # Stage 2: 2D mesh + stacked [η,𝖴x,𝖴y] FE spaces + wall BCs

@@ -32,7 +32,7 @@ println("  bc_irregular_sea.jl — JONSWAP sea via Dirichlet generation")
 println("=" ^ 60)
 
 # ── Sea state ─────────────────────────────────────────────────
-d_val = 3.5
+h_val = 3.5
 Hs    = 0.002                       # 2 mm — linear regime
 Tp    = 1.6
 g     = 9.81
@@ -45,7 +45,7 @@ dspec = WaveSpec.SpectralSpreading.DiscreteSpectralSpreading(
             1.0/(2.5*Tp), 1.0/(0.55*Tp), nfreq;
             domain=WaveSpec.SpectralSampling.Energy)   # equal-energy bins
 spread = WaveSpec.AngularSpreading.DiscreteAngularSpreading(0.0; seed=seed)
-state  = WaveSpec.AiryWaves.AiryState(dspec, spread, d_val)
+state  = WaveSpec.AiryWaves.AiryState(dspec, spread, h_val)
 state  = WaveSpec.AiryWaves.change_seed!(state, seed)   # reproducible phases
 
 # ── Domain / numerics (quick default; production: 200+ Tp, 200×10 mesh) ──
@@ -60,8 +60,8 @@ diags, vert, prob = setup_and_run(
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
     partition   = (nx, ny),
-    fe_order    = 2,
-    d_val       = d_val,
+    p_horizontal    = 2,
+    h_val       = h_val,
     g           = g,
     T_wave      = Tp,               # reporting only (kd banner)
     A_wave      = Hs/2,

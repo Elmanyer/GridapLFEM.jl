@@ -25,12 +25,12 @@ const REF_RTOL = 2e-3
 
 # kd = 3 at T = 1.6 s (matches test_bc_generation.jl)
 g = 9.81; T_wave = 1.6; A_wave = 0.0005
-d_val = 1.899
+h_val = 1.899
 
 diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(2,2),
-    M=2, c_bdy=[0.0,0.728,1.0], d_val=d_val, T_wave=T_wave, A_wave=A_wave,
-    domain=((0.0,24.0),(0.0,2.0)), partition=(24,2), fe_order=2,
+    M=2, c_bdy=[0.0,0.728,1.0], h_val=h_val, T_wave=T_wave, A_wave=A_wave,
+    domain=((0.0,24.0),(0.0,2.0)), partition=(24,2), p_horizontal=2,
     wave_bc=:regular, bc_side=:left, bc_profile=:model,
     sponge_wL=0.0, sponge_wR=6.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0,
     T_final=8*T_wave, dt=T_wave/24, linearised=true, advection=false,
@@ -68,8 +68,8 @@ end
 
 # ---- sequential reference generation (run once, paste REF_EMAX above) --------
 # diags, _, _ = setup_and_run(
-#     M=2, c_bdy=[0.0,0.728,1.0], d_val=1.899, T_wave=1.6, A_wave=0.0005,
-#     domain=((0.0,24.0),(0.0,2.0)), partition=(24,2), fe_order=2,
+#     M=2, c_bdy=[0.0,0.728,1.0], h_val=1.899, T_wave=1.6, A_wave=0.0005,
+#     domain=((0.0,24.0),(0.0,2.0)), partition=(24,2), p_horizontal=2,
 #     wave_bc=:regular, bc_side=:left, bc_profile=:model,
 #     sponge_wL=0.0, sponge_wR=6.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0,
 #     T_final=8*1.6, dt=1.6/24, linearised=true, advection=false,

@@ -4,7 +4,7 @@
 #  JONSWAP spectrum + cosine-power angular spreading: every (ωᵢ, θⱼ) bin is a
 #  plane-wave component with its own direction; the Dirichlet data on the left
 #  boundary prescribes η, 𝖴x AND 𝖴y (directional seas require
-#  y_wall_bc=false — the lateral boundaries are sponge-absorbed instead of
+#  y_wall_bc=:open — the lateral boundaries are sponge-absorbed instead of
 #  solid walls). The result is a short-crested 2D sea surface.
 #
 #  RUN:  julia --project=. GridapLFEM.jl/examples/bc_directional_sea.jl
@@ -21,7 +21,7 @@ println("  bc_directional_sea.jl — short-crested sea via Dirichlet BCs")
 println("=" ^ 60)
 
 # ── Sea state: JONSWAP × cosine-power spreading ───────────────
-d_val = 3.5
+h_val = 3.5
 Hs    = 0.002
 Tp    = 1.6
 g     = 9.81
@@ -35,7 +35,7 @@ dspec = WaveSpec.SpectralSpreading.DiscreteSpectralSpreading(
 # cosine-power spreading, mean direction 0 (+x), σ_θ = 20°, cut at ±60°
 spread = WaveSpec.AngularSpreading.DiscreteAngularSpreading(
             :cosinepow, 0.0, 20.0*pi/180, -pi/3, pi/3, 7)
-state  = WaveSpec.AiryWaves.AiryState(dspec, spread, d_val)
+state  = WaveSpec.AiryWaves.AiryState(dspec, spread, h_val)
 state  = WaveSpec.AiryWaves.change_seed!(state, seed)   # reproducible phases
 
 # ── Domain / numerics (quick default) ─────────────────────────
@@ -50,15 +50,15 @@ diags, vert, prob = setup_and_run(
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
     partition   = (nx, ny),
-    fe_order    = 2,
-    d_val       = d_val,
+    p_horizontal    = 2,
+    h_val       = h_val,
     g           = g,
     T_wave      = Tp,
     A_wave      = Hs/2,
     wave_bc     = state,            # directional AiryState → η, 𝖴x AND 𝖴y BCs
     bc_side     = :left,
     bc_profile  = :model,
-    y_wall_bc   = false,            # REQUIRED for directional inflow
+    y_wall_bc   = :open,            # REQUIRED for directional inflow
     sponge_wL   = 0.0,
     sponge_wR   = 16.0,
     sponge_wB   = 10.0,             # lateral absorption replaces the walls

@@ -60,8 +60,8 @@ g = 9.81; Lx, Ly = 2.0, 1.0; d0 = 1.0
 vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0]); Nσ = vert.N_dof
 model, trian = build_horizontal_model(((0.0,Lx),(0.0,Ly)), (6,4)); feo = 2
 dO = Measure(trian, 2*feo + 2)
-U, V = build_fe_spaces(model, feo, Nσ; y_wall_bc=true, x_wall_bc=true)   # closed basin
-d_func(x) = d0 - 0.15*x[1] - 0.05*x[1]^2 + 0.08*x[1]*x[2]                # ∇h,∇²h ≠ 0
+U, V = build_fe_spaces(model, feo, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed basin
+h_bathy(x) = d0 - 0.15*x[1] - 0.05*x[1]^2 + 0.08*x[1]*x[2]                # ∇h,∇²h ≠ 0
 
 # ---- FINITE-AMPLITUDE unsteady manufactured solution ---------------------------
 # velocity O(0.3), η O(0.2) over d0=1 ⇒ advection & nonlinear pressure non-trivial
@@ -78,7 +78,7 @@ ustar(t)   = interpolate_everywhere(
 ustar_dofs(t) = get_free_dof_values(ustar(t))
 
 # ---- problem: fully nonlinear (advection + full leading + native 𝓝) ------------
-prob = build_problem(vert; g=g, d_func=d_func,
+prob = build_problem(vert; g=g, h_bathy=h_bathy,
     linearised=false, advection=true, lin_pressure=true, P_full=true,
     nl_pressure68=true, nl_pressure_full=FULL,
     mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)
@@ -130,7 +130,7 @@ udm = (ustar_dofs(tm + 1e-4) .- ustar_dofs(tm - 1e-4)) ./ 2e-4     # ∂ₜu* (F
 tu_m = TCF(um, udm)
 R_full = assemble_vector(v -> global_residual(tm, tu_m, v, prob, trian, dO), V)
 
-prob_lin = build_problem(vert; g=g, d_func=d_func, linearised=true, advection=false,
+prob_lin = build_problem(vert; g=g, h_bathy=h_bathy, linearised=true, advection=false,
                          mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)
 R_lin = assemble_vector(v -> global_residual(tm, tu_m, v, prob_lin, trian, dO), V)
 nl_frac = norm(R_full .- R_lin) / norm(R_full)
@@ -141,7 +141,7 @@ check("MMS is genuinely nonlinear (nonlinear residual fraction > 15%)", nl_frac 
 
 # native nonlinear-pressure block is computed (nonzero)
 um_fe = FEFunction(U, um); ηm = um_fe[1]; Uxm = um_fe[2]; Uym = um_fe[3]
-dcf = CellField(d_func, trian); Hm = dcf + ηm
+dcf = CellField(h_bathy, trian); Hm = dcf + ηm
 dhx = alg_dx(dcf); dhy = alg_dy(dcf); dHx = dhx + alg_dx(ηm); dHy = dhy + alg_dy(ηm)
 DUm = alg_dx(Uxm) + alg_dy(Uym); afm = dhx*Uxm + dhy*Uym; bfm = dHx*Uxm + dHy*Uym
 Sm  = Hm*DUm + bfm

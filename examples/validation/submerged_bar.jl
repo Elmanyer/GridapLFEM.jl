@@ -32,7 +32,7 @@ println("=" ^ 64)
 g = 9.81; d0 = 3.5; hbar = 2.0; T = 2.5; A = 0.001
 omega = 2π/T; k0 = find_wavenumber(omega, d0, g); lam0 = 2π/k0
 xbar = 120.0; wbar = 25.0; sramp = wbar/3
-d_func(x) = d0 - 0.5*hbar*(tanh((x[1]-(xbar-wbar))/sramp) -
+h_bathy(x) = d0 - 0.5*hbar*(tanh((x[1]-(xbar-wbar))/sramp) -
                             tanh((x[1]-(xbar+wbar))/sramp))    # smooth bar, exact ∇h
 @printf("  offshore d=%.1f m, bar crest depth=%.1f m, T=%.1f s, λ₀=%.1f m\n",
         d0, d0-hbar, T, lam0)
@@ -46,9 +46,9 @@ gauges = [(xg, Ly/2) for xg in x_gauges]
 
 diags, _, _ = setup_and_run(
     M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,ny),
-    fe_order=2, d_val=d0, T_wave=T, A_wave=A, x_wm=x_wm, y_wm=nothing,
+    p_horizontal=2, h_val=d0, T_wave=T, A_wave=A, x_wm=x_wm, y_wm=nothing,
     sponge_wL=35.0, sponge_wR=35.0, mu_max=5.0, T_final=T_final, dt=dt,
-    d_func=d_func, save_every=0, gauges=gauges,
+    h_bathy=h_bathy, save_every=0, gauges=gauges,
     linearised=false, advection=true,
     lin_pressure=true, P_full=true, nl_pressure68=true, nl_pressure_full=true,
     print_every=200)
@@ -60,7 +60,7 @@ for (i, xg) in enumerate(x_gauges)
     gv = [d.gauge_vals[i] for d in diags][i0:end]
     H1 = amp(gv, omega); H2 = amp(gv, 2omega); H3 = amp(gv, 3omega)
     @printf("  %6.1f   %5.2f   %.3e  %.3e  %.3e   %.3f\n",
-            xg, d_func((xg,0.0)), H1, H2, H3, H2/H1)
+            xg, h_bathy((xg,0.0)), H1, H2, H3, H2/H1)
 end
 println("\n  Expected: H₂ grows toward/over the crest and persists down-slope")
 println("  (released free harmonic). Compare H₁,₂,₃(x) to the reference/experiment.")

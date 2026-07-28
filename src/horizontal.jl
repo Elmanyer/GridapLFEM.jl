@@ -13,24 +13,26 @@
 #  Corner tags are MANDATORY in any wall BC (omitting them leaves corner DOFs
 #  unconstrained → exponential instability; root CLAUDE.md rule 5).
 #
-#  All fields H1-conforming Lagrange, fe_order ≥ 2 (linear elements zero the
+#  All fields H1-conforming Lagrange, p_horizontal ≥ 2 (linear elements zero the
 #  dispersion term and disable all non-hydrostatic physics).
 # ==============================================================
 
 """
-    build_horizontal_model(domain, partition) → (model, trian)
+    build_horizontal_model(domain, partition; y_periodic=false) → (model, trian)
 
 2D Cartesian mesh on ((x0,x1),(y0,y1)) (or flat (x0,x1,y0,y1)) with
-`partition = (nx, ny)` cells. Create the measure as `Measure(trian, 2*fe_order+2)`.
+`partition = (nx, ny)` cells. Create the measure as `Measure(trian, 2*p_horizontal+2)`.
+`y_periodic=true` builds the mesh periodic in y (the matching top/bottom edge DOFs
+are identified), for the `:periodic` lateral boundary condition.
 """
-function build_horizontal_model(domain::Tuple, partition::Tuple)
+function build_horizontal_model(domain::Tuple, partition::Tuple; y_periodic::Bool=false)
     if domain isa Tuple{Tuple,Tuple}
         (x0,x1), (y0,y1) = domain
         dom_flat = (x0, x1, y0, y1)
     else
         dom_flat = domain
     end
-    model = CartesianDiscreteModel(dom_flat, partition)
+    model = CartesianDiscreteModel(dom_flat, partition; isperiodic=(false, y_periodic))
     trian = Triangulation(model)
     return model, trian
 end
@@ -45,13 +47,20 @@ function side_tags(side::Symbol)
 end
 
 """
-    build_fe_spaces(model, fe_order, Nσ; y_wall_bc=true, x_wall_bc=false,
+    build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=false,
                         inflow=nothing) → (U, V)
 
-Stacked 3-field MultiFieldFESpace `[η, 𝖴x, 𝖴y]`.
+Stacked 3-field MultiFieldFESpace `[η, 𝖴x, 𝖴y]`. The lateral (y) boundary
+condition is selected by the symbol `y_wall_bc`:
 
-- `y_wall_bc=true` (default): solid wall `u_j^y = 0 ∀j` on y-boundaries —
-  Dirichlet zero `VectorValue{Nσ}` on the whole 𝖴y field (tags 1–6).
+- `:wall` (default): solid wall `u_j^y = 0 ∀j` on the y-boundaries — Dirichlet
+  zero `VectorValue{Nσ}` on the whole 𝖴y field (tags 1–6).
+- `:open`: natural (free / zero-flux) y-edges — no essential condition.
+- `:periodic`: the y-edges are identified in the *mesh* (`build_horizontal_model`
+  with `y_periodic=true`); at the FE-space level this behaves like `:open`
+  (no y-Dirichlet), the DOF identification being carried by the periodic mesh.
+
+Other arguments:
 - `x_wall_bc=true`: closed basin — additionally `u_j^x = 0 ∀j` on x-boundaries
   (tags 1–4,7,8). REQUIRED for any initial-condition problem (soliton, sloshing,
   IC hump); flumes keep it false (open x-ends, sponge-absorbed).
@@ -59,17 +68,21 @@ Stacked 3-field MultiFieldFESpace `[η, 𝖴x, 𝖴y]`.
   `(side=:left, eta=g_eta, ux=g_ux, uy=g_uy_or_nothing)` with `g(t) = x -> …`
   transient closures (from `eta_bc`/`ux_bc`/`uy_bc` of a `WaveInput`). η and
   𝖴x become `TransientTrialFESpace`s (the returned `U` is callable at `t`);
-  `uy !== nothing` (directional sea) REQUIRES `y_wall_bc=false`. With
-  `x_wall_bc=true` the opposite x-side keeps its zero wall. Sides `:left` /
-  `:right` are supported for generation.
+  `uy !== nothing` (directional sea) REQUIRES `y_wall_bc ≠ :wall` (`:open` or
+  `:periodic`). With `x_wall_bc=true` the opposite x-side keeps its zero wall.
+  Sides `:left` / `:right` are supported for generation.
 """
-function build_fe_spaces(model, fe_order::Int, Nσ::Int;
-                             y_wall_bc::Bool = true, x_wall_bc::Bool = false,
+function build_fe_spaces(model, p_horizontal::Int, Nσ::Int;
+                             y_wall_bc::Symbol = :wall, x_wall_bc::Bool = false,
                              inflow = nothing)
-    reffe_eta = ReferenceFE(lagrangian, Float64, fe_order)
-    reffe_U   = ReferenceFE(lagrangian, VectorValue{Nσ,Float64}, fe_order)
+    y_wall_bc in (:wall, :open, :periodic) ||
+        error("build_fe_spaces: y_wall_bc must be :wall, :open or :periodic (got :$y_wall_bc)")
+    reffe_eta = ReferenceFE(lagrangian, Float64, p_horizontal)
+    reffe_U   = ReferenceFE(lagrangian, VectorValue{Nσ,Float64}, p_horizontal)
     zvv       = VectorValue(ntuple(_ -> 0.0, Nσ)...)
-    y_tags = y_wall_bc ? ["tag_1","tag_2","tag_3","tag_4","tag_5","tag_6"] : String[]
+    # Dirichlet y-wall only for :wall; :open and :periodic impose no y-essential BC
+    # (the periodic case identifies the y-edge DOFs at the mesh level instead).
+    y_tags = y_wall_bc == :wall ? ["tag_1","tag_2","tag_3","tag_4","tag_5","tag_6"] : String[]
     x_tags = x_wall_bc ? ["tag_1","tag_2","tag_3","tag_4","tag_7","tag_8"] : String[]
 
     if inflow === nothing
@@ -110,10 +123,11 @@ function build_fe_spaces(model, fe_order::Int, Nσ::Int;
 
     if inflow !== nothing && inflow.uy !== nothing
         # directional sea: v ≠ 0 on the generation side is incompatible with the
-        # y-wall corner tags — lateral boundaries must be sponge-absorbed instead
-        y_wall_bc &&
+        # y-wall corner tags — lateral boundaries must be :open (sponge-absorbed)
+        # or :periodic instead
+        y_wall_bc == :wall &&
             error("build_fe_spaces: a directional inflow (uy prescribed) requires " *
-                  "y_wall_bc=false (use lateral sponges); the wall corner tags " *
+                  "y_wall_bc=:open or :periodic (not :wall); the wall corner tags " *
                   "conflict with v ≠ 0 at the generation boundary")
         gen_tags = side_tags(inflow.side)
         V_Uy = FESpace(model, reffe_U; conformity=:H1, dirichlet_tags=gen_tags)

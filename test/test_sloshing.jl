@@ -20,13 +20,13 @@ println("=" ^ 60)
 println("  test_sloshing.jl — standing wave vs dispersion theory")
 println("=" ^ 60)
 
-g = 9.81; d_val = 1.0; L = 2.0; Ly = 0.5
+g = 9.81; h_val = 1.0; L = 2.0; Ly = 0.5
 vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
 
 # theory: ω from the LFE-M dispersion at k = π/L
-k = π / L; kd = k * d_val
+k = π / L; kd = k * h_val
 Meff = vert.Mmat .- (kd^2) .* vert.B                 # M − (kd)²B,  B ≤ 0
-c2 = g * d_val * dot(vert.Phi, Meff \ vert.Phi)
+c2 = g * h_val * dot(vert.Phi, Meff \ vert.Phi)
 omega_th = k * sqrt(c2); T_th = 2π / omega_th
 @printf("  k=%.4f  kd=%.3f  c=%.4f m/s  ω_th=%.4f  T_th=%.4f s\n",
         k, kd, sqrt(c2), omega_th, T_th)
@@ -37,13 +37,13 @@ dt = T_th / 40; Tf = 3 * T_th
 
 # closed basin (x_wall_bc MANDATORY for IC problems); no wavemaker, no sponge
 diags, _, _ = setup_and_run(
-    M=2, c_bdy=[0.0, 0.728, 1.0], d_val=d_val, g=g,
-    domain=((0.0, L), (0.0, Ly)), partition=(24, 2), fe_order=2,
+    M=2, c_bdy=[0.0, 0.728, 1.0], h_val=h_val, g=g,
+    domain=((0.0, L), (0.0, Ly)), partition=(24, 2), p_horizontal=2,
     T_wave=1.0, A_wave=0.0, x_wm=-1e6,
     sponge_wL=0.0, sponge_wR=0.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=0.0,
     T_final=Tf, dt=dt, eta0_func=eta0,
     linearised=true, advection=false,
-    y_wall_bc=true, x_wall_bc=true,
+    y_wall_bc=:wall, x_wall_bc=true,
     gauges=[(0.05, Ly/2)], save_every=0, nl_tol=1e-8)
 
 ts = [d.t for d in diags]; gs = [d.gauge_vals[1] for d in diags]

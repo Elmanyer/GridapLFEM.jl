@@ -48,8 +48,8 @@ for _ in 1:50
     f = g*k*tanh(k*d_try) - omega^2; df = g*tanh(k*d_try)
     dk = f/df; global k -= dk; abs(dk) < 1e-12*abs(k) && break
 end
-d_val = kd_target/k; Ce = omega/k; lam = 2π/k
-@printf("\n  kd=%.1f  d=%.3f m  λ=%.2f m  Ce=%.3f m/s\n", kd_target, d_val, lam, Ce)
+h_val = kd_target/k; Ce = omega/k; lam = 2π/k
+@printf("\n  kd=%.1f  d=%.3f m  λ=%.2f m  Ce=%.3f m/s\n", kd_target, h_val, lam, Ce)
 
 x_wm = 6.0
 Lx = x_wm + 6lam + 8.0; Ly = 2.0
@@ -60,7 +60,7 @@ x_g1 = x_wm + 2lam; x_g2 = x_g1 + lam/2; y_g = Ly/2
 
 diags, _, _ = setup_and_run(
     M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,ny),
-    fe_order=2, d_val=d_val, T_wave=T_wave, A_wave=0.0005, x_wm=x_wm,
+    p_horizontal=2, h_val=h_val, T_wave=T_wave, A_wave=0.0005, x_wm=x_wm,
     y_wm=nothing, sponge_wL=8.0, sponge_wR=8.0, sponge_wB=0.0, sponge_wT=0.0,
     mu_max=30.0, T_final=Tf, dt=dt, save_every=0,
     gauges=[(x_g1,y_g),(x_g2,y_g)], linearised=true, advection=false,

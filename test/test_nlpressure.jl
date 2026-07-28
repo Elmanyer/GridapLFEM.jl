@@ -41,7 +41,7 @@ Nσ   = vert.N_dof                      # = 3
 Lx, Ly = 4.0, 2.0
 model, trian = build_horizontal_model(((0.0,Lx),(0.0,Ly)), (8,4))
 dO = Measure(trian, 14)                # integrates every polynomial term exactly
-U, V = build_fe_spaces(model, 2, Nσ; y_wall_bc=false)
+U, V = build_fe_spaces(model, 2, Nσ; y_wall_bc=:open)
 nq = num_free_dofs(V[1])               # continuity-row count
 
 # polynomial state (all degree ≤ 2; u·n = 0 on the whole boundary)
@@ -103,7 +103,7 @@ H_an   = CellField(Hval, trian)
 dhx_an = CellField(x -> 2*b1*x[1] + b2*x[2], trian)
 dhy_an = CellField(x -> b2*x[1], trian)
 
-vert_prob = build_problem(vert; g=9.81, d_func=d_fun)
+vert_prob = build_problem(vert; g=9.81, h_bathy=d_fun)
 
 # direct form: −∫ H ∂_αh (W_α ⋅ (𝓐3[c] ⊡ N_c^exact)),  c ∈ {1,2,4,5}
 N1_an = (-1.0)*(alg_outer(dxS_an, Ux_an) + alg_outer(dyS_an, Uy_an))
@@ -189,10 +189,10 @@ println("\n-- G3: dynamics over a submerged bar, ALL pressure flags on --")
 
 bar(x) = 3.5 - 0.5*1.5*(tanh((x[1]-20.0)/4.0) - tanh((x[1]-32.0)/4.0))
 diags, _, _ = setup_and_run(
-    M=2, d_val=3.5, T_wave=2.0, A_wave=0.001,
-    domain=((0.0,60.0),(0.0,2.0)), partition=(60,2), fe_order=2,
+    M=2, h_val=3.5, T_wave=2.0, A_wave=0.001,
+    domain=((0.0,60.0),(0.0,2.0)), partition=(60,2), p_horizontal=2,
     x_wm=8.0, sponge_wL=8.0, sponge_wR=8.0, mu_max=30.0,
-    T_final=2.0, dt=0.05, d_func=bar,
+    T_final=2.0, dt=0.05, h_bathy=bar,
     linearised=false, advection=true,
     lin_pressure=true, P_full=true, nl_pressure68=true, nl_pressure_full=true,
     gauges=[(26.0,1.0)], save_every=0)
