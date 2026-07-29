@@ -47,7 +47,7 @@ modes are 1-based `j=1..Nσ`, one per node.
 | `algebraic_residual_plan.md` | The design/implementation record for the residual (FE-space layout, tensor constants, residual skeleton, Jacobian, validation). |
 | `src/` (`GridapLFEM.jl` + submodules) | **The self-contained serial + distributed solver package** (`module GridapLFEM`): vertical tensors (incl. `Pcal`), constant-tensor + `Operation` helpers, stacked FE spaces (distributed-safe MultiField dispatch + transient-Dirichlet inflow variants), the loop-free residual + hand Jacobians (the same code runs distributed — `Operation` is forwarded for `DistributedCellField`), the time loops (default fully-implicit `RungeKutta(:SDIRK_2_2)`, `:theta` Crank–Nicolson selectable via `solver_type`; sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…`) plus reconstructed `w_s<σ>`/`p_s<σ>` fields (`reconstruct.jl`), and `waveinput.jl` (Dirichlet boundary wave generation + WaveSpec.jl coupling: component tables, `:model`/`:airy` polarizations, ramp, relaxation zone). Drivers: `setup_and_run` and `setup_and_run_distributed`. |
 | `test/` (21 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` 10/10 (cross-check virtual-work, ≤7e-15), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` (4 ranks), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_mms` 3/3 (unsteady nonlinear MMS), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, `test_dispersion_nonlinear` 3/3 (full-NL⇒Airy, kd=1/3/5 err 0.93/0.36/3.05%), `test_shallow_water` 6/6 (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch:** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. |
-| `examples/` (+ `validation/`, `distributed/`) | Sequential: `plane_wave.jl`, `ring_wave.jl`, and BC-generation `bc_plane_wave.jl`, `bc_irregular_sea.jl` (JONSWAP, gauge CSV), `bc_directional_sea.jl`; `examples/distributed/` — 6 env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry, `run_irregular_sea_dist.jl`, `run_directional_sea_dist.jl` — sea-state env vars + `build_airy_state()` in `_dist_common.jl`) + README; `examples/validation/` — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + `dispersion_sweep.jl` + `spectral_fidelity.jl` (JONSWAP component-wise amplitude+dispersion transfer) + README. |
+| `examples/` (+ `validation/`, `distributed/`) | Sequential: `plane_wave.jl`, `ring_wave.jl`, and BC-generation `bc_plane_wave.jl`, `bc_irregular_sea.jl` (JONSWAP, gauge CSV), `bc_directional_sea.jl`; `examples/distributed/` — 6 env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry, `run_irregular_sea_dist.jl`, `run_directional_sea_dist.jl` — sea-state env vars + `build_airy_state()` in `_dist_common.jl`) + README; `examples/validation/` — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + `dispersion_sweep.jl` + `spectral_fidelity.jl` (JONSWAP component-wise amplitude+dispersion transfer) + README; `examples/distributed_small/` — 16 small-domain (50×20 m) observation/comparison cluster scripts (SLURM launchers in `run/dist_small/`), see the "Current Implementation Stage" small-domain-suite entry. |
 | `postprocessing/` (`GridapLFEMPost`) | Self-contained postprocessing library with its own environment (ReadVTK, Plots+GR, FFTW, Interpolations — pinned separately from the solver). Reads VTK (`solution.pvd`/`sol_t_*.vtu`) + CSV → `WaveSimulation` (auto-`regularize!`s the duplicated Q2 node cloud to a Cartesian grid). Modules: `io, probes, spectral, diagnostics, reconstruct, plotting, seastate`. Gauges/DFT/celerity/harmonics/radial/conservation; heatmap/animation(GIF)/Hovmöller/dispersion/profile plots; `seastate.jl` — Welch PSD, JONSWAP target overlay, spectral moments/Hs, zero-upcrossing heights, Rayleigh exceedance (+ `spectral_validation.jl` example). `reconstruct.jl` rebuilds `w(σ)`/`p_nh(σ)` from the stored velocity modes at any σ (analytic σ-basis, Gauss quad, no Gridap; matches solver `w_s` to 4–8%). No dependency on the solver. |
 | `algebraic_solver_plan.md` | The package layout reference (module/test/example map, notation rules). |
 | `algebraic_distributed_plan.md` | The distributed-memory design reference (GMRES stack conventions, reconstruction). |
@@ -132,12 +132,27 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
   (`check_flat_bed_consistency`). Derivation: `building_files/VerticalSemiDiscreteSystemImproved.tex`
   (flat-bed reduction of the full nonlinear model); plan: `building_files/flat_bed_plan.md`.
 - **Default integrator** SDIRK_2_2 (fully implicit, L-stable); **y-periodic** lateral BC option.
+- **Small-domain run suite** (`examples/distributed_small/`, 16 scripts + `run/dist_small/` launchers):
+  early-stage **observation + comparison** cases on a common 50×20 m domain with proportionally thin
+  sponge/relaxation/generation regions and short, dynamic timescales (`d=3.5, T=2.0`, `kd≈3.5`). Batch 1
+  (6): the configuration space — linear/nonlinear, `:none`/`:native`/`:full` pressure, flat/variable bed,
+  interior/BC generation, periodic/wall/open y-BC, small/big amplitude. Batch 2 (6): a controlled
+  comparison matrix around the flat periodic plane wave (pressure sweep, regime, amplitude, period/kd,
+  linear-vs-nonlinear shoaling). Batch 3 (4): sea-state comparisons (linear vs nonlinear, flat vs bar,
+  directional & irregular). Env-driven config (`get!` per-case defaults, banner ⇔ solver consistent);
+  each launcher has `n = px·py = ntasks`. Smoke-validated on 2 ranks: the big-amplitude full-nonlinear
+  flat periodic plane wave runs stably (Newton-converged, finite). Plans:
+  `building_files/LFEM_runs.md`, `LFEM_runs_compare.md`.
 
 **Under development / open:**
+- **WaveSpec `change_seed!` bug** — `WaveSpec.AiryWaves.change_seed!` accesses a non-existent
+  `state.spec` field (the struct field is `spectrum`), so `build_airy_state` (in
+  `examples/distributed/_dist_common.jl`) currently errors. Blocks every Dirichlet-sea run (production
+  `run_{irregular,directional}_sea_dist.jl` and the small sea cases). A one-line library fix; the run
+  scripts themselves are correct.
 - At-scale physical benchmarks on the cluster (Stokes harmonics, Dingemans bar) — scripts exist
   (`examples/validation/`, `examples/distributed/`); quantitative overlays on the paper's data pending.
-- Production-length (200+ Tp) irregular/directional sea runs (scripts ready, smoke-validated; full
-  runs not yet launched).
+- Production-length (200+ Tp) irregular/directional sea runs (scripts ready; blocked by the WaveSpec bug).
 - A run-and-reconstruct **pressure** profile test; a distributed-gauge utility.
 - Sheared-current focusing (paper §4 case 5) — needs an ambient-current term (a modelling extension).
 - Boundary-generation follow-ups: `:bottom`/`:top` generation sides; second-order (bound-wave)
