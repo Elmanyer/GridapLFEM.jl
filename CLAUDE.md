@@ -127,7 +127,8 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
   (`dhx,dhy = flat_bed ? 0 : ∂h`) in `global_residual`/`jacobian_*`; ∇η/dispersion terms are kept.
   Runtime-verified with a differential residual test (9/9 across all `nl_pressure` tiers: `flat_bed`
   changes a sloped-bed residual, is bit-exact on a flat bed); the `flat_bed=false` path is identical to
-  the prior validated baseline. Drivers emit a bathymetry↔switch consistency warning
+  the prior validated baseline, confirmed by `test_equivalence` re-passing 10/10 (oracle virtual-work
+  match ≤7.4e-15). Drivers emit a bathymetry↔switch consistency warning
   (`check_flat_bed_consistency`). Derivation: `building_files/VerticalSemiDiscreteSystemImproved.tex`
   (flat-bed reduction of the full nonlinear model); plan: `building_files/flat_bed_plan.md`.
 - **Default integrator** SDIRK_2_2 (fully implicit, L-stable); **y-periodic** lateral BC option.
