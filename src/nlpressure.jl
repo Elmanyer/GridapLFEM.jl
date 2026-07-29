@@ -56,8 +56,9 @@ function nlp_native_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy, dHx, dHy,
     M6 = (-1.0)*alg_outer(af, S)
     M7 = alg_outer(bf, S)
     M8 = (-1.0)*alg_outer(S, S)
-    # N³ = −[U_a ⊗ ∂_a(𝖺)] with the hand-expanded ∂𝖺 (bed Hessian analytic)
-    hxx, hxy, hyy = alg_bed_hessian(d_cf)
+    # N³ = −[U_a ⊗ ∂_a(𝖺)] with the hand-expanded ∂𝖺 (bed Hessian analytic).
+    # On a flat bed both ∇h (dhx,dhy → 0, passed in) and the bed Hessian vanish, so N³ → 0.
+    hxx, hxy, hyy = prob.flat_bed ? (0.0*d_cf, 0.0*d_cf, 0.0*d_cf) : alg_bed_hessian(d_cf)
     dxaf = hxx*Ux + dhx*alg_dx(Ux) + hxy*Uy + dhy*alg_dx(Uy)
     dyaf = hxy*Ux + dhx*alg_dy(Ux) + hyy*Uy + dhy*alg_dy(Uy)
     N3 = (-1.0)*(alg_outer(Ux, dxaf) + alg_outer(Uy, dyaf))

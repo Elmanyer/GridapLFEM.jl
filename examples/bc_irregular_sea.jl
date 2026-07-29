@@ -57,6 +57,7 @@ gauges  = [(8.0, Ly/2), (40.0, Ly/2), (64.0, Ly/2)]
 
 diags, vert, prob = setup_and_run(
     M           = 2,
+    flat_bed    = true,   # flat sea bed (∇h≡0)
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
     partition   = (nx, ny),

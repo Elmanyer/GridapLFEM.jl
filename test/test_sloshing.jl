@@ -42,7 +42,7 @@ diags, _, _ = setup_and_run(
     T_wave=1.0, A_wave=0.0, x_wm=-1e6,
     sponge_wL=0.0, sponge_wR=0.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=0.0,
     T_final=Tf, dt=dt, eta0_func=eta0,
-    linearised=true, advection=false,
+    regime=:linear,
     y_wall_bc=:wall, x_wall_bc=true,
     gauges=[(0.05, Ly/2)], save_every=0, nl_tol=1e-8)
 

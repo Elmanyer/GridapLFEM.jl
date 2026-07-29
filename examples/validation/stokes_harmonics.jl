@@ -45,8 +45,7 @@ diags, _, _ = setup_and_run(
     p_horizontal=2, h_val=d, T_wave=T, A_wave=A, x_wm=x_wm, y_wm=nothing,
     sponge_wL=12.0, sponge_wR=12.0, mu_max=20.0, T_final=T_final, dt=dt,
     save_every=0, gauges=[(x_g, y_g)],
-    linearised=false, advection=true,
-    lin_pressure=true, P_full=true, nl_pressure68=true, nl_pressure_full=true,
+    regime=:nonlinear, nl_pressure=:full, flat_bed=true,   # constant-depth Stokes wave (flat bed)
     print_every=200)
 
 # DFT the steady (second-half) gauge signal at ω and 2ω

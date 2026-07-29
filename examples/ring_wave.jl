@@ -54,6 +54,7 @@ push!(gauges, (x_wm + 10.0/sqrt(2.0), y_wm + 10.0/sqrt(2.0)))
 
 diags, vert, prob = setup_and_run(
     M           = 2,
+    flat_bed    = true,   # flat sea bed (∇h≡0)
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
     partition   = (nx, ny),

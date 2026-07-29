@@ -2,7 +2,10 @@
 #  io.jl — read Gridap VTK (.pvd/.vtu) and CSV into Julia structures
 # ==============================================================
 
-"Extract the point-data field arrays of a VTKFile as name => Vector{Float64}."
+"Extract the point-data field arrays of a VTKFile as name => Vector{Float64}.
+
+For a VTK file (snapshot at time step tn), extract the values of each field (eta, ux0, uy0, ux1, uy1...) as 
+(flat) vectors of Float64 and store them in a dictionary keyed by the corresponding field name."
 function _snapshot_fields(vtk)
     pd = get_point_data(vtk)
     out = Dict{String,Vector{Float64}}()
@@ -20,8 +23,8 @@ Load a single `.vtu`: node coordinates (x,y) and every point-data field.
 """
 function load_snapshot(vtu::AbstractString)
     vtk = VTKFile(vtu)
-    P = get_points(vtk)                       # 3 × n_points
-    points = permutedims(P[1:2, :])           # n_points × 2  (drop z)
+    P = get_points(vtk)                       # returns matrix with spatial coordinates of DoFs grid [3 × n_points] = [x1, x2, x3... ; y1, y2, y3... ; z1, z2, z3...]
+    points = permutedims(P[1:2, :])           # drop z coordinate and transpose so that [3 × n_points] -> [n_points × 2] = [x1, y1; x2, y2; x3, y3...]
     return points, _snapshot_fields(vtk)
 end
 
@@ -33,7 +36,11 @@ function _time_from_name(f::AbstractString)
     return x === nothing ? NaN : x
 end
 
-"Parse a ParaView .pvd collection → (vtu_paths::Vector, times::Vector), paths absolute."
+"Parse a ParaView .pvd collection → (vtu_paths::Vector, times::Vector), paths absolute.
+
+It extracts all referenced .vtu snapshot file paths and their corresponding simulation timestamps, 
+converts relative paths to absolute paths, and returns them sorted chronologically by time.
+"
 function _parse_pvd(pvd::AbstractString)
     dir = dirname(abspath(pvd))
     txt = read(pvd, String)
@@ -57,6 +64,8 @@ Load a whole run. `path` is a `.pvd` collection or a directory containing one
 (or a set of `sol_t_*.vtu`). All snapshots share the mesh; each field becomes a
 `[n_points × n_times]` matrix. If `regularize` and the mesh is a Cartesian node
 grid, a `GridView` is attached (enables heatmaps/interpolation/quadrature).
+
+returns a sim=`WaveSimulation` with fields, times, points, and metadata. 
 """
 function load_simulation(path::AbstractString; fields=:all, regularize::Bool=true)
     # resolve to a list of (vtu, time)
@@ -93,10 +102,23 @@ function load_simulation(path::AbstractString; fields=:all, regularize::Bool=tru
         end
     end
 
-    sim = WaveSimulation(collect(Float64, times), points, F, nothing,
-                         Dict{Symbol,Any}(:dir => dirname(abspath(vtus[1])),
+    # Generate simulation structure with results and metadata. 
+    # WaveSimulation:
+    #     times  :: Vector{Float64}                 # vector of times tn
+    #     points :: Matrix{Float64}                 # horizontal grid coordinates [n_points × 2]
+    #     fields :: Dict{String,FieldSeries}        # solution fields (eta, ux0, uy0...) dictionary   name → [n_points × Nt]
+    #     grid   :: Union{Nothing,GridView}         # optional regular-grid view of the node cloud (for reshape/interpolation)
+    #     meta   :: Dict{Symbol,Any}                # metadata dictionary (run directory, number of snapshots, and bounding box)
+
+    sim = WaveSimulation(collect(Float64, times),   # vector of times tn
+                                 points,            # horizontal grid coordinates 
+                                 F,                 # solution fields dictionary  
+                                 nothing,           # optional regular-grid view
+                                 Dict{Symbol,Any}(:dir => dirname(abspath(vtus[1])),
                                           :nt => nt,
                                           :bbox => (extrema(points[:,1]), extrema(points[:,2]))))
+                                          
+    # Add optional regular-grid view if the mesh is a Cartesian node grid.
     regularize && regularize!(sim)
     return sim
 end

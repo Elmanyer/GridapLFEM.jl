@@ -63,7 +63,7 @@ diags, _, _ = setup_and_run(
     p_horizontal=2, h_val=h_val, T_wave=T_wave, A_wave=0.0005, x_wm=x_wm,
     y_wm=nothing, sponge_wL=8.0, sponge_wR=8.0, sponge_wB=0.0, sponge_wT=0.0,
     mu_max=30.0, T_final=Tf, dt=dt, save_every=0,
-    gauges=[(x_g1,y_g),(x_g2,y_g)], linearised=true, advection=false,
+    gauges=[(x_g1,y_g),(x_g2,y_g)], regime=:linear,
     nl_tol=1e-8,
 )
 Cm  = estimate_phase_speed(diags, x_g1, x_g2, omega)

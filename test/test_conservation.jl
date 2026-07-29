@@ -33,7 +33,7 @@ dΩh = Measure(trian, 2*p_horizontal + 2)
 U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=true)
 
 prob = build_problem(vert; g=g, h_bathy=x -> h_val,
-    linearised=true, advection=true,
+    regime=:nonlinear,                 # mass conservation is physics-independent
     mu_sponge=x -> 0.0, wm_src=(x, t) -> 0.0)
 
 A0 = 0.01; xc = 5.0; wd = 1.0

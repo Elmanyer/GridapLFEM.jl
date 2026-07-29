@@ -20,11 +20,9 @@
 #    LFEM_CBDY        comma-sep σ node boundaries        (else optimised M≤4 / uniform)
 #    LFEM_RHO         water density [kg/m³]              1025
 #    LFEM_PRINT_EVERY solver progress report every N steps    (default 10)
-#    LFEM_LINEARISED  linearised physics (1/0)           0  (fully nonlinear)
-#    LFEM_ADVECTION   nonlinear advection (1/0)          1
-#    LFEM_LINP        linear slope pressure A/K (1/0)    script default
-#    LFEM_PFULL       full P¹L¹+P²L²+P³L³ leading press. 0  (oracle P³L³ form)
-#    LFEM_NLP68       nonlinear pressure comps 6–8 (1/0) 0
+#    LFEM_REGIME      physics regime: linear|nonlinear   nonlinear
+#    LFEM_NL_PRESSURE nonlinear pressure: none|native|full  none
+#    LFEM_FLAT_BED    flat sea bed ∇h≡0 (1/0)  1 flat scripts / 0 bathymetry script
 #
 #  The algebraic solver runs the FULL physics distributed through the one
 #  Gridap path (GMRES+Jacobi+Newton) — no owned V⊗H loop, no linear-core
@@ -52,10 +50,11 @@ cbdy_override() = haskey(ENV, "LFEM_CBDY") ?
 write_w_flag()  = genv_b("LFEM_WRITE_W", 1)
 write_p_flag()  = genv_b("LFEM_WRITE_PRESSURE", 1)
 rho_val()       = genv_f("LFEM_RHO", 1025.0)
-lin_flag()      = genv_b("LFEM_LINEARISED", 0)
-adv_flag()      = genv_b("LFEM_ADVECTION", 1)
-pfull_flag()    = genv_b("LFEM_PFULL", 0)
-nlp68_flag()    = genv_b("LFEM_NLP68", 0)
+regime_sym()         = Symbol(genv("LFEM_REGIME", "nonlinear"))
+nl_pressure_sym()    = Symbol(genv("LFEM_NL_PRESSURE", "none"))
+# Sea-bed geometry: false = variable bathymetry (∇h≠0), true = flat bed (∇h≡0).
+# Default per script (LFEM_FLAT_BED): flat-bed cases pass 1, the bathymetry case passes 0.
+flat_bed_flag(default::Int=1) = genv_b("LFEM_FLAT_BED", default)
 
 # ---- Time integrator + nonlinear/linear solver controls ---------------------
 #  Default integrator is the fully-implicit RungeKutta :SDIRK_2_2 (L-stable,
@@ -142,8 +141,8 @@ function banner(title, M, cpu_grid, partition, ncells, outdir)
     @printf("# %s  [ALGEBRAIC solver, stacked layout]\n", title)
     @printf("#   M=%d layers | cpu_grid=%s (%d ranks) | mesh=%s = %d cells\n",
             M, string(cpu_grid), prod(cpu_grid), string(partition), ncells)
-    @printf("#   linearised=%s advection=%s Pfull=%s nlP68=%s\n",
-            string(lin_flag()), string(adv_flag()), string(pfull_flag()), string(nlp68_flag()))
+    @printf("#   regime=%s nl_pressure=%s flat_bed=%s\n",
+            string(regime_sym()), string(nl_pressure_sym()), string(flat_bed_flag()))
     @printf("#   write_w=%s write_pressure=%s | out=%s\n",
             string(write_w_flag()), string(write_p_flag()), outdir)
     @printf("############################################################\n")

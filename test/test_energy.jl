@@ -46,7 +46,7 @@ model, trian = build_horizontal_model(domain, partition)
 dΩh = Measure(trian, 2*p_horizontal + 2)
 U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed basin
 
-prob = build_problem(vert; g=g, h_bathy=x -> h_val, linearised=true, advection=false,
+prob = build_problem(vert; g=g, h_bathy=x -> h_val, regime=:linear,
                      mu_sponge=x -> 0.0, wm_src=(x, t) -> 0.0)
 
 A0 = 0.005

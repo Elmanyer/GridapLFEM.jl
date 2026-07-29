@@ -84,7 +84,7 @@ export build_horizontal_model
 export build_fe_spaces
 
 # Problem
-export LFEMProblem, build_problem
+export LFEMProblem, build_problem, build_problem_raw, resolve_physics
 export global_residual, jacobian_u, jacobian_u_t
 export build_ode_operator, build_ode_operator_ad
 

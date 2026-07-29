@@ -55,6 +55,10 @@ struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
                                       #   (𝓐/𝓚 slope halves + 𝓟 leading part; all paths)
     nl_pressure_full :: Bool          # + comps c∈{1,2,4,5}: 𝓐 half by exact IBP; 𝓚/𝓟 halves via
                                       #   per-step frozen L²-projections (finite-amplitude, O(A³))
+    flat_bed     :: Bool              # flat sea-bed assumption ∇h ≡ 0: drops every term carrying a
+                                      #   factor ∇h (bed-slope 𝓐 packages, L¹=−u̇·∇h, N{3,6}, the
+                                      #   bed-slope IBP half). ∇H = ∇h+∇η → ∇η, so surface-slope
+                                      #   (∇η) and dispersion terms are kept. false = variable bathymetry.
     nlp_state    :: Base.RefValue{Any} # frozen (π𝖲, π𝖻) FEFunctions; nothing before the first step
     mu_sponge    :: Function
     wm_src       :: Function
@@ -64,20 +68,102 @@ struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
 end
 
 """
-    build_problem(vert; g, h_bathy, flags..., mu_sponge, wm_src) → LFEMProblem
+    resolve_physics(; regime=:nonlinear, nl_pressure=:none, flat_bed=false) → NamedTuple
 
-Reshape the `assemble_vertical_tensors` NamedTuple into constant Gridap
-tensors and bundle the runtime flags.
+Translate the high-level physics selection into the seven internal boolean flags
+(`linearised, advection, lin_pressure, P_full, nl_pressure68, nl_pressure_full, flat_bed`).
+This is the single place the flag couplings are defined and validated:
+
+  * `regime`      — `:linear` (⇒ `linearised`, no advection) or `:nonlinear`
+                    (⇒ full nonlinear core with advection);
+  * `nl_pressure` — `:none` / `:native` ({3,6,7,8}) / `:full` (+ Class-III {1,2,4,5});
+  * `flat_bed`    — the sea-bed geometry: `false` = variable bathymetry (∇h≠0, full
+                    model), `true` = flat bed (∇h≡0, every ∇h-term dropped; ∇η-terms kept).
+
+The model's pressure content is intrinsic to `regime`/`nl_pressure` (the leading pressure
+is always complete for the nonlinear core, `P_full`; the `A/K` linear slope package,
+`lin_pressure`, is part of the nonlinear model and of the linear model over a sloped bed);
+`flat_bed` then selects whether the bed-slope (∇h) part of those terms is assembled. It is
+orthogonal to `regime`/`nl_pressure` and never rejected — a consistency **warning** (bed
+varies vs constant) is emitted by the drivers, which know the domain.
+
+Nonlinear pressure is meaningful only in the `:nonlinear` regime, so
+`regime=:linear` with `nl_pressure≠:none` is rejected.
+"""
+function resolve_physics(; regime::Symbol = :nonlinear,
+                             nl_pressure::Symbol = :none,
+                             flat_bed::Bool = false)
+    regime in (:linear, :nonlinear) ||
+        error("resolve_physics: regime must be :linear or :nonlinear (got :$regime)")
+    nl_pressure in (:none, :native, :full) ||
+        error("resolve_physics: nl_pressure must be :none, :native or :full (got :$nl_pressure)")
+    regime == :linear && nl_pressure != :none &&
+        error("resolve_physics: nl_pressure=:$nl_pressure requires regime=:nonlinear " *
+              "(a linear model carries no nonlinear pressure)")
+    advection = regime == :nonlinear
+    return (linearised       = regime == :linear,
+            advection        = advection,
+            lin_pressure     = advection || !flat_bed,   # nonlinear: always; linear: variable-bed only
+            P_full           = advection,                # the nonlinear leading pressure is always complete
+            nl_pressure68    = nl_pressure in (:native, :full),
+            nl_pressure_full = nl_pressure == :full,
+            flat_bed         = flat_bed)
+end
+
+"""
+    build_problem(vert; g, h_bathy, regime=:nonlinear, nl_pressure=:none,
+                        flat_bed=false, mu_sponge, wm_src, relax_*) → LFEMProblem
+
+Assemble the problem bundle from the high-level physics selection (see
+[`resolve_physics`](@ref) for the `regime`/`nl_pressure`/`flat_bed` semantics).
+`flat_bed=true` solves the chosen model over a flat sea bed (∇h≡0); `false` over
+variable bathymetry. For fine-grained control of the individual boolean flags —
+e.g. `lin_pressure` without `P_full` — call [`build_problem_raw`](@ref) directly.
 """
 function build_problem(vert;
         g            :: Float64  = g,
-        h_bathy       :: Function = (x -> 3.5),
+        h_bathy      :: Function = (x -> 3.5),
+        regime       :: Symbol   = :nonlinear,
+        nl_pressure  :: Symbol   = :none,
+        flat_bed     :: Bool     = false,
+        mu_sponge    :: Function = (x -> 0.0),
+        wm_src       :: Function = ((x, t) -> 0.0),
+        relax_bc     :: Bool     = false,
+        relax_mu     :: Function = (x -> 0.0),
+        relax_tg                 = nothing)
+    phys = resolve_physics(; regime=regime, nl_pressure=nl_pressure,
+                             flat_bed=flat_bed)
+    return build_problem_raw(vert; g=g, h_bathy=h_bathy,
+        linearised=phys.linearised, advection=phys.advection,
+        lin_pressure=phys.lin_pressure, P_full=phys.P_full,
+        nl_pressure68=phys.nl_pressure68, nl_pressure_full=phys.nl_pressure_full,
+        flat_bed=phys.flat_bed,
+        mu_sponge=mu_sponge, wm_src=wm_src,
+        relax_bc=relax_bc, relax_mu=relax_mu, relax_tg=relax_tg)
+end
+
+"""
+    build_problem_raw(vert; g, h_bathy, <7 boolean flags>, mu_sponge, wm_src, relax_*) → LFEMProblem
+
+Low-level constructor taking the individual physics booleans directly
+(`linearised, advection, lin_pressure, P_full, nl_pressure68, nl_pressure_full, flat_bed`).
+Use [`build_problem`](@ref) for the ordinary high-level interface; this raw form
+exists for the cases that need a flag combination the high-level interface
+deliberately does not expose (e.g. `lin_pressure` without `P_full`, used by the
+oracle-equivalence test). `flat_bed=false` (default) assembles the bed-slope (∇h)
+terms; `true` drops them. Reshapes the `assemble_vertical_tensors` NamedTuple
+into constant Gridap tensors and bundles the flags.
+"""
+function build_problem_raw(vert;
+        g            :: Float64  = g,
+        h_bathy      :: Function = (x -> 3.5),
         linearised   :: Bool     = false,
         advection    :: Bool     = true,
         lin_pressure :: Bool     = false,
         P_full       :: Bool     = false,
         nl_pressure68:: Bool     = false,
         nl_pressure_full :: Bool = false,
+        flat_bed     :: Bool     = false,
         mu_sponge    :: Function = (x -> 0.0),
         wm_src       :: Function = ((x, t) -> 0.0),
         relax_bc     :: Bool     = false,
@@ -98,7 +184,7 @@ function build_problem(vert;
         error("build_problem: relax_bc=true requires relax_tg (incident_fields NamedTuple)")
     return LFEMProblem(g, h_bathy, vert.N_dof, Φ, Mv, Bv, P, Av, Kv, M3, G3,
                          A3, K3, P3, linearised, advection, lin_pressure,
-                         P_full, nl_pressure68, nl_pressure_full,
+                         P_full, nl_pressure68, nl_pressure_full, flat_bed,
                          Ref{Any}(nothing), mu_sponge, wm_src,
                          relax_bc, relax_mu, relax_tg)
 end
@@ -122,9 +208,14 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
     mu_cf  = CellField(prob.mu_sponge, trian)
     H = d_cf + η
 
-    # derived scalar / layer-vector fields
-    dhx = alg_dx(d_cf);        dhy = alg_dy(d_cf)              # bed slope ∇h
-    dHx = dhx + alg_dx(η);     dHy = dhy + alg_dy(η)           # ∇H = ∇d + ∇η
+    # derived scalar / layer-vector fields.
+    # Bed slope ∇h — identically zero under the flat-bed assumption. Zeroing it here
+    # is the single point of control for `flat_bed`: it drops L¹=−u̇·∇h, the ∇h
+    # prefactor of every bed-slope (𝓐) block, and the a=u·∇h field uniformly, while
+    # ∇H = ∇h+∇η collapses to ∇η so the surface-slope (∇η) terms survive.
+    dhx = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)
+    dhy = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
+    dHx = dhx + alg_dx(η);     dHy = dhy + alg_dy(η)           # ∇H = ∇h + ∇η
     DW  = alg_dx(Wx) + alg_dy(Wy)                              # test-divergence vector
     DUt = alg_dx(Uxt) + alg_dy(Uyt)                            # layer div(u̇)
     ub  = alg_vec2(alg_dot(prob.Φ, Ux), alg_dot(prob.Φ, Uy))   # depth-averaged velocity
@@ -215,8 +306,9 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
         r = r + nlp_native_contrib(prob, d_cf, η, H, dhx, dhy, dHx, dHy,
                                    Ux, Uy, Wx, Wy, DW, Ugh, UgH, S, DU, dΩh)
         if prob.nl_pressure_full
-            r = r + nlp_gradh_contrib(prob, d_cf, η, H, dhx, dhy,
-                                      Ux, Uy, Wx, Wy, Ugh, UgH, S, DU, dΩh)
+            # Class-III bed-slope (𝓐, ∇h) IBP half — pure ∇h; skipped on a flat bed.
+            prob.flat_bed || (r = r + nlp_gradh_contrib(prob, d_cf, η, H, dhx, dhy,
+                                      Ux, Uy, Wx, Wy, Ugh, UgH, S, DU, dΩh))
             st = prob.nlp_state[]
             if st !== nothing
                 N1, N2, N4, N5 = nlp_frozen_N(Ux, Uy, S, DU, st.piS, st.pib)
@@ -258,7 +350,8 @@ function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dΩh)
     if lin
         r = r + ∫( (-1.0)*(d_cf*d_cf)*((alg_mul(prob.Bv, dDUt)) ⋅ DW) ) * dΩh
     else
-        dhx = alg_dx(d_cf); dhy = alg_dy(d_cf)
+        dhx = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)   # ∇h ≡ 0 on a flat bed
+        dhy = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
         dHx = dhx + alg_dx(η); dHy = dhy + alg_dy(η)
         dUgHt = dHx*dUxt + dHy*dUyt
         if prob.P_full
@@ -315,7 +408,8 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dΩh)
 
     # full advection derivative
     if prob.advection
-        dhx = alg_dx(d_cf); dhy = alg_dy(d_cf)
+        dhx = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)   # ∇h ≡ 0 on a flat bed
+        dhy = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
         dHx = dhx + alg_dx(η); dHy = dhy + alg_dy(η)
         DU  = alg_dx(Ux) + alg_dy(Uy)
         UgH = dHx*Ux + dHy*Uy

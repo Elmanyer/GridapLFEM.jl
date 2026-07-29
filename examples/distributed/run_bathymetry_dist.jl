@@ -48,7 +48,6 @@ periods  = genv_f("LFEM_PERIODS", 40.0)
 Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
 save_ev  = genv_i("LFEM_SAVE_EVERY", 25)
 outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "bathymetry_dist_M$(M)"))
-use_linp = genv_b("LFEM_LINP", 1)
 
 # smooth submerged bar: d(x) = d0 − (h_bar/2)·[tanh((x−x_L)/s) − tanh((x−x_R)/s)]
 # (difference → 2 on the bar top ⇒ d = d0 − h_bar there; analytic ⇒ exact ∇h, ∇²h)
@@ -64,9 +63,8 @@ diags, vert, prob = setup_and_run_distributed(
     sponge_wL=sponge, sponge_wR=sponge, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
     T_final=Tfinal, dt=dt,
     h_bathy=h_bathy,                                   # ★ variable bathymetry
-    linearised=lin_flag(), advection=adv_flag(),
-    lin_pressure=use_linp,                           # ★ slope-pressure package on the bar
-    P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
+    regime=regime_sym(), nl_pressure=nl_pressure_sym(),
+    flat_bed=flat_bed_flag(0),                         # ★ variable bathymetry on the bar: ∇h terms ON (default)
     y_wall_bc=:wall, x_wall_bc=false,
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),

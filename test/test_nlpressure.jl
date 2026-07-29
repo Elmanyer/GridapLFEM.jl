@@ -193,8 +193,7 @@ diags, _, _ = setup_and_run(
     domain=((0.0,60.0),(0.0,2.0)), partition=(60,2), p_horizontal=2,
     x_wm=8.0, sponge_wL=8.0, sponge_wR=8.0, mu_max=30.0,
     T_final=2.0, dt=0.05, h_bathy=bar,
-    linearised=false, advection=true,
-    lin_pressure=true, P_full=true, nl_pressure68=true, nl_pressure_full=true,
+    regime=:nonlinear, nl_pressure=:full, flat_bed=false,   # tanh bar → variable bathymetry (∇h ON)
     gauges=[(26.0,1.0)], save_every=0)
 emax = maximum(d.eta_max for d in diags)
 @printf("  bar run: steps=%d  max η=%.5f m\n", length(diags), emax)

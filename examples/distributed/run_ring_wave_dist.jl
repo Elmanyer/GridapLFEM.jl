@@ -47,8 +47,7 @@ diags, vert, prob = setup_and_run_distributed(
     x_wm=L/2, y_wm=L/2,                                   # point source → ring waves
     sponge_wL=sponge, sponge_wR=sponge, sponge_wB=sponge, sponge_wT=sponge, mu_max=mumax,
     T_final=Tfinal, dt=dt,
-    linearised=lin_flag(), advection=adv_flag(),
-    P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
+    regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(),          # flat sea bed (∇h≡0); set LFEM_FLAT_BED=0 for variable bathymetry
     y_wall_bc=:wall, x_wall_bc=false,
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),

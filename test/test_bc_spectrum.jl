@@ -93,8 +93,8 @@ diags, _, _ = setup_and_run(
     p_horizontal=2, h_val=h_val, T_wave=Ts[2], A_wave=maximum(amps),
     wave_bc=wi, bc_side=:left, sponge_wL=0.0, sponge_wR=10.0,
     sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0, T_final=Tf, dt=dt,
-    save_every=0, gauges=[(x_g1, y_g), (x_g2, y_g)], linearised=true,
-    advection=false, check_every=0, print_every=100)
+    save_every=0, gauges=[(x_g1, y_g), (x_g2, y_g)], regime=:linear,
+    check_every=0, print_every=100)
 
 emax = maximum(d.eta_max for d in diags)
 check("stable (no NaN, bounded)", !isnan(emax) && emax < 10*sum(amps),

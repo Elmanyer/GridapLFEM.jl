@@ -54,8 +54,8 @@ U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=fals
 # custom bichromatic Gaussian mass source (two frequencies superposed)
 bwm(x, t) = 2*exp(-((x[1]-x_wm)/σ_wm)^2)*(A1*ω1*cos(ω1*t) + A2*ω2*cos(ω2*t))
 sponge = make_sponge(((0.0,Lx),(0.0,Ly)), 15.0, 15.0, 0.0, 0.0, 8.0)
-prob = build_problem(vert; g=g, h_bathy=x -> d, linearised=false, advection=true,
-                     lin_pressure=true, P_full=true, nl_pressure68=true,
+prob = build_problem(vert; g=g, h_bathy=x -> d, regime=:nonlinear,
+                     nl_pressure=:native, flat_bed=true,   # constant-depth (flat bed)
                      mu_sponge=sponge, wm_src=bwm)
 
 x_g = x_wm + 6lam

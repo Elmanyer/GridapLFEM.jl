@@ -113,7 +113,10 @@ for cfg in configs
     prob_lay = LFEMProblemLFEM(g_phys, cfg.dfn,
         vert_o.Mmat, vert_o.Phi, vert_o.B, vert_o.Mcal, vert_o.Gcal, vert_o.A, vert_o.K,
         Nσ, cfg.lin, cfg.linp, cfg.adv, sponge, wm)
-    prob = ALG.build_problem(vert_a; g=g_phys, h_bathy=cfg.dfn,
+    # build_problem_raw: the oracle has lin_pressure WITHOUT P_full, a split the
+    # high-level regime/nl_pressure/flat_bed interface deliberately ties. flat_bed
+    # defaults to false here (∇h computed from cfg.dfn, matching the oracle).
+    prob = ALG.build_problem_raw(vert_a; g=g_phys, h_bathy=cfg.dfn,
         linearised=cfg.lin, advection=cfg.adv, lin_pressure=cfg.linp,
         P_full=false, nl_pressure68=false, mu_sponge=sponge, wm_src=wm)
 

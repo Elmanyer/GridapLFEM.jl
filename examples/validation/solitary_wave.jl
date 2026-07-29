@@ -41,7 +41,7 @@ dΩh = Measure(trian, 2*p_horizontal + 2)
 U, V = build_fe_spaces(model, p_horizontal, Nσ; y_wall_bc=:wall, x_wall_bc=true)   # closed x!
 
 sponge = make_sponge(domain, 0.0, 12.0, 0.0, 0.0, 8.0)          # absorb at the far end
-prob = build_problem(vert; g=g, h_bathy=x -> d, linearised=false, advection=true,
+prob = build_problem(vert; g=g, h_bathy=x -> d, regime=:nonlinear,
                      mu_sponge=sponge, wm_src=(x,t) -> 0.0)
 
 # IC: η = A sech²(κ(x−x0)); uⱼˣ = c η/(d+η) (uniform over modes); uⱼʸ = 0

@@ -27,10 +27,9 @@ export LFEM_PY=5             # 20*5 = 100 ranks; mesh 1500x100 -> 75x20 cells/ra
 # export LFEM_PERIODS=40      # run length in wave periods
 # export LFEM_NX=1500; export LFEM_NY=100
 
-# --- Slope-pressure physics (variable bed) — LINP on by default here --------
-# export LFEM_LINP=1          # A/K linear slope-pressure package
-# export LFEM_PFULL=1         # + full leading-pressure slope (P1L1+P2L2)
-# export LFEM_NLP68=1         # + nonlinear pressure comps 6-8
+# --- Sea-bed geometry (variable bed → ∇h terms ON) --------------------------
+# export LFEM_FLAT_BED=0         # 0 = variable bathymetry (default for the bar); 1 = flat bed (∇h≡0)
+# export LFEM_NL_PRESSURE=native # nonlinear pressure: none | native | full
 
 # --- Solver knobs (RungeKutta :SDIRK_2_2 defaults; bump if Newton stalls) ----
 # export LFEM_LS_MAXITER=4000

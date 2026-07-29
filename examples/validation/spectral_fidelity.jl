@@ -72,7 +72,7 @@ diags, vert, prob = setup_and_run(
     p_horizontal=2, h_val=h_val, g=g, T_wave=Tp, A_wave=Hs/2,
     wave_bc=wi, bc_side=:left, bc_profile=:model,
     sponge_wL=0.0, sponge_wR=25.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=5.0,
-    T_final=T_final, dt=dt, linearised=true, advection=false,
+    T_final=T_final, dt=dt, regime=:linear,
     save_every=0, gauges=gauges, print_every=200, check_every=0)
 
 # ── Component-wise analysis ───────────────────────────────────

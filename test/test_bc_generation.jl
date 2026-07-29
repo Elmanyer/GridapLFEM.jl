@@ -89,7 +89,7 @@ common = (M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)),
 println("\n--- A: Dirichlet inflow, :model polarization, linearised ---")
 diagsA, _, _ = setup_and_run(; common...,
     wave_bc=:regular, bc_side=:left, bc_profile=:model, sponge_wL=0.0,
-    T_final=Tf, linearised=true, advection=false)
+    T_final=Tf, regime=:linear)
 
 emaxA = maximum(d.eta_max for d in diagsA)
 check("A: stable (no NaN, no blow-up)",
@@ -119,7 +119,7 @@ check("A: phase speed vs Airy celerity < 3.5%", erre < 0.035,
 println("\n--- B: Dirichlet inflow, :airy polarization, linearised ---")
 diagsB, _, _ = setup_and_run(; common...,
     wave_bc=:regular, bc_side=:left, bc_profile=:airy, sponge_wL=0.0,
-    T_final=Tf, linearised=true, advection=false)
+    T_final=Tf, regime=:linear)
 emaxB = maximum(d.eta_max for d in diagsB)
 check("B: stable", !isnan(emaxB) && emaxB < 10*A_wave,
       @sprintf("(max η=%.2e m)", emaxB))
@@ -132,7 +132,7 @@ check("B: gauge amplitude within 15% of A (cosh sampling mismatch)",
 println("\n--- C: Dirichlet inflow + generation/absorption relaxation zone ---")
 diagsC, _, _ = setup_and_run(; common...,
     wave_bc=:regular, bc_side=:left, bc_profile=:model, sponge_wL=0.0,
-    relax_bc=true, T_final=Tf, linearised=true, advection=false)
+    relax_bc=true, T_final=Tf, regime=:linear)
 emaxC = maximum(d.eta_max for d in diagsC)
 check("C: stable with relaxation zone", !isnan(emaxC) && emaxC < 10*A_wave,
       @sprintf("(max η=%.2e m)", emaxC))
@@ -145,7 +145,7 @@ check("C: gauge amplitude within 10% of A",
 println("\n--- D: Dirichlet inflow, fully nonlinear (advection + H-weights) ---")
 diagsD, _, _ = setup_and_run(; common...,
     wave_bc=:regular, bc_side=:left, bc_profile=:model, sponge_wL=0.0,
-    T_final=5*T_wave, linearised=false, advection=true)
+    T_final=5*T_wave, regime=:nonlinear)
 emaxD = maximum(d.eta_max for d in diagsD)
 check("D: nonlinear run stable", !isnan(emaxD) && emaxD < 10*A_wave,
       @sprintf("(max η=%.2e m)", emaxD))

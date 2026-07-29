@@ -13,7 +13,7 @@
 #
 #  Because the stacked residual and its hand Jacobians are expressed purely in
 #  Gridap CellField algebra, this single distributed path carries every physics
-#  flag — advection, lin_pressure, P_full, nl_pressure68, nl_pressure_full —
+#  flag — advection, lin_pressure, P_full, nl_pressure68, nl_pressure_full, flat_bed —
 #  using the very same code as the sequential driver; only the linear solver
 #  (GMRES + Jacobi + Newton) and the reductions differ.
 #
@@ -75,12 +75,10 @@ function setup_and_run_distributed(;
     y_wall_bc    :: Symbol  = :wall,       # y-edge BC: :wall (𝖴y=0) | :open (natural) | :periodic
     x_wall_bc    :: Bool    = false,       # solid walls on the x-edges (true for closed-basin IC)
     # ---- Physics flags (all supported in parallel) ---------------------------
-    linearised   :: Bool    = false,       # linear regime
-    advection    :: Bool    = true,        # nonlinear advection block
-    lin_pressure :: Bool    = false,       # A/K linear slope-pressure package
-    P_full       :: Bool    = false,       # keep all three slope components of R_P
-    nl_pressure68:: Bool    = false,       # nonlinear-pressure native set c∈{3,6,7,8}
-    nl_pressure_full :: Bool = false,      # + c∈{1,2,4,5}; distributed mass solve = CG + Jacobi
+    regime       :: Symbol  = :nonlinear,  # :linear (linearised, no advection) | :nonlinear
+    nl_pressure  :: Symbol  = :none,       # nonlinear pressure: :none | :native | :full (CG+Jacobi)
+    flat_bed     :: Bool    = false,       # sea-bed geometry: false = variable bathymetry (∇h≠0),
+                                           #   true = flat bed (∇h≡0; ∇h-terms dropped, ∇η-terms kept)
     nlp_cg_rtol  :: Float64 = 1e-10,       # CG tolerance for the frozen-projection solve
     nlp_cg_maxiter :: Int   = 500,         # CG iteration cap for that solve
     h_bathy                  = nothing,     # x → d(x): variable bathymetry (overrides h_val)
@@ -188,10 +186,8 @@ function setup_and_run_distributed(;
                                    inflow=inflow)
         if i_am_main(ranks)
             @printf("  domain [%.1f,%.1f]×[%.1f,%.1f]  partition %d×%d\n", x0,x1,y0,y1,nx,ny)
-            @printf("  Fields: 3 (η + 2 stacked VectorValue{%d}) | lin=%s adv=%s linP=%s Pfull=%s nlP68=%s nlPfull=%s\n",
-                    vert.N_dof, string(linearised), string(advection),
-                    string(lin_pressure), string(P_full), string(nl_pressure68),
-                    string(nl_pressure_full))
+            @printf("  Fields: 3 (η + 2 stacked VectorValue{%d}) | regime=%s nl_pressure=%s flat_bed=%s\n",
+                    vert.N_dof, string(regime), string(nl_pressure), string(flat_bed))
         end
 
         # ----- Stage 3: forcing setup (identical on every rank) ----------------
@@ -208,6 +204,7 @@ function setup_and_run_distributed(;
              isnothing(y_wm) ? make_wavemaker_line(x_wm, A_wave, T_wave, k_wave) :
                                make_wavemaker_point(x_wm, Float64(y_wm), A_wave, T_wave)
         dfn = isnothing(h_bathy) ? (x -> h_val) : h_bathy   # bathymetry
+        i_am_main(ranks) && check_flat_bed_consistency(dfn, dom_flat, flat_bed)  # bed ↔ flat_bed warning (rank 0)
 
         # Optional relaxation zone next to the inflow (generation + absorption).
         relax_mu_fn = x -> 0.0
@@ -223,8 +220,7 @@ function setup_and_run_distributed(;
 
         # Same problem bundle as the sequential driver — identical residual.
         prob = build_problem(vert; g=g, h_bathy=dfn,
-            linearised=linearised, advection=advection, lin_pressure=lin_pressure,
-            P_full=P_full, nl_pressure68=nl_pressure68, nl_pressure_full=nl_pressure_full,
+            regime=regime, nl_pressure=nl_pressure, flat_bed=flat_bed,
             mu_sponge=sponge, wm_src=wm,
             relax_bc=use_relax, relax_mu=relax_mu_fn, relax_tg=relax_tg)
 
@@ -251,9 +247,9 @@ function setup_and_run_distributed(;
             make_initial_conditions(space_at(U, 0.0), vert.N_dof; eta0_func=eta0_func)
         end
 
-        # For nl_pressure_full, the frozen-projection mass solve uses CG + Jacobi
+        # For nl_pressure=:full, the frozen-projection mass solve uses CG + Jacobi
         # here (a partitioned matrix has no direct-factorisation method).
-        nlp = nl_pressure_full ?
+        nlp = nl_pressure == :full ?
               (prob, build_nlp_ctx(model, p_horizontal, vert.N_dof, trian, dΩh;
                                    distributed=true, cg_rtol=nlp_cg_rtol,
                                    cg_maxiter=nlp_cg_maxiter)) : nothing

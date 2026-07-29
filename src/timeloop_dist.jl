@@ -5,7 +5,7 @@
 #  residual/Jacobians are expressed entirely in Gridap CellField algebra
 #  (`Operation` is forwarded for `DistributedCellField`), the very same
 #  `global_residual`/`jacobian_*` run across MPI ranks unchanged — the full
-#  nonlinear physics (advection, slope pressure, P_full, nl_pressure68) is
+#  nonlinear physics (advection, slope pressure, P_full, nl_pressure68, flat_bed) is
 #  available distributed with no separate code path. This file provides the
 #  partitioned mesh builder, the scalable Krylov solver stack, and a rank-aware
 #  time loop.

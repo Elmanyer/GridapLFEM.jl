@@ -89,8 +89,7 @@ result = with_mpi() do distribute
     end
 
     prob = build_problem(vert; g=g, h_bathy=h_bathy,
-        linearised=false, advection=true, lin_pressure=true, P_full=true,
-        nl_pressure68=true, nl_pressure_full=nlpfull,
+        regime=:nonlinear, nl_pressure=(nlpfull ? :full : :native), flat_bed=false,   # curved bed (∇h ≠ 0)
         mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)
     nlp = nlpfull ? (prob, build_nlp_ctx(model, feord, Nσ, trian, dΩh; distributed=true)) : nothing
 

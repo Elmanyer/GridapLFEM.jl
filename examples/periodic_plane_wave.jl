@@ -51,6 +51,7 @@ gauges = [(x_wm + 8*4.0, 0.5),          # near the bottom periodic edge
 
 diags, vert, prob = setup_and_run(
     M           = 2,
+    flat_bed    = true,   # flat sea bed (∇h≡0)
     c_bdy       = [0.0, 0.728, 1.0],
     domain      = ((0.0, Lx), (0.0, Ly)),
     partition   = (nx, ny),

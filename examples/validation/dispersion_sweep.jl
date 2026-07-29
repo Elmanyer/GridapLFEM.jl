@@ -1,7 +1,7 @@
 # ==============================================================
 #  dispersion_sweep.jl — trace the dispersion curve with the FULL solver
 #
-#  Runs the full nonlinear solver (linearised=false, advection=true) at a tiny
+#  Runs the full nonlinear solver (regime=:nonlinear) at a tiny
 #  amplitude on a flat bed, sweeping kd across the range, and measures the phase
 #  celerity Cm at each point via DFT phase differencing. Produces the measured
 #  dispersion curve Cm/Ce(kd) — the time-domain counterpart of the closed-form
@@ -60,7 +60,7 @@ for kd in kd_list
         h_val=d, T_wave=T_wave, A_wave=A_wave, x_wm=x_wm, y_wm=nothing,
         sponge_wL=6.0, sponge_wR=8.0, mu_max=30.0, T_final=14*T_wave, dt=T_wave/24,
         save_every=0, gauges=[(x,Ly/2) for x in xg],
-        linearised=false, advection=true, print_every=10_000)
+        regime=:nonlinear, print_every=10_000)
     Cm = celerity_spatial(diags, xg, omega, k)
     r  = isnan(Cm) ? NaN : Cm/Ce; err = isnan(Cm) ? NaN : abs(r-1)
     @printf("  %5.1f %8.3f %8.2f %8.3f %8.3f %8.4f\n", kd, d, lam, Ce, Cm, r)

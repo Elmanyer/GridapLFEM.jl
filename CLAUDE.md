@@ -40,7 +40,7 @@ modes are 1-based `j=1..Nσ`, one per node.
 
 | File | What it is |
 |------|-----------|
-| `Project.toml` / `Manifest.toml` | A standalone Julia environment (deliberately not a registered package — `GridapLFEM` is loaded via `include()`+`using .GridapLFEM`, never `Pkg.add`). It is pinned to the same package versions as the parent `../Project.toml` (Gridap 0.19.11, GridapDistributed 0.4.13, GridapSolvers 0.6.2, PartitionedArrays 0.3.5, MPI 0.20.26) so both environments behave identically. If you add a new `using X` to any `src/*.jl` file, run `Pkg.add("X")` here too (`--project=GridapLFEM.jl`) to keep the two environments in sync. |
+| `Project.toml` / `Manifest.toml` | A standalone Julia environment (deliberately not a registered package — `GridapLFEM` is loaded via `include()`+`using .GridapLFEM`, never `Pkg.add`). It is pinned to the same package versions as the parent `../Project.toml` (Gridap 0.19.11, GridapDistributed 0.4.13, GridapSolvers 0.6.2, PartitionedArrays 0.3.5, MPI 0.20.26) so both environments behave identically. If you add a new `using X` to any `src/*.jl` file, run `Pkg.add("X")` here too (`--project=GridapLFEM.jl`) to keep the two environments in sync. `BlockArrays` is a direct `[deps]` entry (already resolved in the Manifest) only so the differently-structured **oracle** `LFEModel2D` loaded by `test_equivalence.jl` can `using BlockArrays` from this env. |
 | `latex_doc/` (`main.tex` + section files) | The authoritative LaTeX derivation, organised as a multi-file project: `main.tex` (preamble/macros) inputs `GoverningEquations`, `SigmaTransformation`, `VerticalFEapprox`, `wDerivation`, `pDerivation`, `VerticalProjection`, `VerticalSemiDiscreteSystem`, **`GridapImplementation.tex` (§8** — stacked layout, residual implementation, 𝓛/𝓝 pressure treatment, wave generation/sponge/BC incl. the Dirichlet boundary wave generation subsection) and **`ValidationTests.tex` (§9** — the validation report incl. the BC-generation gates, Goda–Suzuki, spectral fidelity). Sign convention: `R_P` is a positive integral **subtracted** in the global sum, uniformly with `R_lin`/`R_nonlin`. Compile-checked with pdflatex. |
 | `LFEM_Gridap.md` | Synthesis of the derivation §1–§8 leading to the single scalar residual, in the LaTeX notation; §9 bridges that notation to the solver code. |
 | `algebraic_residual_math.md` | Operator reference: how each §8 residual term is written with native Gridap tensor ops (no MultiField decomposition, no vertical-index loops) — the `L`/`N` pressure stacks, the leading-pressure `R_P`, IBP of second-derivative terms, and the verified Gridap operator table. |
@@ -71,8 +71,11 @@ that default to the fully-implicit `RungeKutta(:SDIRK_2_2)` (L-stable 2nd-order,
 deep-water regime; `:theta` Crank–Nicolson also selectable) — sequential LU+Newton / distributed
 GMRES+Jacobi+Newton; the full nonlinear physics — advection, the full leading pressure `R_P`, all
 eight 𝓝 nonlinear-pressure components (native {3,6,7,8} + frozen-projection {1,2,4,5}) — in **both**
-serial and distributed; wavemaker/sponge/wall-BC; runtime solver monitoring plus an independent
-governing-equation residual checker (`monitor.jl`, transient-aware); and `w_s`/`p_s` VTK reconstruction.
+serial and distributed. The model is selected through three orthogonal high-level controls
+`regime`/`nl_pressure`/`flat_bed` (see §6): `flat_bed` chooses a flat sea bed (∇h≡0, every ∇h-term
+dropped, ∇η/dispersion kept) vs variable bathymetry, with a driver-side consistency warning.
+Wavemaker/sponge/wall-BC; runtime solver monitoring plus an independent governing-equation residual
+checker (`monitor.jl`, transient-aware); and `w_s`/`p_s` VTK reconstruction.
 
 **Dirichlet boundary wave generation + WaveSpec coupling** (`waveinput.jl`): waves generated purely
 from time-varying Dirichlet data on a domain side — regular / multichromatic / WaveSpec `AiryState`
@@ -103,6 +106,31 @@ Rayleigh exceedance), validated against solver output.
 **Docs**: `latex_doc/` (authoritative derivation; §8 incl. the Dirichlet-generation subsection; §9
 the validation report incl. BC gates — compile-checked), `LFEM_Gridap.md`, `boundary_wave_generation.md`,
 `ValidationTests.md`.
+
+## Current Implementation Stage
+
+**Working & validated.** The 2-D LFE-M solver is complete and validated in **both** serial and
+distributed forms: the stacked loop-free residual + hand Jacobians, the full nonlinear physics
+(advection, the complete leading pressure `R_P`, all eight 𝓝 nonlinear-pressure components), the
+SDIRK/θ time integrators, wavemaker/sponge/wall/periodic BCs, and Dirichlet boundary wave generation
+with WaveSpec coupling. The `test/` suite (21 files + `cluster/`) passes — cross-check virtual-work
+equivalence ≤7e-15, asymptotic consistency (full-NL⇒Airy, kd→0⇒√(gd)), unsteady nonlinear MMS ~3e-9,
+BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. Postprocessing
+(`GridapLFEMPost`) and the authoritative LaTeX derivation are in place and compile-checked.
+
+**Recently completed (this branch).**
+- **Physics-selection interface** (§6): the six residual booleans are driven by three orthogonal
+  high-level controls `regime` ∈ {`:linear`,`:nonlinear`}, `nl_pressure` ∈ {`:none`,`:native`,`:full`},
+  and **`flat_bed`** ∈ {`false`,`true`} via `resolve_physics`. `flat_bed` replaced the former
+  `slope_pressure` switch: it selects a flat sea bed (∇h≡0 — drops the bed-slope `𝓐` packages, `L¹`,
+  `N{3,6}`, the bed-slope IBP half) vs variable bathymetry, at a single control point
+  (`dhx,dhy = flat_bed ? 0 : ∂h`) in `global_residual`/`jacobian_*`; ∇η/dispersion terms are kept.
+  Runtime-verified with a differential residual test (9/9 across all `nl_pressure` tiers: `flat_bed`
+  changes a sloped-bed residual, is bit-exact on a flat bed); the `flat_bed=false` path is identical to
+  the prior validated baseline. Drivers emit a bathymetry↔switch consistency warning
+  (`check_flat_bed_consistency`). Derivation: `building_files/VerticalSemiDiscreteSystemImproved.tex`
+  (flat-bed reduction of the full nonlinear model); plan: `building_files/flat_bed_plan.md`.
+- **Default integrator** SDIRK_2_2 (fully implicit, L-stable); **y-periodic** lateral BC option.
 
 **Under development / open:**
 - At-scale physical benchmarks on the cluster (Stokes harmonics, Dingemans bar) — scripts exist
@@ -276,10 +304,10 @@ than as one `VectorValue{3}`-of-vectors) is what keeps the term well-typed and f
 carries:
 
 * **Components {3,6,7,8} are first-order** (outer products), so they are assembled directly in all
-  three blocks (𝓐/𝓚 slope halves + the 𝓟 leading part), serial and distributed — flag `nl_pressure68`.
+  three blocks (𝓐/𝓚 slope halves + the 𝓟 leading part), serial and distributed — `nl_pressure=:native`.
 * **Components {1,2,4,5} carry second derivatives** of the unknowns (`∂𝖲=∇(∇·(H𝖴))`, "gradient of a
-  divergence", and `∂²η`), which cannot act directly on `Q2`. They are handled by class — flag
-  `nl_pressure_full`:
+  divergence", and `∂²η`), which cannot act directly on `Q2`. They are handled by class —
+  `nl_pressure=:full`:
   * **∇h half** → **integrated by parts onto the test function** (exact; uses the analytic bed Hessian
     `∇²h`), machine-verified.
   * **∇H half + 𝓟 part** → the `∂²η` factor is irreducible, so it is evaluated from **per-step frozen
@@ -289,8 +317,31 @@ carries:
 
 All 𝓝 blocks are `O(A²–A³)` and treated quasi-Newton (they add to the residual but not to the
 Jacobian — their contribution to convergence is negligible at these amplitudes). The full linear-regime
-physics (dispersion, sloshing, small-amplitude shoaling) is available without any nonlinear-pressure
-flag; the flags add the finite-amplitude harmonics.
+physics (dispersion, sloshing, small-amplitude shoaling) is available with `nl_pressure=:none`;
+`:native`/`:full` add the finite-amplitude harmonics.
+
+### Physics selection interface
+
+The drivers (and `build_problem`) select the physics through **three coupled controls** rather than
+six independent booleans (which allowed inconsistent/redundant combinations):
+
+| control | values | meaning |
+|---------|--------|---------|
+| `regime` | `:linear` \| `:nonlinear` | `:linear` = linearised core, no advection; `:nonlinear` = full nonlinear core + advection |
+| `nl_pressure` | `:none` \| `:native` \| `:full` | nonlinear non-hydrostatic pressure: off / `{3,6,7,8}` / `+{1,2,4,5}` |
+| `flat_bed` | `Bool` | sea-bed geometry: `false` = variable bathymetry (∇h≠0, full model); `true` = flat bed (∇h≡0 — every term carrying an explicit or implicit factor ∇h is dropped, ∇η/dispersion terms kept). Orthogonal to `regime`/`nl_pressure`; see `VerticalSemiDiscreteSystemImproved.tex` §"Flat-bed reduction". |
+
+`resolve_physics` (in `src/problem.jl`) maps these to the seven internal booleans stored on
+`LFEMProblem` (`linearised, advection, lin_pressure, P_full, nl_pressure68, nl_pressure_full, flat_bed`).
+The model's pressure content is intrinsic to `regime`/`nl_pressure` (`P_full = advection`,
+`lin_pressure = advection || !flat_bed`); `flat_bed` then zeroes ∇h at a single point in
+`global_residual`/`jacobian_*` (`dhx,dhy = flat_bed ? 0 : ∂h`), which uniformly drops the bed-slope
+`𝓐` packages, `L¹`, `N{3,6}` and the bed-slope IBP half while `∇H → ∇η` keeps the surface-slope terms.
+`resolve_physics` rejects the footgun `regime=:linear` with `nl_pressure≠:none`; the drivers emit a
+**warning** on a `flat_bed` ↔ bathymetry mismatch (`check_flat_bed_consistency`). **`build_problem`**
+takes the three high-level controls; **`build_problem_raw`** is the low-level escape hatch taking the
+seven booleans directly, for the rare combination the high-level interface deliberately does not expose
+— notably `lin_pressure` without `P_full`, used by the oracle-equivalence test.
 
 ---
 

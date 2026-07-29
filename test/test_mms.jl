@@ -79,8 +79,7 @@ ustar_dofs(t) = get_free_dof_values(ustar(t))
 
 # ---- problem: fully nonlinear (advection + full leading + native 𝓝) ------------
 prob = build_problem(vert; g=g, h_bathy=h_bathy,
-    linearised=false, advection=true, lin_pressure=true, P_full=true,
-    nl_pressure68=true, nl_pressure_full=FULL,
+    regime=:nonlinear, nl_pressure=(FULL ? :full : :native), flat_bed=false,   # curved bed (∇h,∇²h ≠ 0)
     mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)
 ctx = FULL ? build_nlp_ctx(model, feo, Nσ, trian, dΩh) : nothing
 
@@ -130,7 +129,7 @@ udm = (ustar_dofs(tm + 1e-4) .- ustar_dofs(tm - 1e-4)) ./ 2e-4     # ∂ₜu* (F
 tu_m = TCF(um, udm)
 R_full = assemble_vector(v -> global_residual(tm, tu_m, v, prob, trian, dΩh), V)
 
-prob_lin = build_problem(vert; g=g, h_bathy=h_bathy, linearised=true, advection=false,
+prob_lin = build_problem(vert; g=g, h_bathy=h_bathy, regime=:linear,
                          mu_sponge=x -> 0.0, wm_src=(x,t) -> 0.0)
 R_lin = assemble_vector(v -> global_residual(tm, tu_m, v, prob_lin, trian, dΩh), V)
 nl_frac = norm(R_full .- R_lin) / norm(R_full)

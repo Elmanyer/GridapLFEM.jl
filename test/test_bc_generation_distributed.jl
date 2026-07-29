@@ -33,7 +33,7 @@ diags, vert, prob = setup_and_run_distributed(
     domain=((0.0,24.0),(0.0,2.0)), partition=(24,2), p_horizontal=2,
     wave_bc=:regular, bc_side=:left, bc_profile=:model,
     sponge_wL=0.0, sponge_wR=6.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0,
-    T_final=8*T_wave, dt=T_wave/24, linearised=true, advection=false,
+    T_final=8*T_wave, dt=T_wave/24, regime=:linear,
     save_every=0, print_every=50, check_every=0,
 )
 
@@ -72,6 +72,6 @@ end
 #     domain=((0.0,24.0),(0.0,2.0)), partition=(24,2), p_horizontal=2,
 #     wave_bc=:regular, bc_side=:left, bc_profile=:model,
 #     sponge_wL=0.0, sponge_wR=6.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0,
-#     T_final=8*1.6, dt=1.6/24, linearised=true, advection=false,
+#     T_final=8*1.6, dt=1.6/24, regime=:linear,
 #     save_every=0, print_every=50, check_every=0)
 # @printf("REF_EMAX = %.7e\n", maximum(d.eta_max for d in diags))

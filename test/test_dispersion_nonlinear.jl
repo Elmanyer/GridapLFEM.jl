@@ -4,7 +4,7 @@
 #
 #  The linear dispersion relation ω²=gk tanh(kd) is a property of infinitesimal
 #  waves. Rather than run the *linearised* solver (test_dispersion.jl), here the
-#  FULL nonlinear solver (linearised=false, advection=true) is run on a FLAT bed
+#  FULL nonlinear solver (regime=:nonlinear) is run on a FLAT bed
 #  at a tiny amplitude (kA~1e-4, so the O((kA)²) Stokes phase-speed correction is
 #  ~1e-8): the production code path must reproduce Airy theory — the asymptotic-
 #  consistency principle (a nonlinear model reduces to the simpler linear model
@@ -76,7 +76,7 @@ function run_kd(kd)
         p_horizontal=2, h_val=d, T_wave=T_wave, A_wave=A_wave, x_wm=x_wm, y_wm=nothing,
         sponge_wL=6.0, sponge_wR=8.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0,
         T_final=Tf, dt=dt, save_every=0, gauges=[(x, Ly/2) for x in xg],
-        linearised=false, advection=true, nl_tol=1e-8, print_every=10_000)
+        regime=:nonlinear, nl_tol=1e-8, print_every=10_000)
     Cm = celerity_spatial(diags, xg, omega, k)
     return k, d, lam, Ce, Cm
 end

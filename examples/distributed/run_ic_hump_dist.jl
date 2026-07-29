@@ -50,8 +50,7 @@ diags, vert, prob = setup_and_run_distributed(
     sponge_wL=0.0, sponge_wR=0.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=0.0,
     T_final=Tfinal, dt=dt,
     eta0_func=eta0,                                  # ★ initial condition release
-    linearised=lin_flag(), advection=adv_flag(),
-    P_full=pfull_flag(), nl_pressure68=nlp68_flag(),
+    regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(),          # flat sea bed (∇h≡0); set LFEM_FLAT_BED=0 for variable bathymetry
     y_wall_bc=:wall, x_wall_bc=true,                  # ★ CLOSED basin (mandatory for IC)
     output_dir=outdir, save_every=save_ev,
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),

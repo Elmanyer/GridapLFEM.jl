@@ -167,6 +167,35 @@ seas) are prescribed on `bc_side` (`:left`/`:right`). Related kwargs:
 requires `T_ramp=0.0`), `relax_bc`+`relax_width` (generation/absorption
 relaxation zone adjacent to the inflow, strength `mu_max`).
 """
+
+"""
+    check_flat_bed_consistency(h_bathy, domain, flat_bed; ns=7, rtol=1e-8) → Bool
+
+Warn if the `flat_bed` switch disagrees with the prescribed bathymetry `h_bathy`
+(`x → d(x)`) sampled on a small grid over `domain`: `flat_bed=true` over a varying
+bed silently drops the ∇h (sloping-bed) physics, while `flat_bed=false` over a
+constant bed assembles ∇h-terms that vanish anyway. Returns whether the bed is
+constant. Sampling a pure function is cheap and rank-independent.
+"""
+function check_flat_bed_consistency(h_bathy, domain, flat_bed::Bool;
+                                    ns::Int = 7, rtol::Float64 = 1e-8)
+    (x0, x1), (y0, y1) = domain isa Tuple{Tuple,Tuple} ? domain :
+                         ((domain[1], domain[2]), (domain[3], domain[4]))
+    hs = [h_bathy(VectorValue(x, y)) for x in range(x0, x1; length=ns),
+                                         y in range(y0, y1; length=ns)]
+    hmin, hmax = extrema(hs); hmean = sum(hs) / length(hs)
+    is_const = (hmax - hmin) <= rtol * max(abs(hmean), 1.0)
+    if flat_bed && !is_const
+        @warn "flat_bed=true but the bathymetry varies over the domain " *
+              "(Δh=$(round(hmax - hmin; sigdigits=3)) m): the ∇h (sloping-bed) terms are being " *
+              "dropped and the bed-slope physics is NOT represented — use flat_bed=false for variable bathymetry."
+    elseif !flat_bed && is_const
+        @info "flat_bed=false but h_bathy is constant (d=$(round(hmean; sigdigits=4)) m): " *
+              "the ∇h terms vanish anyway; set flat_bed=true to skip assembling them."
+    end
+    return is_const
+end
+
 function setup_and_run(;
     # ---- Vertical discretisation ---------------------------------------------
     M            :: Int     = 2,          # number of vertical σ-elements (LFE-M order: 2/3/4)
@@ -205,12 +234,10 @@ function setup_and_run(;
     y_wall_bc    :: Symbol  = :wall,      # y-edge BC: :wall (𝖴y=0) | :open (natural) | :periodic (y-periodic)
     x_wall_bc    :: Bool    = false,      # solid walls on the x-edges (𝖴x=0); true for closed-basin IC
     # ---- Physics flags (switch individual residual terms on/off) --------------
-    linearised   :: Bool    = false,      # linear regime (drop H-weights, d²B dispersion)
-    advection    :: Bool    = true,       # nonlinear advection block (𝓜/𝓖)
-    lin_pressure :: Bool    = false,      # A/K linear slope-pressure package (needs a sloped bed)
-    P_full       :: Bool    = false,      # keep all three slope components of R_P (else P³L³ only)
-    nl_pressure68:: Bool    = false,      # nonlinear-pressure native set c∈{3,6,7,8} (all blocks)
-    nl_pressure_full :: Bool = false,     # + c∈{1,2,4,5}: ∇h exact-IBP; ∇H/𝓟 via frozen projections
+    regime       :: Symbol  = :nonlinear, # :linear (linearised, no advection) | :nonlinear
+    nl_pressure  :: Symbol  = :none,      # nonlinear pressure: :none | :native {3,6,7,8} | :full {+1,2,4,5}
+    flat_bed     :: Bool    = false,      # sea-bed geometry: false = variable bathymetry (∇h≠0),
+                                          #   true = flat bed (∇h≡0; every ∇h-term dropped, ∇η-terms kept)
     h_bathy                 = nothing,    # x → d(x): variable bathymetry (overrides h_val)
     eta0_func               = nothing,    # x → η₀(x): initial free surface (IC release: set x_wall_bc=true)
     # ---- Dirichlet boundary wave generation (waveinput.jl) --------------------
@@ -368,9 +395,9 @@ function setup_and_run(;
 
     # --- Assemble the problem bundle: vertical tensors → Gridap constants +
     #     the depth, forcing, and physics flags that define the residual. -------
+    check_flat_bed_consistency(dfn, domain, flat_bed)   # warn on bed ↔ flat_bed mismatch
     prob = build_problem(vert; g=g, h_bathy=dfn,
-        linearised=linearised, advection=advection, lin_pressure=lin_pressure,
-        P_full=P_full, nl_pressure68=nl_pressure68, nl_pressure_full=nl_pressure_full,
+        regime=regime, nl_pressure=nl_pressure, flat_bed=flat_bed,
         mu_sponge=sponge, wm_src=wm,
         relax_bc=use_relax, relax_mu=relax_mu_fn, relax_tg=relax_tg)
 
@@ -406,9 +433,9 @@ function setup_and_run(;
         make_initial_conditions(U, vert.N_dof; eta0_func=eta0_func)
     end
 
-    # For nl_pressure_full, build the frozen-projection context (mass matrix
+    # For nl_pressure=:full, build the frozen-projection context (mass matrix
     # factorised once) used to evaluate the irreducible ∇H/𝓟 pressure halves.
-    nlp = nl_pressure_full ?
+    nlp = nl_pressure == :full ?
           (prob, build_nlp_ctx(model, p_horizontal, vert.N_dof, trian, dΩh)) : nothing
 
     # Reconstruction context for optional w/p VTK output (nothing if both off).
