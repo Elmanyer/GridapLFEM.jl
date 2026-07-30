@@ -4,8 +4,8 @@
 serial+distributed package `src/GridapLFEM.jl` (stacked `[η,𝖴x,𝖴y]` layout, loop-free residual),
 its test suite (`test/`), sequential and cluster examples (`examples/`), the standalone
 postprocessing library (`postprocessing/GridapLFEMPost`), the vendored sea-state package
-(`WaveSpec.jl/`), and the design/paper material in `building_files/` (the LaTeX derivation
-`latex_doc/`, the specification documents, the validation report). An independent per-layer
+(`WaveSpec.jl/`), and the design/paper material in `building_files/` (the LaTeX derivation project
+`LFEM_discretisation.zip`, the synthesis notes, the validation report §9 within it). An independent per-layer
 implementation lives in `../LFE-M_2D_solver/` and is used by `test_equivalence.jl` as a second,
 differently-structured assembly of the same weak form — a cross-check that the two agree to
 machine precision.
@@ -41,7 +41,7 @@ modes are 1-based `j=1..Nσ`, one per node.
 | File | What it is |
 |------|-----------|
 | `Project.toml` / `Manifest.toml` | A standalone Julia environment (deliberately not a registered package — `GridapLFEM` is loaded via `include()`+`using .GridapLFEM`, never `Pkg.add`). It is pinned to the same package versions as the parent `../Project.toml` (Gridap 0.19.11, GridapDistributed 0.4.13, GridapSolvers 0.6.2, PartitionedArrays 0.3.5, MPI 0.20.26) so both environments behave identically. If you add a new `using X` to any `src/*.jl` file, run `Pkg.add("X")` here too (`--project=GridapLFEM.jl`) to keep the two environments in sync. `BlockArrays` is a direct `[deps]` entry (already resolved in the Manifest) only so the differently-structured **oracle** `LFEModel2D` loaded by `test_equivalence.jl` can `using BlockArrays` from this env. |
-| `latex_doc/` (`main.tex` + section files) | The authoritative LaTeX derivation, organised as a multi-file project: `main.tex` (preamble/macros) inputs `GoverningEquations`, `SigmaTransformation`, `VerticalFEapprox`, `wDerivation`, `pDerivation`, `VerticalProjection`, `VerticalSemiDiscreteSystem`, **`GridapImplementation.tex` (§8** — stacked layout, residual implementation, 𝓛/𝓝 pressure treatment, wave generation/sponge/BC incl. the Dirichlet boundary wave generation subsection) and **`ValidationTests.tex` (§9** — the validation report incl. the BC-generation gates, Goda–Suzuki, spectral fidelity). Sign convention: `R_P` is a positive integral **subtracted** in the global sum, uniformly with `R_lin`/`R_nonlin`. Compile-checked with pdflatex. |
+| `LFEM_discretisation.zip` (LaTeX project) | The authoritative LaTeX derivation, a multi-file project (compiles with pdflatex): `main.tex` (preamble/macros) inputs `GoverningEquations`, `SigmaTransformation`, `VerticalFEapprox`, `wDerivation`, `pDerivation`, `VerticalProjection`, `VerticalSemiDiscreteSystem` (incl. the **flat-bed reduction** of the full nonlinear model), `LinearModel`, `GlobalResidual`, **`GridapImplementation.tex` (§8** — stacked layout, residual implementation, 𝓛/𝓝 pressure treatment, the `regime`/`nl_pressure`/**`flat_bed`** model-setups subsection, wave generation/sponge/BC incl. Dirichlet boundary generation with the `:model`/`:airy` polarization) and **`ValidationTests.tex` (§9** — the validation report incl. the BC-generation gates, Goda–Suzuki, spectral fidelity). Sign convention: `R_P` is a positive integral **subtracted** in the global sum, uniformly with `R_lin`/`R_nonlin`. All prior standalone `*Improved.tex`/`.md` section drafts are now integrated into this zip. |
 | `LFEM_Gridap.md` | Synthesis of the derivation §1–§8 leading to the single scalar residual, in the LaTeX notation; §9 bridges that notation to the solver code. |
 | `algebraic_residual_math.md` | Operator reference: how each §8 residual term is written with native Gridap tensor ops (no MultiField decomposition, no vertical-index loops) — the `L`/`N` pressure stacks, the leading-pressure `R_P`, IBP of second-derivative terms, and the verified Gridap operator table. |
 | `DESIGN_RECORDS.md` | Consolidated **historical design records** for the completed features — algebraic residual + Jacobians, package layout, distributed solver, nonlinear-pressure completion, boundary wave generation, periodic-y BC, the `flat_bed` switch, and the production sea-state scripts. Provenance only (*why* the code is shaped as it is); the code, this `CLAUDE.md`, and the LaTeX derivation are authoritative. |
@@ -52,7 +52,6 @@ modes are 1-based `j=1..Nσ`, one per node.
 | `WaveSpec.jl/` (repo-vendored package) | Stochastic sea-state synthesis (CMOE-TUDelft; JONSWAP/TMA/… spectra, sampling strategies, angular spreading, `AiryState`). `Pkg.develop`ed in both environments; `using WaveSpec` is re-exported by `GridapLFEM`. The `WaveInput` converter (`src/waveinput.jl`) snapshots seeded amplitudes/phases into plain arrays and re-solves the wavenumbers with the solver's `g` (WaveSpec uses 9.80665). |
 | `boundary_wave_generation.md` | Dirichlet boundary wave generation math note (nodal trace, `:model` discrete-eigenmode polarization derivation, ramp, well-posedness/reflection, relaxation zone, WaveSpec contract, validation map). The design record is in `DESIGN_RECORDS.md`. |
 | `LFEM_runs.md` | Plan/record for the small-domain observation + comparison run suite (all three batches; `examples/distributed_small/` + `run/dist_small/`). |
-| improved LaTeX section drafts | `GridapImplementationImproved.tex` (§8), `VerticalSemiDiscreteSystemImproved.tex` (flat-bed reduction), `LinearModel.tex`, `VerticalPolarizationExtension.tex` (+ `.md` readable versions) — rewritten/added sections for the LaTeX project (`LFEM_discretisation.zip`), compile-checked. |
 | `algebraic_lfem2D.jl` / `test_algebraic_lfem2D.jl` | The single-file prototype of the residual and its validation script; the `src/` package is the maintained form. |
 | `test_2HDmodel.ipynb` | An early exploratory notebook; its vertical pre-compute is sound and it is kept only for reference. |
 
@@ -101,9 +100,10 @@ ratio 0.979.
 `w(σ)`/`p_nh(σ)` reconstruction, and the sea-state module (Welch PSD, JONSWAP target overlay, Hs,
 Rayleigh exceedance), validated against solver output.
 
-**Docs**: `latex_doc/` (authoritative derivation; §8 incl. the Dirichlet-generation subsection; §9
-the validation report incl. BC gates — compile-checked), `LFEM_Gridap.md`, `boundary_wave_generation.md`,
-`ValidationTests.md`.
+**Docs**: `building_files/LFEM_discretisation.zip` (authoritative LaTeX derivation; §8 the Gridap
+implementation incl. the `flat_bed` model-setups subsection and Dirichlet generation; §9 the validation
+report incl. BC gates — compile-checked), `LFEM_Gridap.md`, `algebraic_residual_math.md`,
+`boundary_wave_generation.md`, and the consolidated `DESIGN_RECORDS.md`.
 
 ## Current Implementation Stage
 
@@ -127,8 +127,8 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
   changes a sloped-bed residual, is bit-exact on a flat bed); the `flat_bed=false` path is identical to
   the prior validated baseline, confirmed by `test_equivalence` re-passing 10/10 (oracle virtual-work
   match ≤7.4e-15). Drivers emit a bathymetry↔switch consistency warning
-  (`check_flat_bed_consistency`). Derivation: `building_files/VerticalSemiDiscreteSystemImproved.tex`
-  (flat-bed reduction of the full nonlinear model); design record: `building_files/DESIGN_RECORDS.md` §7.
+  (`check_flat_bed_consistency`). Derivation: the flat-bed reduction of the full nonlinear model in
+  `LFEM_discretisation.zip` (`VerticalSemiDiscreteSystem.tex`); design record: `DESIGN_RECORDS.md` §7.
 - **Default integrator** SDIRK_2_2 (fully implicit, L-stable); **y-periodic** lateral BC option.
 - **Small-domain run suite** — **4 parametric scripts** (`examples/distributed_small/`, grouped by
   wave-generation type: `run_periodic_plane_small` [line source], `run_ring_small` [point source],
@@ -346,7 +346,7 @@ six independent booleans (which allowed inconsistent/redundant combinations):
 |---------|--------|---------|
 | `regime` | `:linear` \| `:nonlinear` | `:linear` = linearised core, no advection; `:nonlinear` = full nonlinear core + advection |
 | `nl_pressure` | `:none` \| `:native` \| `:full` | nonlinear non-hydrostatic pressure: off / `{3,6,7,8}` / `+{1,2,4,5}` |
-| `flat_bed` | `Bool` | sea-bed geometry: `false` = variable bathymetry (∇h≠0, full model); `true` = flat bed (∇h≡0 — every term carrying an explicit or implicit factor ∇h is dropped, ∇η/dispersion terms kept). Orthogonal to `regime`/`nl_pressure`; see `VerticalSemiDiscreteSystemImproved.tex` §"Flat-bed reduction". |
+| `flat_bed` | `Bool` | sea-bed geometry: `false` = variable bathymetry (∇h≠0, full model); `true` = flat bed (∇h≡0 — every term carrying an explicit or implicit factor ∇h is dropped, ∇η/dispersion terms kept). Orthogonal to `regime`/`nl_pressure`; see the "Flat-bed reduction" subsection of `VerticalSemiDiscreteSystem.tex` in `LFEM_discretisation.zip`. |
 
 `resolve_physics` (in `src/problem.jl`) maps these to the seven internal booleans stored on
 `LFEMProblem` (`linearised, advection, lin_pressure, P_full, nl_pressure68, nl_pressure_full, flat_bed`).
