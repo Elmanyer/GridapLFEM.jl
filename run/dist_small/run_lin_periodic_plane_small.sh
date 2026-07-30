@@ -1,7 +1,7 @@
 #!/bin/bash
 # SMALL run — linear plane wave, flat, A=0.001
 #SBATCH --job-name="LFEM_lin_plane"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=119:59:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=32

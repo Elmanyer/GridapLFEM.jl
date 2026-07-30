@@ -1,7 +1,7 @@
 #!/bin/bash
 # SMALL run — nonlinear native-NL-pressure plane wave, flat, A=0.1
 #SBATCH --job-name="LFEM_nl_native_plane"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=119:59:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=32

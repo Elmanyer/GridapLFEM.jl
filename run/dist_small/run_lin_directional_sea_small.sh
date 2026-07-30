@@ -1,7 +1,7 @@
 #!/bin/bash
 # SMALL run — linear directional sea, flat, Hs=0.2
 #SBATCH --job-name="LFEM_lin_directional"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=119:59:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=64

@@ -1,7 +1,7 @@
 #!/bin/bash
 # SMALL run — nonlinear full irregular sea, flat, Hs=0.2 (BASE)
 #SBATCH --job-name="LFEM_nl_irregular"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=119:59:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=32

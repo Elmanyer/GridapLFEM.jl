@@ -1,7 +1,7 @@
 #!/bin/bash
 # SMALL run — nonlinear full plane wave, flat, A=0.1 (BASE)
 #SBATCH --job-name="LFEM_nl_plane_flat"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=119:59:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=32
