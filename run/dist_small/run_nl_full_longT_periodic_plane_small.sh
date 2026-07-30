@@ -1,6 +1,6 @@
 #!/bin/bash
-# SMALL comparison run — nonlinear full-pressure, flat bed, long period T=3.0 (kd~1.7)
-#SBATCH --job-name="LFEMcmp_nl_full_longT"
+# SMALL run — nonlinear full plane wave, flat, long T=3.0
+#SBATCH --job-name="LFEMs_nl_longT"
 #SBATCH --partition=fat_rome
 #SBATCH --time=06:00:00
 #SBATCH --nodes=1
@@ -12,14 +12,14 @@
 
 source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
 
-# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ------------------------
+# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ---
 export LFEM_PX=8
-export LFEM_PY=4            # 8*4 = 32 ranks; small 50x20 domain, mesh 200x40
+export LFEM_PY=4            # 8*4 = 32 ranks
 
-# --- Case config is hard-coded (env still overrides). Common knobs: ----------
-# export LFEM_AWAVE=...      # wave amplitude [m]
-# export LFEM_TWAVE=...      # wave period [s]
-# export LFEM_PERIODS=12     # run length in periods
+# --- Case-specific overrides (only what differs from the script's base) ---
+export LFEM_TWAVE=3.0
+export LFEM_SPONGE_R=12
+export LFEM_PERIODS=10
 
 mpiexecjl -n 32 julia --project=$HOME/GridapLFEM.jl \
-    $HOME/GridapLFEM.jl/examples/distributed_small/run_nl_full_longT_periodic_plane_small.jl
+    $HOME/GridapLFEM.jl/examples/distributed_small/run_periodic_plane_small.jl

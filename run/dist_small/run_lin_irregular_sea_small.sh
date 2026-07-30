@@ -1,6 +1,6 @@
 #!/bin/bash
-# SMALL sea-state comparison run — linear irregular sea, flat bed, Hs=0.2
-#SBATCH --job-name="LFEMsea_lin_irregular"
+# SMALL run — linear irregular sea, flat, Hs=0.2
+#SBATCH --job-name="LFEMs_lin_irregular"
 #SBATCH --partition=fat_rome
 #SBATCH --time=06:00:00
 #SBATCH --nodes=1
@@ -12,15 +12,13 @@
 
 source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
 
-# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ------------------------
+# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ---
 export LFEM_PX=8
-export LFEM_PY=4            # 8*4 = 32 ranks; small 50x20 domain
+export LFEM_PY=4            # 8*4 = 32 ranks
 
-# --- Sea state (defaults set in the .jl; override here) ----------------------
-# export LFEM_HS=0.2; export LFEM_TP=2.0
-# export LFEM_SEED=20260723
-# export LFEM_RELAX=1; export LFEM_RELAX_W=6
-# export LFEM_PERIODS=15
+# --- Case-specific overrides (only what differs from the script's base) ---
+export LFEM_REGIME=linear
+export LFEM_NL_PRESSURE=none
 
 mpiexecjl -n 32 julia --project=$HOME/GridapLFEM.jl \
-    $HOME/GridapLFEM.jl/examples/distributed_small/run_lin_irregular_sea_small.jl
+    $HOME/GridapLFEM.jl/examples/distributed_small/run_irregular_sea_small.jl

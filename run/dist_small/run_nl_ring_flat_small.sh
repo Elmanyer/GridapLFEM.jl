@@ -1,6 +1,6 @@
 #!/bin/bash
-# SMALL observation run — CASE 4: nonlinear · full pressure · flat bed · ring wave · A=0.1
-#SBATCH --job-name="LFEMsmall_nl_ring"
+# SMALL run — nonlinear full ring wave, flat, A=0.1 (BASE)
+#SBATCH --job-name="LFEMs_nl_ring"
 #SBATCH --partition=fat_rome
 #SBATCH --time=06:00:00
 #SBATCH --nodes=1
@@ -12,14 +12,12 @@
 
 source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
 
-# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ------------------------
+# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ---
 export LFEM_PX=8
-export LFEM_PY=8            # 8*8 = 64 ranks; small 50x20 domain, 2-D mesh 200x80
+export LFEM_PY=8            # 8*8 = 64 ranks
 
-# --- Case knobs (point source at centre; 4-side sponges) --------------------
-# export LFEM_AWAVE=0.1
-# export LFEM_SPONGE_X=6; export LFEM_SPONGE_Y=4; export LFEM_MUMAX=12
-# export LFEM_PERIODS=12
+# --- Case-specific overrides (only what differs from the script's base) ---
+# (base config — no overrides needed)
 
 mpiexecjl -n 64 julia --project=$HOME/GridapLFEM.jl \
-    $HOME/GridapLFEM.jl/examples/distributed_small/run_nl_ring_flat_small.jl
+    $HOME/GridapLFEM.jl/examples/distributed_small/run_ring_small.jl
