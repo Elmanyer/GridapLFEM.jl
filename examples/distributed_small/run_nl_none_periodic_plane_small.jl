@@ -11,7 +11,7 @@
 #  Geometry identical to case 2: left sponge [0,6], wm x=12, right sponge
 #  [40,50], periodic y. d=3.5, T=2.0 ⇒ kd≈3.5, λ≈6.25 m, c≈3.13 m/s.
 #
-#  LAUNCH:  LFEM_PX=4 LFEM_PY=1 mpiexecjl --project=. -n 4 julia --project=. \
+#  LAUNCH:  LFEM_PX=8 LFEM_PY=4 mpiexecjl --project=. -n 32 julia --project=. \
 #             GridapLFEM.jl/examples/distributed_small/run_nl_none_periodic_plane_small.jl
 #  (SLURM: run/dist_small/run_nl_none_periodic_plane_small.sh)
 # ==============================================================
@@ -23,8 +23,8 @@ get!(ENV, "LFEM_REGIME", "nonlinear"); get!(ENV, "LFEM_NL_PRESSURE", "none")
 get!(ENV, "LFEM_FLAT_BED", "1")
 
 M        = genv_i("LFEM_M", 2)
-px, py   = genv_i("LFEM_PX", 4), genv_i("LFEM_PY", 1)
-nx, ny   = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 20)
+px, py   = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 4)
+nx, ny   = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 40)
 feord    = genv_i("LFEM_FE_ORDER", 2)
 Lx, Ly   = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)
 d        = genv_f("LFEM_D", 3.5)

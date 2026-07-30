@@ -14,7 +14,7 @@
 #  NOTE: uses build_airy_state ⇒ depends on the WaveSpec change_seed! fix.
 #
 #  LAUNCH (px·py MUST equal -n):
-#    LFEM_PX=4 LFEM_PY=1 mpiexecjl --project=. -n 4 julia --project=. \
+#    LFEM_PX=8 LFEM_PY=4 mpiexecjl --project=. -n 32 julia --project=. \
 #        GridapLFEM.jl/examples/distributed_small/run_lin_irregular_sea_small.jl
 #  (SLURM: run/dist_small/run_lin_irregular_sea_small.sh)
 # ==============================================================
@@ -29,7 +29,7 @@ get!(ENV, "LFEM_NFREQ", "15")
 get!(ENV, "LFEM_RELAX", "1"); get!(ENV, "LFEM_RELAX_W", "6")
 
 M        = genv_i("LFEM_M", 2)
-px, py   = genv_i("LFEM_PX", 4), genv_i("LFEM_PY", 1)
+px, py   = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 4)
 nx, ny   = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 40)
 feord    = genv_i("LFEM_FE_ORDER", 2)
 Lx, Ly   = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)

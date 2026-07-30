@@ -11,7 +11,7 @@
 #  Geometry identical to case 2 (periodic y). A shorter run (10 periods) since
 #  the longer, faster wave fills the working region in ~2 periods.
 #
-#  LAUNCH:  LFEM_PX=4 LFEM_PY=1 mpiexecjl --project=. -n 4 julia --project=. \
+#  LAUNCH:  LFEM_PX=8 LFEM_PY=4 mpiexecjl --project=. -n 32 julia --project=. \
 #             GridapLFEM.jl/examples/distributed_small/run_nl_full_longT_periodic_plane_small.jl
 #  (SLURM: run/dist_small/run_nl_full_longT_periodic_plane_small.sh)
 # ==============================================================
@@ -23,8 +23,8 @@ get!(ENV, "LFEM_REGIME", "nonlinear"); get!(ENV, "LFEM_NL_PRESSURE", "full")
 get!(ENV, "LFEM_FLAT_BED", "1")
 
 M        = genv_i("LFEM_M", 2)
-px, py   = genv_i("LFEM_PX", 4), genv_i("LFEM_PY", 1)
-nx, ny   = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 20)
+px, py   = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 4)
+nx, ny   = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 40)
 feord    = genv_i("LFEM_FE_ORDER", 2)
 Lx, Ly   = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)
 d        = genv_f("LFEM_D", 3.5)
