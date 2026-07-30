@@ -27,13 +27,15 @@ get!(ENV, "LFEM_FLAT_BED", "1")
 
 M       = genv_i("LFEM_M", 2)
 px, py  = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 8)      # 8*8 = 64 ranks
-nx, ny  = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 80)   # square cells 0.25x0.25
+nx, ny  = genv_i("LFEM_NX", 160), genv_i("LFEM_NY", 160)   # square cells 0.25x0.25
 feord   = genv_i("LFEM_FE_ORDER", 2)
-Lx, Ly  = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)
+Lx, Ly  = genv_f("LFEM_LX", 40.0), genv_f("LFEM_LY", 40.0)
 d       = genv_f("LFEM_D", 3.5)
 Twave   = genv_f("LFEM_TWAVE", 2.0)
 Awave   = genv_f("LFEM_AWAVE", 0.1)
-spX     = genv_f("LFEM_SPONGE_X", 6.0)
+x_wm    = genv_f("LFEM_XWM", Lx/2)
+y_wm    = genv_f("LFEM_YWM", Ly/2)
+spX     = genv_f("LFEM_SPONGE_X", 4.0)
 spY     = genv_f("LFEM_SPONGE_Y", 4.0)
 mumax   = genv_f("LFEM_MUMAX", 12.0)
 dt      = genv_f("LFEM_DT", 0.02)
@@ -50,7 +52,7 @@ banner("SMALL | ring wave (point source, flat bed) | $(regime_sym()) $(nl_pressu
 diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
-    h_val=d, T_wave=Twave, A_wave=Awave, x_wm=Lx/2, y_wm=Ly/2,      # point source => ring
+    h_val=d, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=y_wm,      # point source => ring
     sponge_wL=spX, sponge_wR=spX, sponge_wB=spY, sponge_wT=spY, mu_max=mumax,
     T_final=Tfinal, dt=dt,
     regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(1),
