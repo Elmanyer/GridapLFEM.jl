@@ -1,14 +1,14 @@
 #!/bin/bash
 # SMALL run — nonlinear full plane wave over a bar, A=0.1
-#SBATCH --job-name="LFEMs_nl_plane_bar"
+#SBATCH --job-name="LFEM_nl_plane_varbed"
 #SBATCH --partition=fat_rome
-#SBATCH --time=06:00:00
+#SBATCH --time=119:59:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=32
 #SBATCH --ntasks-per-node=32
 #SBATCH --cpus-per-task=1
-#SBATCH --output=GridapLFEM.%j.out
-#SBATCH --error=GridapLFEM.%j.err
+#SBATCH --output=%x.%j.out
+#SBATCH --error=%x.%j.err
 
 source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
 
