@@ -1,7 +1,7 @@
 #!/bin/bash
 # SMALL run — nonlinear full directional sea over a bar, Hs=0.2
 #SBATCH --job-name="LFEM_nl_directional_varbed"
-#SBATCH --partition=rome
+#SBATCH --partition=fat_rome
 #SBATCH --time=119:59:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=64
