@@ -1,14 +1,32 @@
 #!/bin/bash
-
-#SBATCH --job-name="compile_GridapSWE"
+#SBATCH --job-name="compile_GridapLFEM"
 #SBATCH --partition=rome
 #SBATCH --time=16:00:00
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=1
-#SBATCH --mem-per-cpu=16G
-#SBATCH --output=GridapSWE.%j.out
-#SBATCH --error=GridapSWE.%j.err
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem-per-cpu=8G
+#SBATCH --output=compile_GridapLFEM.%j.out
+#SBATCH --error=compile_GridapLFEM.%j.err
+#
+# Build the GridapLFEM system image on Snellius. Submit from the compile/ dir:
+#     sbatch compile_snellius.sh
+# Produces  $HOME/GridapLFEM.jl/GridapLFEM_sysimage.so  (~1 GB).
+# Build on the SAME partition (rome) you run on, so the CPU target matches.
 
-source load_modules_snellius.sh
+set -euo pipefail
+PROJ=$HOME/GridapLFEM.jl
+source "$PROJ/compile/load_modules_snellius.sh"    # OpenMPI 5.0.3 + LD_LIBRARY_PATH
 
-julia --project=../ compile.jl
+# 1) Pin MPI.jl to the SYSTEM OpenMPI (writes $PROJ/LocalPreferences.toml).
+#    Without this the sysimage bakes in the bundled MPICH and crashes at launch.
+julia --project="$PROJ" "$PROJ/compile/set_preferences.jl"
+
+# 2) One-time: ensure PackageCompiler is available in the project.
+julia --project="$PROJ" -e 'using Pkg; haskey(Pkg.project().dependencies, "PackageCompiler") || Pkg.add("PackageCompiler")'
+
+# 3) Build the sysimage. Single MPI rank so warmup.jl can trace the distributed
+#    path too; the full cold compile happens here, once.
+mpiexecjl --project="$PROJ" -n 1 julia --project="$PROJ" "$PROJ/compile/compile.jl"
+
+echo "Sysimage built: $PROJ/GridapLFEM_sysimage.so"
