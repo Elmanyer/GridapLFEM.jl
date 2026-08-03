@@ -65,12 +65,14 @@ The **complete** LaTeX §8 global residual, every term:
 - Quadratic sponge absorption layers — damp **both the velocity and the free surface η**
   (`+∫ μ q η`, same μ profile/`mu_max`), so open-boundary modes are fully absorbed
 - Solid-wall / open / **periodic** (in y) boundary conditions
-- **Wave generation — three mechanisms** selected by `wave_gen`: `:inner_res` (interior Gaussian
-  source: line ⇒ plane wave, point ⇒ ring wave), `:bc_gen_profile` (a **parametrised** wave generated
-  from a boundary — a periodic plane wave from `A_wave`/`T_wave`/`wave_dir`, or a supplied `WaveInput`),
-  `:bc_gen_airy` (a WaveSpec stochastic sea from a boundary). `:auto` (default) infers it from
-  `wave_bc`, validated by `resolve_wave_gen`
-- **Dirichlet boundary wave generation** (`:bc_gen_profile` / `:bc_gen_airy`) — waves enter through time-varying Dirichlet
+- **Wave generation — two mechanisms** selected by `wave_gen`: `:inner_res` (interior Gaussian
+  source: line ⇒ plane wave, point ⇒ ring wave) and `:bc_gen` (boundary Dirichlet generation). For
+  `:bc_gen` the boundary source is dispatched on the **type** of `wave_bc` — a *parametrised* regular
+  plane wave from `A_wave`/`T_wave`/`wave_dir`, a supplied `WaveInput`, or a **WaveSpec `AiryState`**
+  stochastic sea — all feeding the same Dirichlet machinery (they differ only in how the `WaveInput`
+  component table is populated). `:auto` (default) infers it (`wave_bc===nothing` ⇒ `:inner_res`, else
+  `:bc_gen`)
+- **Dirichlet boundary wave generation** (`:bc_gen`) — waves enter through time-varying Dirichlet
   data (η, 𝖴x, and 𝖴y for directional seas) on a domain side, no interior source: regular waves,
   hand-built multichromatic seas, or **WaveSpec.jl stochastic sea states** (JONSWAP/TMA/…, angular
   spreading) via the `AiryState → WaveInput` converter. Discrete LFE-M eigenmode vertical
@@ -232,9 +234,9 @@ with a PMIx version mismatch. `nx`/`ny` in `partition` must divide evenly by `px
 | **`regime`** | `:linear` (linearised, no advection) \| `:nonlinear` (full finite-amplitude core) |
 | **`nl_pressure`** | `:none` \| `:native` `{3,6,7,8}` \| `:full` `+{1,2,4,5}` — the O(A³) non-hydrostatic pressure |
 | **`flat_bed`** | `true` = flat bed (∇h≡0) \| `false` = variable bathymetry; a driver warning flags a bed↔switch mismatch |
-| **`wave_gen`** | wave-generation mechanism: `:inner_res` (interior Gaussian source) \| `:bc_gen_profile` (parametrised boundary wave) \| `:bc_gen_airy` (WaveSpec boundary sea); `:auto` (default) infers it from `wave_bc` |
+| **`wave_gen`** | wave-generation mechanism: `:inner_res` (interior Gaussian source) \| `:bc_gen` (boundary Dirichlet generation — the source, a regular wave / `WaveInput` / `AiryState`, is dispatched on the type of `wave_bc`); `:auto` (default) infers it from `wave_bc` |
 | `T_wave`, `A_wave`, `x_wm`, `y_wm` | interior source (`:inner_res`): `y_wm=nothing` → line source (plane wave), else point source (ring wave) |
-| `wave_dir` | propagation angle vs +x for a `:bc_gen_profile` boundary wave (0 = normal incidence) |
+| `wave_dir` | propagation angle vs +x for a `:bc_gen` boundary wave (0 = normal incidence) |
 | `sponge_wL/wR/wB/wT`, `mu_max` | quadratic absorbing sponge widths and strength; damps **velocity AND η** (0 width = side off) |
 | `eta0_func` | initial free-surface release `η₀(x)` — **requires `x_wall_bc=true`** (closed basin) |
 | `wave_bc` | boundary-generation source: `:regular` (from `A_wave`/`T_wave`/`wave_dir`), a `WaveInput`, or a `WaveSpec.AiryWaves.AiryState` (auto-converted); disables the interior wavemaker |

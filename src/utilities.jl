@@ -199,37 +199,31 @@ end
 """
     resolve_wave_gen(wave_gen, wave_bc) → Symbol
 
-Map the user's `wave_gen` selector to one of `:inner_res | :bc_gen_profile |
-:bc_gen_airy`, validating it against `wave_bc`. `:auto` (the default) infers the
-mechanism for backward compatibility:
+Map the user's `wave_gen` selector to one of the two mechanisms `:inner_res |
+:bc_gen`, validating it against `wave_bc`:
 
-  - `wave_bc === nothing`           → `:inner_res`      (interior Gaussian source)
-  - `wave_bc isa AiryState`         → `:bc_gen_airy`    (WaveSpec stochastic sea)
-  - otherwise (`:regular`/WaveInput)→ `:bc_gen_profile` (parametrised boundary wave)
+  - `:inner_res` — interior Gaussian source (line ⇒ plane wave, point ⇒ ring wave);
+                   requires `wave_bc === nothing`.
+  - `:bc_gen`    — boundary Dirichlet generation. The boundary source — a
+                   parametrised regular wave (from `A_wave`/`T_wave`/`wave_dir`),
+                   a prebuilt `WaveInput`, or a WaveSpec `AiryState` — is dispatched
+                   on the TYPE of `wave_bc` inside the driver; all feed the SAME
+                   Dirichlet machinery (they differ only in how the `WaveInput`
+                   component table is populated, not in the boundary mechanism).
 
-An explicit value is checked for consistency with `wave_bc`.
+`:auto` (the default) infers it: `wave_bc === nothing` → `:inner_res`, else `:bc_gen`.
 """
 function resolve_wave_gen(wave_gen::Symbol, wave_bc)
-    is_airy = wave_bc isa WaveSpec.AiryWaves.AiryState
     if wave_gen === :auto
-        wave_bc === nothing && return :inner_res
-        return is_airy ? :bc_gen_airy : :bc_gen_profile
+        return wave_bc === nothing ? :inner_res : :bc_gen
     elseif wave_gen === :inner_res
         wave_bc === nothing ||
             error("wave_gen=:inner_res uses the interior source; leave wave_bc=nothing")
         return :inner_res
-    elseif wave_gen === :bc_gen_profile
-        is_airy &&
-            error("wave_gen=:bc_gen_profile is for parametrised waves; pass an AiryState " *
-                  "with wave_gen=:bc_gen_airy instead")
-        return :bc_gen_profile
-    elseif wave_gen === :bc_gen_airy
-        is_airy ||
-            error("wave_gen=:bc_gen_airy requires wave_bc to be a WaveSpec AiryState")
-        return :bc_gen_airy
+    elseif wave_gen === :bc_gen
+        return :bc_gen
     else
-        error("wave_gen must be :auto, :inner_res, :bc_gen_profile or :bc_gen_airy " *
-              "(got :$wave_gen)")
+        error("wave_gen must be :auto, :inner_res or :bc_gen (got :$wave_gen)")
     end
 end
 
@@ -278,9 +272,9 @@ function setup_and_run(;
     h_bathy                 = nothing,    # x → d(x): variable bathymetry (overrides h_val)
     eta0_func               = nothing,    # x → η₀(x): initial free surface (IC release: set x_wall_bc=true)
     # ---- Dirichlet boundary wave generation (waveinput.jl) --------------------
-    wave_gen     :: Symbol  = :auto,      # :inner_res | :bc_gen_profile | :bc_gen_airy (:auto infers from wave_bc)
+    wave_gen     :: Symbol  = :auto,      # :inner_res | :bc_gen  (:auto infers from wave_bc)
     wave_bc                 = nothing,    # nothing | :regular | WaveInput | WaveSpec AiryState
-    wave_dir     :: Float64 = 0.0,        # propagation angle vs +x for :bc_gen_profile [rad]
+    wave_dir     :: Float64 = 0.0,        # propagation angle vs +x for a :bc_gen boundary wave [rad]
     bc_side      :: Symbol  = :left,      # generation boundary (:left/:right)
     bc_profile   :: Symbol  = :model,     # vertical polarization of the inflow (:model/:airy)
     T_ramp                  = nothing,    # Hann ramp-up time [s]; nothing → 2 peak periods
@@ -352,14 +346,16 @@ function setup_and_run(;
     wg = resolve_wave_gen(wave_gen, wave_bc)
     @printf("  Wave generation: %s\n", string(wg))
     wi = nothing
-    if wg !== :inner_res
+    if wg === :bc_gen
         bc_side in (:left, :right) ||
             error("setup_and_run: bc_side must be :left or :right (got :$bc_side)")
         Tr = T_ramp === nothing ? nothing : Float64(T_ramp)
-        # :bc_gen_airy → convert a WaveSpec AiryState; :bc_gen_profile → a prebuilt
-        # WaveInput, or a parametrised regular plane wave from A_wave/T_wave/wave_dir.
+        # The boundary source is dispatched on the TYPE of wave_bc: a prebuilt
+        # WaveInput passes through; a WaveSpec AiryState is converted; otherwise
+        # (nothing / :regular) a parametrised regular plane wave is built from
+        # A_wave/T_wave/wave_dir. All three feed the same Dirichlet machinery.
         wi = wave_bc isa WaveInput ? wave_bc :
-             wg === :bc_gen_airy ?
+             wave_bc isa WaveSpec.AiryWaves.AiryState ?
                  WaveInput(vert, wave_bc; d=h_val, g=g, T_ramp=Tr, profile=bc_profile) :
                  WaveInput(vert; A=A_wave, T=T_wave, d=h_val, g=g, theta=wave_dir,
                            T_ramp=(Tr === nothing ? 2.0*T_wave : Tr), profile=bc_profile)

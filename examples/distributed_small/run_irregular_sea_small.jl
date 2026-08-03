@@ -64,7 +64,7 @@ diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     h_val=d, T_wave=Tp, A_wave=hs_val()/2,
-    wave_gen=:bc_gen_airy, wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
+    wave_gen=:bc_gen, wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
     T_ramp=tramp_val(), relax_bc=relax_flag(), relax_width=relax_w_val(),
     sponge_wL=0.0, sponge_wR=spR, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
     T_final=Tfinal, dt=dt, h_bathy=h_bathy,

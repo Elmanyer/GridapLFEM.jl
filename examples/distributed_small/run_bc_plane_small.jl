@@ -3,7 +3,7 @@
 #
 #  Periodic plane wave GENERATED FROM THE LEFT BOUNDARY (Dirichlet data, no
 #  interior source): η/𝖴x prescribed from a parametrised regular Airy component
-#  (wave_gen=:bc_gen_profile), a generation+absorption relaxation zone at the
+#  (wave_gen=:bc_gen), a generation+absorption relaxation zone at the
 #  inflow, and a strong sponge at the far (right) end. y-periodic ⇒ a clean plane
 #  wave with NO two-open-ends resonance — this is the stable replacement for the
 #  interior-line-source plane wave that seeded the open-boundary instability.
@@ -68,7 +68,7 @@ banner("SMALL | BC plane wave (Dirichlet left) | $(regime_sym()) $(nl_pressure_s
 diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
-    wave_gen=:bc_gen_profile, bc_side=:left, wave_dir=wdir, bc_profile=bc_profile_sym(),
+    wave_gen=:bc_gen, bc_side=:left, wave_dir=wdir, bc_profile=bc_profile_sym(),
     h_val=d, T_wave=Twave, A_wave=Awave,
     T_ramp=tramp_val(), relax_bc=relax_flag(), relax_width=relax_w_val(),
     sponge_wL=0.0, sponge_wR=spR, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,

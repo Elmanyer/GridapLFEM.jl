@@ -84,13 +84,16 @@ hot start, and an optional generation/absorption relaxation zone. Driver kwargs
 `wave_bc/bc_side/bc_profile/T_ramp/ic_from_bc/relax_bc/relax_width` on both drivers; transient trial
 spaces work sequentially and distributed.
 
-**Wave-generation selector** (`wave_gen`, both drivers): an explicit control that separates the three
-mechanisms — `:inner_res` (interior Gaussian source: line ⇒ plane, point ⇒ ring), `:bc_gen_profile`
-(Dirichlet boundary, **parametrised** wave — a regular plane wave from `A_wave`/`T_wave`/`wave_dir`, or
-a caller-supplied `WaveInput`), `:bc_gen_airy` (Dirichlet boundary, **WaveSpec `AiryState`**).
-`resolve_wave_gen` validates the choice against `wave_bc`; the default `:auto` infers it
-(`wave_bc===nothing`→`:inner_res`; `AiryState`→`:bc_gen_airy`; else→`:bc_gen_profile`) so existing
-calls keep working. `wave_dir` sets the boundary-wave propagation angle vs +x.
+**Wave-generation selector** (`wave_gen`, both drivers): an explicit control with **two** mechanisms —
+`:inner_res` (interior Gaussian source: line ⇒ plane, point ⇒ ring) and `:bc_gen` (Dirichlet boundary
+generation). For `:bc_gen` the boundary source is dispatched on the **type** of `wave_bc` — a
+parametrised regular plane wave from `A_wave`/`T_wave`/`wave_dir`, a caller-supplied `WaveInput`, or a
+**WaveSpec `AiryState`** — all feeding the same Dirichlet machinery (they differ only in how the
+`WaveInput` component table is populated, not in the boundary mechanism; a boundary wave must be a
+consistent solution — surface *and* velocity — so it radiates cleanly, which is why it is always a
+`WaveInput`). `resolve_wave_gen` validates the choice; the default `:auto` infers it
+(`wave_bc===nothing`→`:inner_res`, else `:bc_gen`) so existing calls keep working. `wave_dir` sets the
+boundary-wave propagation angle vs +x.
 
 **Tests** (`test/`, 21 + `cluster/`): all pass — see the §1 table for the per-file scores. Highlights:
 cross-check virtual-work equivalence ≤7e-15; the asymptotic-consistency pair (full-NL⇒Airy across the
@@ -143,16 +146,17 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
   cures the open-boundary spurious mode that a velocity-only sponge left under-damped (a linear
   plane wave that previously grew to 10⁴× and NaN'd). Closed-basin tests are bit-identical (μ≡0
   there). Design record: `DESIGN_RECORDS.md`; plan: `building_files/SPONGE_WAVEGEN_PLAN.md`.
-- **Explicit `wave_gen` selector** — `:inner_res` / `:bc_gen_profile` / `:bc_gen_airy` cleanly
-  separate interior-source, parametrised-boundary, and WaveSpec-boundary generation
+- **Explicit `wave_gen` selector** — two mechanisms `:inner_res` / `:bc_gen` (interior source vs
+  boundary Dirichlet generation); for `:bc_gen` the source (parametrised regular wave / `WaveInput` /
+  WaveSpec `AiryState`) is dispatched on the type of `wave_bc`, all feeding the same Dirichlet machinery
   (`resolve_wave_gen`, both drivers; `:auto` keeps old calls working). New driver kwarg `wave_dir`
   (boundary-wave angle). New example `run_bc_plane_small.jl` (BC plane wave, left Dirichlet +
   relaxation + strong far sponge) with flat/varbed × lin/nonlinear launchers. Small-domain
   `mu_max` defaults raised 10→40 to kill waves fast in the sponge.
 - **Small-domain run suite** — **5 parametric scripts** (`examples/distributed_small/`, grouped by
   wave-generation type: `run_periodic_plane_small` [line source], `run_ring_small` [point source],
-  `run_bc_plane_small` [`:bc_gen_profile` boundary plane wave], `run_directional_sea_small` /
-  `run_irregular_sea_small` [`:bc_gen_airy` Dirichlet BC]) driving **20 launchers**
+  `run_bc_plane_small` [`:bc_gen` boundary plane wave], `run_directional_sea_small` /
+  `run_irregular_sea_small` [`:bc_gen` WaveSpec Dirichlet BC]) driving **20 launchers**
   (`run/dist_small/`), one per case. Each script bakes in the common geometry/mesh/partition/solver
   defaults and reads the physics from env (`get!` base defaults ⇒ banner ⇔ solver consistent; a
   `flat_bed=0` toggle builds the submerged bar; the output dir is auto-tagged by config so cases don't
