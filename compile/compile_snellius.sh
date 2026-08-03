@@ -22,6 +22,18 @@ source "$PROJ/compile/load_modules_snellius.sh"    # OpenMPI 5.0.3 + LD_LIBRARY_
 #    Without this the sysimage bakes in the bundled MPICH and crashes at launch.
 julia --project="$PROJ" "$PROJ/compile/set_preferences.jl"
 
+# 1b) Force a clean precompile with the new preference, then VERIFY that MPI binds
+#     the SYSTEM OpenMPI. `set -e` aborts the build here if it still resolves to a
+#     JLL artifact — far better than discovering it at launch.
+julia --project="$PROJ" -e 'using Pkg; Pkg.precompile()'
+julia --project="$PROJ" -e '
+    using MPIPreferences
+    @assert MPIPreferences.binary == "system" "MPIPreferences.binary=$(MPIPreferences.binary) (expected system)"
+    using MPI
+    v = MPI.MPI_LIBRARY_VERSION_STRING
+    println("MPI bound at build: ", v)
+    @assert occursin("Open MPI", v) "MPI did not bind system Open MPI: $v"'
+
 # 2) One-time: ensure PackageCompiler is available in the project.
 julia --project="$PROJ" -e 'using Pkg; haskey(Pkg.project().dependencies, "PackageCompiler") || Pkg.add("PackageCompiler")'
 
