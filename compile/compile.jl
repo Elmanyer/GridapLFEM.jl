@@ -45,9 +45,20 @@ occursin("Open MPI", _LIBVER) || error("""
 
 using PackageCompiler
 
+# include_transitive_dependencies=false is LOAD-BEARING for system MPI:
+# with the default `true`, PackageCompiler does `using` on EVERY transitive
+# Manifest dependency to bake it — including OpenMPI_jll, which is a dep of MPI
+# that is NOT imported under MPIPreferences.binary="system". That force-load bakes
+# OpenMPI_jll's initializer into the image; it then fires at startup, dlopen's the
+# JLL artifact libmpi.so, and crashes with `undefined symbol: opal_single_threaded`.
+# Disabling the transitive sweep bakes only the packages actually loaded (which use
+# the system libmpi), so the JLL never enters the image. The explicitly listed
+# packages + what they load are still baked; genuinely-unused deps just recompile
+# on demand at runtime (negligible).
 create_sysimage(
     [:Gridap, :GridapDistributed, :GridapSolvers, :PartitionedArrays,
      :MPI, :BlockArrays, :WaveSpec];
-    sysimage_path             = joinpath(@__DIR__, "..", "GridapLFEM_sysimage.so"),
-    precompile_execution_file = joinpath(@__DIR__, "warmup.jl"),
+    sysimage_path                 = joinpath(@__DIR__, "..", "GridapLFEM_sysimage.so"),
+    precompile_execution_file     = joinpath(@__DIR__, "warmup.jl"),
+    include_transitive_dependencies = false,
 )

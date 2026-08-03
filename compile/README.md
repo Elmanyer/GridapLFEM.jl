@@ -127,14 +127,24 @@ or environment variables needs **no** rebuild.
 ## Troubleshooting
 
 **`InitError(mod=:OpenMPI_jll … undefined symbol: opal_single_threaded)` at launch.**
-The image was baked against the JLL, not the system OpenMPI. Fix at the source:
-```bash
-source ~/GridapLFEM.jl/compile/load_modules_snellius.sh
-cd ~/GridapLFEM.jl
-julia --project=. compile/set_preferences.jl
-julia --project=. -e 'using MPI; println(MPI.MPI_LIBRARY_VERSION_STRING)'   # must be Open MPI 5.0.3
-```
-then rebuild (Step 2). The build's preflight now prevents this recurring.
+`OpenMPI_jll` (the bundled artifact) got baked into the image and its initializer fires at
+startup. There are two independent causes:
+1. **The MPI binding wasn't system at build time.** Fix at the source and rebuild:
+   ```bash
+   source ~/GridapLFEM.jl/compile/load_modules_snellius.sh
+   cd ~/GridapLFEM.jl
+   julia --project=. compile/set_preferences.jl
+   julia --project=. -e 'using MPI; println(MPI.MPI_LIBRARY_VERSION_STRING)'   # must be Open MPI 5.0.3
+   ```
+   The build's preflight now aborts if this is wrong.
+2. **PackageCompiler's transitive-dependency sweep force-loads `OpenMPI_jll`.** Even with
+   `binary="system"` (so a plain `using MPI` never loads the JLL), `create_sysimage` with the
+   default `include_transitive_dependencies=true` does `using` on every Manifest dep — including
+   `OpenMPI_jll` (a dep of `MPI` that is *not* imported under system MPI) — baking its startup
+   initializer. `compile.jl` sets **`include_transitive_dependencies=false`** to prevent this.
+   Symptom that distinguishes this case: a plain `using MPI` prints `Open MPI 5.0.3` fine, yet
+   `strings GridapLFEM_sysimage.so | grep OpenMPI_jll` still shows the JLL. Rebuild after pulling
+   the fixed `compile.jl`; the JLL must then be **absent** from that `strings` output.
 
 **Job accepted then vanishes from `squeue`, no `.out`/`.err`.** Not a sysimage issue —
 `sacct -j <id> --format=JobID,State,ExitCode,Reason` and check `AdminComment`

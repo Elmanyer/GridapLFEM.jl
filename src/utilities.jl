@@ -238,7 +238,7 @@ function setup_and_run(;
     p_horizontal :: Int     = 2,          # horizontal FE order (must be ≥2: Q1 zeroes the dispersion)
     # ---- Physical parameters -------------------------------------------------
     h_val        :: Float64 = 3.5,        # still-water depth [m] (flat bed unless h_bathy given)
-    g            :: Float64 = g,       # gravitational acceleration [m/s²]
+    g            :: Float64 = g,          # gravitational acceleration [m/s²]
     T_wave       :: Float64 = 1.6,        # forcing wave period [s]
     A_wave       :: Float64 = 0.001,      # forcing wave amplitude [m] (keep small for stability)
     # ---- Internal wavemaker (used only when wave_bc is nothing) ---------------
@@ -292,7 +292,7 @@ function setup_and_run(;
     # ---- Reconstructed field output (at the Nσ vertical σ-nodes) --------------
     write_w        :: Bool    = false,    # also write vertical-velocity fields w_s<σ> to VTK
     write_pressure :: Bool    = false,    # also write total-pressure fields p_s<σ> to VTK
-    rho            :: Float64 = rho,   # water density [kg/m³] (used for the pressure output)
+    rho            :: Float64 = rho,      # water density [kg/m³] (used for the pressure output)
 )
     # Choose the σ-node positions: the paper's optimised set for this M when
     # available, otherwise a uniform split of [0,1] into M+1 nodes.
@@ -300,7 +300,7 @@ function setup_and_run(;
         c_bdy = get(DEFAULT_CBDY, M, collect(LinRange(0.0, 1.0, M + 1)))
     end
 
-    # --- Stage 1: vertical pre-computation (mesh-independent, done once) -------
+    # --- STAGE 1: VERTICAL PRE-COMPUTATION (MESH INDEPENDENT, DONE ONCE) -------
     # Build the σ-basis and integrate every vertical tensor the residual needs.
     println("=== Vertical FE problem (algebraic LFE-M) ===")
     vert = assemble_vertical_tensors(M, p_vertical, c_bdy)
@@ -321,17 +321,20 @@ function setup_and_run(;
                   "array); use a line source (y_wm=nothing)"
     end
 
-    # --- Stage 2 setup: horizontal mesh + integration measure ----------------- 
-    # quadrature degree = 2·p_horizontal+2 integrates the nonlinear (product) terms exactly enough.
+    # --- STAGE 2 SETUP: HORIZONTAL MESH + INTEGRATION MEASURE ----------------- 
     # `y_periodic` glues the top/bottom edges when y_wall_bc == :periodic.
     model, trian = build_horizontal_model(domain, partition; y_periodic=y_periodic)
+    # quadrature degree = 2·p_horizontal+2 integrates the nonlinear (product) terms exactly enough.
     dΩh = Measure(trian, 2*p_horizontal + 2)
 
     # Forcing frequency and the matching wavenumber from the Airy relation
     # ω² = g k tanh(kd) (used to size the wavemaker and report kd).
-    omega  = 2.0*pi/T_wave
-    k_wave = find_wavenumber(omega, h_val, g)
+    omega  = 2.0*pi/T_wave                      # compute wave frequency from the period
+    k_wave = find_wavenumber(omega, h_val, g)   # compute corresponding wavenumber from the Airy dispersion relation
+
+    # dfn: the bathymetry function: either a constant h_val or a user-supplied h_bathy(x).
     dfn    = isnothing(h_bathy) ? (x -> h_val) : h_bathy    # bathymetry: constant h_val or user d(x)
+
     # Unpack the domain corners (accept either nested or flat tuple form).
     if domain isa Tuple{Tuple,Tuple}
         (x0d, x1d), (y0d, y1d) = domain
@@ -339,7 +342,7 @@ function setup_and_run(;
         x0d, x1d, y0d, y1d = domain
     end
 
-    # ---- Dirichlet boundary wave generation (waveinput.jl) --------------------
+    # ---- DIRICHLET BOUNDARY WAVE GENERATION (WAVEINPUT.JL) --------------------
     # If wave_bc is set, build the component table `wi` that drives the inflow
     # boundary; the interior wavemaker is disabled below. `wi` stays nothing for
     # the internal-wavemaker path.
@@ -350,24 +353,36 @@ function setup_and_run(;
         bc_side in (:left, :right) ||
             error("setup_and_run: bc_side must be :left or :right (got :$bc_side)")
         Tr = T_ramp === nothing ? nothing : Float64(T_ramp)
-        # The boundary source is dispatched on the TYPE of wave_bc: a prebuilt
-        # WaveInput passes through; a WaveSpec AiryState is converted; otherwise
-        # (nothing / :regular) a parametrised regular plane wave is built from
-        # A_wave/T_wave/wave_dir. All three feed the same Dirichlet machinery.
-        wi = wave_bc isa WaveInput ? wave_bc :
-             wave_bc isa WaveSpec.AiryWaves.AiryState ?
-                 WaveInput(vert, wave_bc; d=h_val, g=g, T_ramp=Tr, profile=bc_profile) :
-                 WaveInput(vert; A=A_wave, T=T_wave, d=h_val, g=g, theta=wave_dir,
-                           T_ramp=(Tr === nothing ? 2.0*T_wave : Tr), profile=bc_profile)
+
+        # The boundary source is dispatched on the TYPE of wave_bc.
+        if wave_bc isa WaveInput  # a prebuilt WaveInput passes through
+            wi = wave_bc
+        elseif wave_bc isa WaveSpec.AiryWaves.AiryState  # a WaveSpec AiryState is converted
+            wi = WaveInput(vert, wave_bc; d=h_val, g=g, T_ramp=Tr, profile=bc_profile)
+        else     # otherwise (nothing / :regular) a parametrised regular plane wave is built from A_wave/T_wave/wave_dir. 
+            tr_val = Tr === nothing ? 2.0 * T_wave : Tr
+            wi = WaveInput(vert; A=A_wave, T=T_wave, d=h_val, g=g, theta=wave_dir,
+                        T_ramp=tr_val, profile=bc_profile)
+        end
+        # All three feed the same Dirichlet machinery, which needs to be feed the component table `wi`,
+        # a WaveInput structure (the only difference is how the table is populated).
+
         println()
-        waveinput_summary(wi)                 # print Hs/Tp/components of the generated sea
+        waveinput_summary(wi)      # print Hs/Tp/components of the generated sea
         # Sanity: the generation boundary must sit over a constant depth equal to
         # the depth the boundary data was built for.
+         
+        # Identify the x-coordinate of the generation boundary (x0d or x1d) 
         xg = bc_side == :left ? x0d : x1d
+
+        # Sample the bathymetry along the y-direction at that x coordinate (xg = generation BC position). The depth must be constant
         dsamp = [dfn(VectorValue(xg, y0d + s*(y1d - y0d))) for s in 0.0:0.25:1.0]
+
+        # Check if all sampled depths are approximately equal to the WaveInput depth (wi.d) within a relative tolerance of 1e-8. If not, issue a warning.
         all(v -> isapprox(v, wi.d; rtol=1e-8), dsamp) ||
             @warn "wave_bc: depth along the generation boundary is not constant " *
                   "(or differs from the WaveInput depth $(wi.d) m)"
+
         # A directional (θ≠0) sea needs open/periodic lateral boundaries, not walls.
         wi.directional && y_wall_bc == :wall &&
             error("setup_and_run: a directional sea (θ≠0 components) requires " *
@@ -375,10 +390,12 @@ function setup_and_run(;
         wi.directional && y_periodic &&
             @warn "y_wall_bc=:periodic with a directional sea requires each component's " *
                   "transverse wavenumber k·sinθ to be a box harmonic 2π/Ly (not enforced)"
+
         # A hot start supplies the field at t=0, so it is incompatible with a ramp.
         ic_from_bc && wi.T_ramp > 0.0 &&
             error("setup_and_run: ic_from_bc=true requires T_ramp=0.0 " *
                   "(the hot start replaces the ramp)")
+
         # Warn if a sponge sits on the inflow (it would eat the incoming wave)…
         gen_w = bc_side == :left ? sponge_wL : sponge_wR
         gen_w > 0.0 && !relax_bc &&
@@ -390,16 +407,33 @@ function setup_and_run(;
             @warn "wave_bc: no sponge opposite the inflow — expect reflections"
     end
 
-    # --- Stage 2: stacked FE spaces [η,𝖴x,𝖴y] + boundary conditions -----------
+    # --- STACKED FE SPACES [η,𝖴x,𝖴y] + BOUNDARY CONDITIONS wi --------------------
     println("\n=== 2D Horizontal FE problem (stacked [η,𝖴x,𝖴y]) ===")
     # For a generated sea, pass the time-varying Dirichlet data (η, 𝖴x, and 𝖴y
     # for directional seas) so build_fe_spaces makes the matching transient trials.
-    inflow = wi === nothing ? nothing :
-             (side=bc_side, eta=eta_bc(wi), ux=ux_bc(wi),
-              uy=wi.directional ? uy_bc(wi) : nothing)
-    U, V = build_fe_spaces(model, p_horizontal, vert.N_dof;
-                               y_wall_bc=y_wall_bc, x_wall_bc=x_wall_bc,
-                               inflow=inflow)
+
+    # Build inflow BC data for build_fe_spaces. 
+    # If wi is nothing, the interior wavemaker is used and no Dirichlet BCs are applied. 
+    if wi === nothing
+        inflow = nothing
+    # Otherwise, the inflow BCs are built from the WaveInput structure wi.
+    else
+        if wi.directional
+            uy_val = uy_bc(wi)
+        else
+            uy_val = nothing
+        end
+        inflow = (side = bc_side, eta = eta_bc(wi), ux = ux_bc(wi), uy = uy_val)
+    end
+
+    # Build the stacked FE spaces for the horizontal problem, applying the inflow BCs if provided.
+    U, V = build_fe_spaces(model, 
+                                p_horizontal,           # horizontal FE order
+                                vert.N_dof;             # number of vertical DOFs = number of stacked fields
+                                y_wall_bc=y_wall_bc,    # lateral BC type
+                                x_wall_bc=x_wall_bc,    # solid wall BC on x-edges
+                                inflow=inflow)          # inflow BC data (η, 𝖴x, 𝖴y) if provided
+
     @printf("  Fields: 3 (η + 2 stacked VectorValue{%d})   free DOFs: %d\n",
             vert.N_dof, num_free_dofs(U(0.0)))
     @printf("  Wave: λ=%.2f m, kd=%.2f\n", 2pi/k_wave, k_wave*h_val)
@@ -407,11 +441,16 @@ function setup_and_run(;
     # --- Forcing: sponge profile + internal wavemaker source ------------------
     # Sponge damping μ(x,y) grows quadratically toward the flagged boundaries.
     sponge = make_sponge(domain, sponge_wL, sponge_wR, sponge_wB, sponge_wT, mu_max)
+
     # Internal source S(x,t): none when generating at a boundary; a line source
     # (plane waves) when y_wm is nothing; a point source (ring waves) otherwise.
-    wm = wi !== nothing ? ((x, t) -> 0.0) :
-         isnothing(y_wm) ? make_wavemaker_line(x_wm, A_wave, T_wave, k_wave) :
-                           make_wavemaker_point(x_wm, Float64(y_wm), A_wave, T_wave)
+    if wi !== nothing
+        wm = (x, t) -> 0.0  # Dirichlet generation disables the interior wavemaker
+    elseif isnothing(y_wm)
+        wm = make_wavemaker_line(x_wm, A_wave, T_wave, k_wave)  # line source (plane waves)
+    else
+        wm = make_wavemaker_point(x_wm, Float64(y_wm), A_wave, T_wave)  # point source (ring waves)
+    end
 
     # --- Optional relaxation zone next to the inflow (generation + absorption) -
     # Blends the state toward the incident wave over a strip at the boundary.
@@ -428,30 +467,47 @@ function setup_and_run(;
                 wrx, mu_max, string(bc_side))
     end
 
+    # Warn if the user has set flat_bed=true but the bathymetry varies, or vice versa.
+    check_flat_bed_consistency(dfn, domain, flat_bed)   # warn on bed ↔ flat_bed mismatch
+
     # --- Assemble the problem bundle: vertical tensors → Gridap constants +
     #     the depth, forcing, and physics flags that define the residual. -------
-    check_flat_bed_consistency(dfn, domain, flat_bed)   # warn on bed ↔ flat_bed mismatch
-    prob = build_problem(vert; g=g, h_bathy=dfn,
-        regime=regime, nl_pressure=nl_pressure, flat_bed=flat_bed,
-        mu_sponge=sponge, wm_src=wm,
-        relax_bc=use_relax, relax_mu=relax_mu_fn, relax_tg=relax_tg)
+    prob = build_problem(vert; g=g, 
+                        h_bathy=dfn,                # bathymetry function (x → d(x))
+                        regime=regime,              # linear/nonlinear physics
+                        nl_pressure=nl_pressure,    # nonlinear pressure treatment
+                        flat_bed=flat_bed,          # whether to drop ∇h terms (flat bed)
+                        mu_sponge=sponge,           # sponge damping profile μ(x,y)
+                        wm_src=wm,                  # internal wavemaker source S(x,t)
+                        relax_bc=use_relax,         # whether to use a relaxation zone at the inflow
+                        relax_mu=relax_mu_fn,       # relaxation-zone damping profile μ(x,y)
+                        relax_tg=relax_tg)          # incident wave target for the relaxation zone
 
-    # Wrap the residual (+ Jacobians) into a Gridap TransientFEOperator. `use_ad`
-    # swaps the hand Jacobians for AD-generated ones (cross-checking only).
+    # Build problem TransientFEOperator ->  Wrap the residual (+ Jacobians) into a Gridap operator
+    # `use_ad` swaps the hand Jacobians for AD-generated ones (cross-checking only).
     op = use_ad ? build_ode_operator_ad(prob, U, V, trian, dΩh) :
                   build_ode_operator(prob, U, V, trian, dΩh)
+
     # The monitor transparently wraps the Newton solver to harvest per-step stats.
     monitor = SolverMonitor()
+
     # Build the time integrator (SDIRK by default) around a Newton+LU nonlinear solve.
-    solver  = build_ode_solver(dt; solver_type=solver_type, theta=theta,
-                                   rho_inf=rho_inf, tableau=tableau,
-                                   nl_iter=nl_iter, nl_tol=nl_tol,
-                                   show_trace=show_trace, monitor=monitor)
+    solver  = build_ode_solver(dt;  solver_type=solver_type,    # :sdirk | :theta | :gen_alpha | :rk3
+                                    theta=theta,                # θ for :theta (0.5 = Crank–Nicolson)
+                                    rho_inf=rho_inf,            # high-frequency damping for :gen_alpha (ρ∞∈[0,1])
+                                    tableau=tableau,            # SDIRK tableau for :sdirk
+                                    nl_iter=nl_iter,            # max Newton iterations per stage
+                                    nl_tol=nl_tol,              # Newton residual tolerance (‖r‖∞)
+                                    show_trace=show_trace,      # print the Newton iteration trace
+                                    monitor=monitor)            # wrap the Newton solver to harvest per-step stats
+
     # Optional independent re-assembly of the governing equations for verification
+    # -> check if the governing equations are satisfied at the current solution (‖R‖∞ < check_tol).
     # (its θ-scheme self-check is meaningful only for the :theta integrator).
     checker = check_every > 0 ?
               ResidualChecker(prob, U, V, trian, dΩh, dt, theta,
                                  solver_type == :theta) : nothing
+
     # Initial condition. Four cases: hot-start from the incident wave; rest state
     # for a generated sea; rest state (default); or a prescribed η₀(x) release.
     u0 = if wi !== nothing && ic_from_bc
@@ -494,12 +550,24 @@ function setup_and_run(;
     # --- March the transient problem from 0 to T_final, collecting per-step
     #     diagnostics and writing VTK/gauge output as requested. ---------------
     println("\n=== Time loop (algebraic) ===")
-    diags = run_time_loop(op, solver, u0, 0.0, T_final;
-                              output_dir=output_dir, save_every=save_every,
-                              trian=trian, Nσ=vert.N_dof,
-                              print_every=print_every, gauges=gauges,
-                              recon=recon, trial_space=U, dt=dt, nlp=nlp,
-                              monitor=monitor, checker=checker,
-                              check_every=check_every, check_tol=check_tol)
+    diags = run_time_loop(op, solver,                   # Gridap operator + time integrator, constructed at build_ode_solver
+                            u0,                         # initial condition (Gridap FE function)
+                            0.0,                        # initial time
+                            T_final;                    # final time
+                            output_dir=output_dir,      # VTK/pvd destination (output directory)
+                            save_every=save_every,      # write a VTK snapshot every N steps (0 = no VTK)
+                            trian=trian,                # horizontal mesh (for VTK output)
+                            Nσ=vert.N_dof,              # number of vertical σ-levels = number of stacked horizontal fields (+ 1 for η) 
+                            print_every=print_every,    # print a step report every N steps (1 = every step)
+                            gauges=gauges,              # list of (x,y) probe points; η is sampled there each step
+                            recon=recon,                # reconstruction context for optional w/p VTK output (nothing if both off)
+                            trial_space=U,              # trial FE space (for VTK output)
+                            dt=dt,                      # time step [s]
+                            nlp=nlp,                    # frozen-projection context for nl_pressure=:full (nothing if not used)
+                            monitor=monitor,            # wrap the Newton solver to harvest per-step stats
+                            checker=checker,            # optional independent re-assembly of the governing equations for verification
+                            check_every=check_every,    # re-verify the governing equations every N steps (0 = off)
+                            check_tol=check_tol)        # tolerance for that verification (‖R‖∞)
+
     return diags, vert, prob
 end
