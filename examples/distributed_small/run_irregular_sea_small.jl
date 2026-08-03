@@ -36,7 +36,7 @@ feord   = genv_i("LFEM_FE_ORDER", 2)
 Lx, Ly  = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)
 d       = genv_f("LFEM_D", 3.5)
 spR     = genv_f("LFEM_SPONGE_R", 12.0)
-mumax   = genv_f("LFEM_MUMAX", 8.0)
+mumax   = genv_f("LFEM_MUMAX", 40.0)   # strong: kill the outgoing/boundary mode fast
 dt      = genv_f("LFEM_DT", 0.02)
 periods = genv_f("LFEM_PERIODS", 15.0)
 Tp      = tp_val()
@@ -64,7 +64,7 @@ diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     h_val=d, T_wave=Tp, A_wave=hs_val()/2,
-    wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
+    wave_gen=:bc_gen_airy, wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
     T_ramp=tramp_val(), relax_bc=relax_flag(), relax_width=relax_w_val(),
     sponge_wL=0.0, sponge_wR=spR, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
     T_final=Tfinal, dt=dt, h_bathy=h_bathy,

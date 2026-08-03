@@ -63,6 +63,7 @@ diags, vert, prob = setup_and_run(
     g           = g,
     T_wave      = T_wave,
     A_wave      = A_wave,
+    wave_gen    = :inner_res,       # interior Gaussian source
     x_wm        = x_wm,
     y_wm        = y_wm,             # point source → ring waves
     sponge_wL   = sponge_w,

@@ -84,6 +84,14 @@ hot start, and an optional generation/absorption relaxation zone. Driver kwargs
 `wave_bc/bc_side/bc_profile/T_ramp/ic_from_bc/relax_bc/relax_width` on both drivers; transient trial
 spaces work sequentially and distributed.
 
+**Wave-generation selector** (`wave_gen`, both drivers): an explicit control that separates the three
+mechanisms — `:inner_res` (interior Gaussian source: line ⇒ plane, point ⇒ ring), `:bc_gen_profile`
+(Dirichlet boundary, **parametrised** wave — a regular plane wave from `A_wave`/`T_wave`/`wave_dir`, or
+a caller-supplied `WaveInput`), `:bc_gen_airy` (Dirichlet boundary, **WaveSpec `AiryState`**).
+`resolve_wave_gen` validates the choice against `wave_bc`; the default `:auto` infers it
+(`wave_bc===nothing`→`:inner_res`; `AiryState`→`:bc_gen_airy`; else→`:bc_gen_profile`) so existing
+calls keep working. `wave_dir` sets the boundary-wave propagation angle vs +x.
+
 **Tests** (`test/`, 21 + `cluster/`): all pass — see the §1 table for the per-file scores. Highlights:
 cross-check virtual-work equivalence ≤7e-15; the asymptotic-consistency pair (full-NL⇒Airy across the
 band, kd→0⇒√(gd)); unsteady nonlinear MMS ~3e-9; BC generation 30/30 + 11/11 + 8/8 (Goda–Suzuki) +
@@ -130,9 +138,21 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
   (`check_flat_bed_consistency`). Derivation: the flat-bed reduction of the full nonlinear model in
   `LFEM_discretisation.zip` (`VerticalSemiDiscreteSystem.tex`); design record: `DESIGN_RECORDS.md` §7.
 - **Default integrator** SDIRK_2_2 (fully implicit, L-stable); **y-periodic** lateral BC option.
-- **Small-domain run suite** — **4 parametric scripts** (`examples/distributed_small/`, grouped by
+- **Surface-damping sponge** — the sponge now damps the free surface η as well as the velocity
+  (`+∫ μ q η` in continuity, same μ profile/μ_max; residual + hand Jacobian, `problem.jl`). This
+  cures the open-boundary spurious mode that a velocity-only sponge left under-damped (a linear
+  plane wave that previously grew to 10⁴× and NaN'd). Closed-basin tests are bit-identical (μ≡0
+  there). Design record: `DESIGN_RECORDS.md`; plan: `building_files/SPONGE_WAVEGEN_PLAN.md`.
+- **Explicit `wave_gen` selector** — `:inner_res` / `:bc_gen_profile` / `:bc_gen_airy` cleanly
+  separate interior-source, parametrised-boundary, and WaveSpec-boundary generation
+  (`resolve_wave_gen`, both drivers; `:auto` keeps old calls working). New driver kwarg `wave_dir`
+  (boundary-wave angle). New example `run_bc_plane_small.jl` (BC plane wave, left Dirichlet +
+  relaxation + strong far sponge) with flat/varbed × lin/nonlinear launchers. Small-domain
+  `mu_max` defaults raised 10→40 to kill waves fast in the sponge.
+- **Small-domain run suite** — **5 parametric scripts** (`examples/distributed_small/`, grouped by
   wave-generation type: `run_periodic_plane_small` [line source], `run_ring_small` [point source],
-  `run_directional_sea_small` / `run_irregular_sea_small` [Dirichlet BC]) driving **16 launchers**
+  `run_bc_plane_small` [`:bc_gen_profile` boundary plane wave], `run_directional_sea_small` /
+  `run_irregular_sea_small` [`:bc_gen_airy` Dirichlet BC]) driving **20 launchers**
   (`run/dist_small/`), one per case. Each script bakes in the common geometry/mesh/partition/solver
   defaults and reads the physics from env (`get!` base defaults ⇒ banner ⇔ solver consistent; a
   `flat_bed=0` toggle builds the submerged bar; the output dir is auto-tagged by config so cases don't
@@ -302,7 +322,7 @@ linP  : − ∫ H*( ∂x(d)*πAx + ∂y(d)*πAy + ∂x(H)*πKx + ∂y(H)*πKy )
         L1=−(∂x(d)*Uxt+∂y(d)*Uyt); L2=∂x(H)*Uxt+∂y(H)*Uyt; L3=−(H*(∂x(Uxt)+∂y(Uyt))+L2)
         πAx = (Wx⋅A[1])⋅L1+(Wx⋅A[2])⋅L2+(Wx⋅A[3])⋅L3   (πAy,πKx,πKy analogous)
 nlP   : comps {3,6,7,8} native; comps {1,2,4,5} split (§6); + 𝓟-part of R_P (uses Pcal)
-sponge: + ∫ μ*((Wx⋅(𝗠⋅Ux))+(Wy⋅(𝗠⋅Uy)))
+sponge: + ∫ μ*( q*η + (Wx⋅(𝗠⋅Ux)) + (Wy⋅(𝗠⋅Uy)) )   # damps the free surface η AND velocity (same μ profile/μ_max)
 ```
 
 **Gravity** uses the integrated-by-parts energy form `−(g/2)(H²−d²)(𝚽·DW)`. Subtracting the

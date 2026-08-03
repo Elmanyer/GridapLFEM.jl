@@ -47,6 +47,7 @@ diags, vert, prob = setup_and_run(
     g           = g,
     T_wave      = T_wave,
     A_wave      = A_wave,
+    wave_gen    = :bc_gen_profile,  # parametrised boundary wave
     wave_bc     = :regular,         # ← Dirichlet generation (no wavemaker)
     bc_side     = :left,
     bc_profile  = :model,           # discrete LFE-M eigenmode polarization

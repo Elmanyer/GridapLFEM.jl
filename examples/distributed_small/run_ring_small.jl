@@ -37,7 +37,7 @@ x_wm    = genv_f("LFEM_XWM", Lx/2)
 y_wm    = genv_f("LFEM_YWM", Ly/2)
 spX     = genv_f("LFEM_SPONGE_X", 4.0)
 spY     = genv_f("LFEM_SPONGE_Y", 4.0)
-mumax   = genv_f("LFEM_MUMAX", 12.0)
+mumax   = genv_f("LFEM_MUMAX", 40.0)   # strong: kill the reflected/boundary mode fast
 dt      = genv_f("LFEM_DT", 0.02)
 periods = genv_f("LFEM_PERIODS", 12.0)
 Tfinal  = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
@@ -52,6 +52,7 @@ banner("SMALL | ring wave (point source, flat bed) | $(regime_sym()) $(nl_pressu
 diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
+    wave_gen=:inner_res,                                           # interior point source
     h_val=d, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=y_wm,      # point source => ring
     sponge_wL=spX, sponge_wR=spX, sponge_wB=spY, sponge_wT=spY, mu_max=mumax,
     T_final=Tfinal, dt=dt,

@@ -196,6 +196,43 @@ function check_flat_bed_consistency(h_bathy, domain, flat_bed::Bool;
     return is_const
 end
 
+"""
+    resolve_wave_gen(wave_gen, wave_bc) → Symbol
+
+Map the user's `wave_gen` selector to one of `:inner_res | :bc_gen_profile |
+:bc_gen_airy`, validating it against `wave_bc`. `:auto` (the default) infers the
+mechanism for backward compatibility:
+
+  - `wave_bc === nothing`           → `:inner_res`      (interior Gaussian source)
+  - `wave_bc isa AiryState`         → `:bc_gen_airy`    (WaveSpec stochastic sea)
+  - otherwise (`:regular`/WaveInput)→ `:bc_gen_profile` (parametrised boundary wave)
+
+An explicit value is checked for consistency with `wave_bc`.
+"""
+function resolve_wave_gen(wave_gen::Symbol, wave_bc)
+    is_airy = wave_bc isa WaveSpec.AiryWaves.AiryState
+    if wave_gen === :auto
+        wave_bc === nothing && return :inner_res
+        return is_airy ? :bc_gen_airy : :bc_gen_profile
+    elseif wave_gen === :inner_res
+        wave_bc === nothing ||
+            error("wave_gen=:inner_res uses the interior source; leave wave_bc=nothing")
+        return :inner_res
+    elseif wave_gen === :bc_gen_profile
+        is_airy &&
+            error("wave_gen=:bc_gen_profile is for parametrised waves; pass an AiryState " *
+                  "with wave_gen=:bc_gen_airy instead")
+        return :bc_gen_profile
+    elseif wave_gen === :bc_gen_airy
+        is_airy ||
+            error("wave_gen=:bc_gen_airy requires wave_bc to be a WaveSpec AiryState")
+        return :bc_gen_airy
+    else
+        error("wave_gen must be :auto, :inner_res, :bc_gen_profile or :bc_gen_airy " *
+              "(got :$wave_gen)")
+    end
+end
+
 function setup_and_run(;
     # ---- Vertical discretisation ---------------------------------------------
     M            :: Int     = 2,          # number of vertical σ-elements (LFE-M order: 2/3/4)
@@ -241,7 +278,9 @@ function setup_and_run(;
     h_bathy                 = nothing,    # x → d(x): variable bathymetry (overrides h_val)
     eta0_func               = nothing,    # x → η₀(x): initial free surface (IC release: set x_wall_bc=true)
     # ---- Dirichlet boundary wave generation (waveinput.jl) --------------------
+    wave_gen     :: Symbol  = :auto,      # :inner_res | :bc_gen_profile | :bc_gen_airy (:auto infers from wave_bc)
     wave_bc                 = nothing,    # nothing | :regular | WaveInput | WaveSpec AiryState
+    wave_dir     :: Float64 = 0.0,        # propagation angle vs +x for :bc_gen_profile [rad]
     bc_side      :: Symbol  = :left,      # generation boundary (:left/:right)
     bc_profile   :: Symbol  = :model,     # vertical polarization of the inflow (:model/:airy)
     T_ramp                  = nothing,    # Hann ramp-up time [s]; nothing → 2 peak periods
@@ -310,20 +349,20 @@ function setup_and_run(;
     # If wave_bc is set, build the component table `wi` that drives the inflow
     # boundary; the interior wavemaker is disabled below. `wi` stays nothing for
     # the internal-wavemaker path.
+    wg = resolve_wave_gen(wave_gen, wave_bc)
+    @printf("  Wave generation: %s\n", string(wg))
     wi = nothing
-    if wave_bc !== nothing
+    if wg !== :inner_res
         bc_side in (:left, :right) ||
             error("setup_and_run: bc_side must be :left or :right (got :$bc_side)")
         Tr = T_ramp === nothing ? nothing : Float64(T_ramp)
-        # :regular → build a monochromatic table from A_wave/T_wave; otherwise
-        # accept a prebuilt WaveInput, or convert a WaveSpec AiryState sea state.
+        # :bc_gen_airy → convert a WaveSpec AiryState; :bc_gen_profile → a prebuilt
+        # WaveInput, or a parametrised regular plane wave from A_wave/T_wave/wave_dir.
         wi = wave_bc isa WaveInput ? wave_bc :
-             wave_bc === :regular ?
-                 WaveInput(vert; A=A_wave, T=T_wave, d=h_val, g=g,
-                           T_ramp=(Tr === nothing ? 2.0*T_wave : Tr),
-                           profile=bc_profile) :
-                 WaveInput(vert, wave_bc; d=h_val, g=g, T_ramp=Tr,
-                           profile=bc_profile)
+             wg === :bc_gen_airy ?
+                 WaveInput(vert, wave_bc; d=h_val, g=g, T_ramp=Tr, profile=bc_profile) :
+                 WaveInput(vert; A=A_wave, T=T_wave, d=h_val, g=g, theta=wave_dir,
+                           T_ramp=(Tr === nothing ? 2.0*T_wave : Tr), profile=bc_profile)
         println()
         waveinput_summary(wi)                 # print Hs/Tp/components of the generated sea
         # Sanity: the generation boundary must sit over a constant depth equal to

@@ -1,25 +1,28 @@
 # ==============================================================
-#  run_periodic_plane_small.jl — PARAMETRIC small-domain periodic plane wave
+#  run_bc_plane_small.jl — PARAMETRIC small-domain BC periodic plane wave
 #
-#  ONE script for every interior-line-source, y-periodic plane-wave case on the
-#  50x20 m small domain. The physics is selected entirely by environment
-#  variables (set in the launcher); the geometry/mesh/partition are fixed here.
-#  Covers the observation + comparison cases 1,2,3,7-12 (see run/dist_small/).
+#  Periodic plane wave GENERATED FROM THE LEFT BOUNDARY (Dirichlet data, no
+#  interior source): η/𝖴x prescribed from a parametrised regular Airy component
+#  (wave_gen=:bc_gen_profile), a generation+absorption relaxation zone at the
+#  inflow, and a strong sponge at the far (right) end. y-periodic ⇒ a clean plane
+#  wave with NO two-open-ends resonance — this is the stable replacement for the
+#  interior-line-source plane wave that seeded the open-boundary instability.
 #
-#  Config via env (launcher overrides ONLY what changes; base = nonlinear / full
-#  pressure / flat bed / A=0.1 / T=2.0):
+#  Config via env (base = nonlinear / full pressure / flat bed / A=0.1 / T=2.0):
 #    LFEM_REGIME       linear | nonlinear                    (default nonlinear)
 #    LFEM_NL_PRESSURE  none | native | full                  (default full)
-#    LFEM_FLAT_BED     1 flat | 0 variable (=> submerged bar built here)  (1)
+#    LFEM_FLAT_BED     1 flat | 0 variable (=> submerged bar built here)   (1)
 #    LFEM_AWAVE        wave amplitude [m]                    (default 0.1)
 #    LFEM_TWAVE        wave period [s]                       (default 2.0)
+#    LFEM_WAVE_DIR     propagation angle vs +x [rad]         (default 0.0)
+#    LFEM_BC_PROFILE   model | airy  (vertical polarization) (default model)
 #    LFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
 #
-#  Fixed defaults baked in here (rarely overridden): domain 50x20, mesh 200x40,
-#  partition 8x4 (32 ranks), fe_order 2, dt 0.02, d 3.5, x_wm 12, sponges 6/10,
-#  mu_max 10, periods 12, save_every 10. All still env-overridable.
+#  Fixed defaults baked in here: domain 50x20, mesh 200x40, partition 8x4 (32
+#  ranks), fe_order 2, dt 0.02, d 3.5, LEFT relaxation zone (width ~1λ) + right
+#  sponge 12, mu_max 40, periods 12, save_every 10. All still env-overridable.
 #
-#  LAUNCH (px*py MUST equal -n): see run/dist_small/*.sh
+#  LAUNCH (px*py MUST equal -n): see run/dist_small/*bc_plane*.sh
 # ==============================================================
 
 include(joinpath(@__DIR__, "..", "distributed", "_dist_common.jl"))
@@ -28,23 +31,23 @@ include(joinpath(@__DIR__, "..", "distributed", "_dist_common.jl"))
 get!(ENV, "LFEM_REGIME", "nonlinear")
 get!(ENV, "LFEM_NL_PRESSURE", "full")
 get!(ENV, "LFEM_FLAT_BED", "1")
+get!(ENV, "LFEM_RELAX", "1"); get!(ENV, "LFEM_RELAX_W", "6")
 
-# ---- fixed geometry / numerics defaults (common to all periodic-plane cases) ----
+# ---- fixed geometry / numerics defaults (common to all bc-plane cases) ----
 M       = genv_i("LFEM_M", 2)
 px, py  = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 4)      # 8*4 = 32 ranks
 nx, ny  = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 40)   # dx=0.25, dy=0.5
 feord   = genv_i("LFEM_FE_ORDER", 2)
 Lx, Ly  = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)
 d       = genv_f("LFEM_D", 3.5)
-x_wm    = genv_f("LFEM_XWM", 12.0)
-spL     = genv_f("LFEM_SPONGE_L", 10.0)
-spR     = genv_f("LFEM_SPONGE_R", 10.0)
-mumax   = genv_f("LFEM_MUMAX", 40.0)   # strong: kill the reflected/boundary mode fast
+spR     = genv_f("LFEM_SPONGE_R", 12.0)
+mumax   = genv_f("LFEM_MUMAX", 40.0)   # strong: kill the outgoing/boundary mode fast
 dt      = genv_f("LFEM_DT", 0.02)
 save_ev = genv_i("LFEM_SAVE_EVERY", 10)
 # ---- per-case knobs (defaults = base case) ----
 Twave   = genv_f("LFEM_TWAVE", 2.0)
 Awave   = genv_f("LFEM_AWAVE", 0.1)
+wdir    = genv_f("LFEM_WAVE_DIR", 0.0)
 periods = genv_f("LFEM_PERIODS", 12.0)
 Tfinal  = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
 
@@ -57,17 +60,18 @@ h_bathy = usebar ?
 
 bedtag  = usebar ? "bar" : "flat"
 tag     = "$(regime_sym())_$(nl_pressure_sym())_$(bedtag)_A$(Awave)_T$(Twave)"
-outdir  = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "small_plane_$(tag)_M$(M)"))
+outdir  = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "small_bcplane_$(tag)_M$(M)"))
 
-banner("SMALL | periodic plane wave | $(regime_sym()) $(nl_pressure_sym()) $bedtag A=$Awave T=$Twave",
+banner("SMALL | BC plane wave (Dirichlet left) | $(regime_sym()) $(nl_pressure_sym()) $bedtag A=$Awave T=$Twave",
        M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
     cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
-    wave_gen=:inner_res,                                           # interior line source
-    h_val=d, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=nothing,   # line source
-    sponge_wL=spL, sponge_wR=spR, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
+    wave_gen=:bc_gen_profile, bc_side=:left, wave_dir=wdir, bc_profile=bc_profile_sym(),
+    h_val=d, T_wave=Twave, A_wave=Awave,
+    T_ramp=tramp_val(), relax_bc=relax_flag(), relax_width=relax_w_val(),
+    sponge_wL=0.0, sponge_wR=spR, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
     T_final=Tfinal, dt=dt, h_bathy=h_bathy,
     regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(1),
     y_wall_bc=:periodic, x_wall_bc=false,
@@ -78,5 +82,5 @@ diags, vert, prob = setup_and_run_distributed(
     ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(),
     print_every=genv_i("LFEM_PRINT_EVERY", 10))
 
-is_rank0() && @printf("periodic_plane [%s] done: %d steps, %d snapshots to %s\n",
+is_rank0() && @printf("bc_plane [%s] done: %d steps, %d snapshots to %s\n",
                       tag, length(diags), length(diags) ÷ max(save_ev,1), outdir)

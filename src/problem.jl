@@ -249,8 +249,13 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
         end
     end
 
-    # ---- sponge -----------------------------------------------------------------
-    r = r + ∫( mu_cf*((Wx ⋅ alg_mul(prob.Mv, Ux)) + (Wy ⋅ alg_mul(prob.Mv, Uy))) ) * dΩh
+    # ---- sponge (damps velocity AND the free surface η, same μ profile) ---------
+    #  +∫ μ q η in continuity gives ηt = … − μη → exponential decay of the surface
+    #  in the layer (Newtonian relaxation); essential to absorb the η-dominated
+    #  open-boundary mode that a velocity-only sponge leaves under-damped.
+    r = r + ∫( mu_cf*( q*η
+                     + (Wx ⋅ alg_mul(prob.Mv, Ux))
+                     + (Wy ⋅ alg_mul(prob.Mv, Uy)) ) ) * dΩh
 
     # ---- generation/absorption relaxation zone (Dirichlet inflow) ---------------
     #  Relax the state toward the incident wave in a zone adjacent to the
@@ -395,8 +400,10 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dΩh)
         r = r + ∫( dη*(Wx ⋅ alg_mul(prob.Mv, ut[2])) + dη*(Wy ⋅ alg_mul(prob.Mv, ut[3])) ) * dΩh
     end
 
-    # sponge
-    r = r + ∫( mu_cf*((Wx ⋅ alg_mul(prob.Mv, dUx)) + (Wy ⋅ alg_mul(prob.Mv, dUy))) ) * dΩh
+    # sponge (velocity + free-surface η damping; exact linear derivative)
+    r = r + ∫( mu_cf*( q*dη
+                     + (Wx ⋅ alg_mul(prob.Mv, dUx))
+                     + (Wy ⋅ alg_mul(prob.Mv, dUy)) ) ) * dΩh
 
     # relaxation zone (linear in u — exact derivative)
     if prob.relax_bc

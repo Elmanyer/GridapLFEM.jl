@@ -62,9 +62,15 @@ The **complete** LaTeX §8 global residual, every term:
 - **Full nonlinear pressure**, all eight `𝓝ₖⱼ` components in all three residual blocks — the native
   first-order set {3,6,7,8} plus the Class-III set {1,2,4,5} via exact integration-by-parts for the
   bed-slope half and frozen L²-projections for the surface-slope / leading-pressure halves
-- Quadratic sponge absorption layers
+- Quadratic sponge absorption layers — damp **both the velocity and the free surface η**
+  (`+∫ μ q η`, same μ profile/`mu_max`), so open-boundary modes are fully absorbed
 - Solid-wall / open / **periodic** (in y) boundary conditions
-- **Dirichlet boundary wave generation** (`wave_bc`) — waves enter through time-varying Dirichlet
+- **Wave generation — three mechanisms** selected by `wave_gen`: `:inner_res` (interior Gaussian
+  source: line ⇒ plane wave, point ⇒ ring wave), `:bc_gen_profile` (a **parametrised** wave generated
+  from a boundary — a periodic plane wave from `A_wave`/`T_wave`/`wave_dir`, or a supplied `WaveInput`),
+  `:bc_gen_airy` (a WaveSpec stochastic sea from a boundary). `:auto` (default) infers it from
+  `wave_bc`, validated by `resolve_wave_gen`
+- **Dirichlet boundary wave generation** (`:bc_gen_profile` / `:bc_gen_airy`) — waves enter through time-varying Dirichlet
   data (η, 𝖴x, and 𝖴y for directional seas) on a domain side, no interior source: regular waves,
   hand-built multichromatic seas, or **WaveSpec.jl stochastic sea states** (JONSWAP/TMA/…, angular
   spreading) via the `AiryState → WaveInput` converter. Discrete LFE-M eigenmode vertical
@@ -117,7 +123,7 @@ GridapLFEM.jl/
 │   ├── bc_plane_wave.jl · bc_irregular_sea.jl · bc_directional_sea.jl   sequential BC generation
 │   ├── validation/               physical benchmarks (Stokes, bar, soliton, ring, sideband) + README
 │   ├── distributed/              8 env-configurable cluster MPI scripts + README
-│   └── distributed_small/        4 parametric small-domain (50×20) scripts (line/point/dir/irreg)
+│   └── distributed_small/        5 parametric small-domain (50×20) scripts (line/point/bc-plane/dir/irreg)
 ├── run/                          # SLURM launchers (snellius/blue) + run/dist_small/ (16 small-domain jobs)
 ├── postprocessing/GridapLFEMPost # self-contained VTK/CSV analysis + plotting library (own env)
 ├── compile/                      # cluster sysimage build (compile.jl, warmup.jl, module loaders)
@@ -226,10 +232,12 @@ with a PMIx version mismatch. `nx`/`ny` in `partition` must divide evenly by `px
 | **`regime`** | `:linear` (linearised, no advection) \| `:nonlinear` (full finite-amplitude core) |
 | **`nl_pressure`** | `:none` \| `:native` `{3,6,7,8}` \| `:full` `+{1,2,4,5}` — the O(A³) non-hydrostatic pressure |
 | **`flat_bed`** | `true` = flat bed (∇h≡0) \| `false` = variable bathymetry; a driver warning flags a bed↔switch mismatch |
-| `T_wave`, `A_wave`, `x_wm`, `y_wm` | wavemaker: `y_wm=nothing` → line source (plane wave), else point source (ring wave) |
-| `sponge_wL/wR/wB/wT`, `mu_max` | quadratic absorbing sponge layer widths and strength (0 width = side off) |
+| **`wave_gen`** | wave-generation mechanism: `:inner_res` (interior Gaussian source) \| `:bc_gen_profile` (parametrised boundary wave) \| `:bc_gen_airy` (WaveSpec boundary sea); `:auto` (default) infers it from `wave_bc` |
+| `T_wave`, `A_wave`, `x_wm`, `y_wm` | interior source (`:inner_res`): `y_wm=nothing` → line source (plane wave), else point source (ring wave) |
+| `wave_dir` | propagation angle vs +x for a `:bc_gen_profile` boundary wave (0 = normal incidence) |
+| `sponge_wL/wR/wB/wT`, `mu_max` | quadratic absorbing sponge widths and strength; damps **velocity AND η** (0 width = side off) |
 | `eta0_func` | initial free-surface release `η₀(x)` — **requires `x_wall_bc=true`** (closed basin) |
-| `wave_bc` | Dirichlet boundary wave generation: `:regular` (from `A_wave`/`T_wave`), a `WaveInput`, or a `WaveSpec.AiryWaves.AiryState` (auto-converted); disables the interior wavemaker |
+| `wave_bc` | boundary-generation source: `:regular` (from `A_wave`/`T_wave`/`wave_dir`), a `WaveInput`, or a `WaveSpec.AiryWaves.AiryState` (auto-converted); disables the interior wavemaker |
 | `bc_side`, `bc_profile` | generation boundary (`:left`/`:right`); vertical polarization (`:model` = discrete eigenmode, default / `:airy` = cosh sampling) |
 | `T_ramp`, `ic_from_bc` | Hann start-up ramp (default 2 peak periods); hot start from the incident field (needs `T_ramp=0`) |
 | `relax_bc`, `relax_width` | generation/absorption relaxation zone at the inflow (strength `mu_max`, default width one peak wavelength) |
