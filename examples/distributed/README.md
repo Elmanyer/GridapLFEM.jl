@@ -87,25 +87,44 @@ LFEM_M=2 LFEM_PX=16 LFEM_PY=8 LFEM_NTHETA=7 LFEM_SPREAD_STD=20 \
 
 ## On a SLURM cluster
 
+Ready-made launchers for these scripts live in **`run/`** (one per case). They all run against the
+prebuilt system image via the shared helper `run/lfem_env.sh` — without it every rank JIT-compiles
+the FEM stack (~30–45 min and a ~4–8 GB/rank memory spike). Build the image once
+(`cd compile && sbatch compile_snellius.sh`), then submit:
+
+```bash
+sbatch run/run_planewave.sh      # or run_ringwave.sh, run_irregularsea.sh, …
+```
+
+To write a new launcher, copy the nearest one and change only the `#SBATCH` header, the `LFEM_*`
+overrides, and the `lfem_run` target:
+
 ```bash
 #!/bin/bash
 #SBATCH --job-name=lfem_plane
+#SBATCH --partition=rome        # the sysimage removes the compile spike that needed fat_rome
 #SBATCH --nodes=1
 #SBATCH --ntasks=32
 #SBATCH --time=08:00:00
 #SBATCH --output=lfem_plane_M%a.out
-#SBATCH --array=2,3            # job array: one run per M (SLURM_ARRAY_TASK_ID)
+#SBATCH --array=2,3             # job array: one run per M (SLURM_ARRAY_TASK_ID)
+                                # (no --mem-per-cpu: take the node default, 2 GB/core on rome)
 
-cd $SLURM_SUBMIT_DIR
+source $HOME/GridapLFEM.jl/run/lfem_env.sh
+
 export LFEM_M=$SLURM_ARRAY_TASK_ID
-export LFEM_PX=8 LFEM_PY=4     # 8*4 = 32 = --ntasks
-export LFEM_NX=4000 LFEM_NY=200
+export LFEM_PX=8; export LFEM_PY=4     # 8*4 = 32 = --ntasks
+export LFEM_NX=4000; export LFEM_NY=200
 export LFEM_SAVE_EVERY=25
-export LFEM_OUTDIR=$SLURM_SUBMIT_DIR/output/plane_M${LFEM_M}
+export LFEM_OUTDIR=$HOME/GridapLFEM.jl/output/plane_M${LFEM_M}
 
-srun julia --project=. GridapLFEM.jl/examples/distributed/run_plane_wave_dist.jl
-# (or ~/.julia/bin/mpiexecjl --project=. -n $SLURM_NTASKS julia --project=. <script>)
+lfem_run 32 examples/distributed/run_plane_wave_dist.jl
 ```
+
+`lfem_run <nranks> <script.jl>` (path relative to the project root) loads the cluster modules the
+image was built with, verifies the image, and expands to the full
+`mpiexecjl --project=… -n … julia --project=… -J<sysimage> …` invocation. Set `LFEM_NO_SYSIMAGE=1`
+to fall back to the JIT path while the image is stale or rebuilding. Details: `compile/README.md`.
 
 ## Validation against the old solver
 

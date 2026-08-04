@@ -126,10 +126,13 @@ GridapLFEM.jl/
 │   ├── validation/               physical benchmarks (Stokes, bar, soliton, ring, sideband) + README
 │   ├── distributed/              8 env-configurable cluster MPI scripts + README
 │   └── distributed_small/        5 parametric small-domain (50×20) scripts (line/point/bc-plane/dir/irreg)
-├── run/                          # SLURM launchers (snellius/blue) + run/dist_small/ (16 small-domain jobs)
+├── run/                          # SLURM launchers — all sysimage-based (see Running on a cluster)
+│   ├── lfem_env.sh              shared helper: modules + sysimage + lfem_run <nranks> <script.jl>
+│   ├── run_*.sh                 9 production cases (snellius; run_blue.sh = DelftBlue)
+│   └── dist_small/              20 small-domain (50×20) observation/comparison jobs
 ├── postprocessing/GridapLFEMPost # self-contained VTK/CSV analysis + plotting library (own env)
-├── compile/                      # cluster sysimage build (compile.jl, warmup.jl, module loaders)
-├── WaveSpec.jl/                  # vendored stochastic sea-state package (Pkg.develop'd)
+├── compile/                      # cluster sysimage build (compile.jl, warmup.jl, module loaders) + README
+├── WaveSpec.jl/                  # vendored stochastic sea-state package (Pkg.develop'd, repo version)
 ├── building_files/               # LaTeX project (zip), design records, prototype, notebook
 │   ├── LFEM_discretisation.zip   authoritative LaTeX derivation (compiles; §8 = this solver, §9 = validation)
 │   ├── LFEM_Gridap.md            clean synthesis of the derivation → the scalar residual
@@ -218,9 +221,43 @@ diags, vert, prob = setup_and_run_distributed(
 
 Use Julia's own MPI launcher (`mpiexecjl`) — the system `mpiexec` fails on this development machine
 with a PMIx version mismatch. `nx`/`ny` in `partition` must divide evenly by `px`/`py`. Distributed
-`diags` carries `(t, eta_max)` only (point gauges need inter-rank communication). See
-`examples/distributed/README.md` for cluster/SLURM usage, and `examples/distributed_small/` +
-`run/dist_small/` for a ready-made small-domain (50×20) observation/comparison suite.
+`diags` carries `(t, eta_max)` only (point gauges need inter-rank communication).
+
+### Running on a cluster (SLURM + system image)
+
+On the cluster, runs are launched from `run/` and **always against a prebuilt system image**
+(`GridapLFEM_sysimage.so`). Without it every rank JIT-compiles the full Gridap FEM stack: ~30–45 min
+of wall time per run and a ~4–8 GB/rank memory spike that OOM'd whole nodes at 32–128 ranks. With
+it the ranks mmap one shared, already-compiled image — no compile, no spike, and the jobs fit the
+cheap `rome`/L1 budget at the node-default 2 GB/core.
+
+```bash
+# 1. build the image once (~45-60 min; rebuild after changing src/*.jl or upgrading packages)
+cd ~/GridapLFEM.jl/compile && sbatch compile_snellius.sh
+
+# 2. submit any case — all launchers already use the image
+cd ~/GridapLFEM.jl
+sbatch run/dist_small/run_nl_periodic_plane_flat_small.sh   # small-domain (50x20) suite, 20 cases
+sbatch run/run_irregularsea.sh                              # production case, 9 total
+```
+
+Every launcher is a thin wrapper: its `#SBATCH` header, the case's `LFEM_*` env overrides, and one
+call to the shared helper `run/lfem_env.sh`, which loads the cluster modules the image was built
+with, verifies the image, and launches:
+
+```bash
+source $HOME/GridapLFEM.jl/run/lfem_env.sh
+export LFEM_PX=8; export LFEM_PY=4          # 8*4 = 32 ranks
+export LFEM_REGIME=linear
+lfem_run 32 examples/distributed_small/run_periodic_plane_small.jl
+```
+
+Helper knobs: `LFEM_PROJ`, `LFEM_CLUSTER` (`snellius`/`blue`), `LFEM_SYSIMAGE`, and
+`LFEM_NO_SYSIMAGE=1` to drop `-J` and fall back to the JIT path (useful while the image is stale or
+rebuilding — the image is **not** versioned against `src/`, so rebuild after editing the solver). A
+missing image aborts the job immediately rather than silently taking the slow path. Full build
+walkthrough and troubleshooting: `compile/README.md`. Per-case physics/geometry env vars:
+`examples/distributed/README.md`, `examples/distributed_small/`.
 
 ---
 
@@ -324,8 +361,11 @@ records are in `building_files/DESIGN_RECORDS.md`.
 
 ## Known issues
 
-- The vendored **`WaveSpec.jl`** `change_seed!` currently accesses a non-existent `state.spec` field
-  (the struct field is `spectrum`), so `build_airy_state` errors — this blocks the Dirichlet **sea-state**
-  runs (production `run_{irregular,directional}_sea_dist.jl` and the small sea cases). A one-line
-  library fix; the run scripts themselves are correct. Regular-wave / multichromatic BC generation and
-  all interior-wavemaker cases are unaffected.
+- The vendored **`WaveSpec.jl`** must track the **GitHub repository version, not a tagged release**:
+  the release's `change_seed!` accesses a non-existent `state.spec` field (the struct field is
+  `spectrum`), which makes `build_airy_state` error and blocks every Dirichlet **sea-state** run.
+  The repo version carries the fix and is what is vendored here — if sea-state runs start failing
+  in `change_seed!`, check that `WaveSpec.jl/` has not been reset to a release tag.
+- The cluster **system image is not versioned against `src/`**: nothing detects that the solver was
+  edited after the image was built, and the job will run the stale baked code. Rebuild
+  (`compile/compile_snellius.sh`) after touching `src/*.jl`, or launch with `LFEM_NO_SYSIMAGE=1`.

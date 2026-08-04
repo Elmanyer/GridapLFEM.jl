@@ -9,6 +9,7 @@
 #SBATCH --output=GridapLFEM.%j.out
 #SBATCH --error=GridapLFEM.%j.err
 
-source $HOME/GridapLFEM.jl/compile/load_modules_blue.sh
+export LFEM_CLUSTER=blue
+source $HOME/GridapLFEM.jl/run/lfem_env.sh
 
-mpiexecjl -n 16 julia --project=$HOME/GridapLFEM.jl $HOME/GridapLFEM.jl/examples/distributed/run_plane_wave_dist.jl
+lfem_run 16 examples/distributed/run_plane_wave_dist.jl

@@ -1,16 +1,16 @@
 #!/bin/bash
 
 #SBATCH --job-name="LFEM_ringwave"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=119:59:00
 #SBATCH --ntasks-per-node=64
 #SBATCH --cpus-per-task=1
 #SBATCH --output=GridapLFEM.%j.out
 #SBATCH --error=GridapLFEM.%j.err
 
-source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
+source $HOME/GridapLFEM.jl/run/lfem_env.sh
 
-# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ------------------------
+# --- MPI process grid (PX*PY MUST equal the rank count given to lfem_run) ---
 export LFEM_PX=8
 export LFEM_PY=8              # 8*8 = 64 ranks; mesh 200x200 -> 25x25 cells/rank
 
@@ -28,4 +28,4 @@ export LFEM_PY=8              # 8*8 = 64 ranks; mesh 200x200 -> 25x25 cells/rank
 # export LFEM_LS_MAXITER=4000 # raise GMRES cap if convergence warnings appear
 # export LFEM_NL_TOL=1e-6
 
-mpiexecjl -n 64 julia --project=$HOME/GridapLFEM.jl $HOME/GridapLFEM.jl/examples/distributed/run_ring_wave_dist.jl
+lfem_run 64 examples/distributed/run_ring_wave_dist.jl

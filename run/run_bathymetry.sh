@@ -1,16 +1,16 @@
 #!/bin/bash
 
 #SBATCH --job-name="LFEM_bathymetry"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=72:00:00
 #SBATCH --ntasks-per-node=100
 #SBATCH --cpus-per-task=1
 #SBATCH --output=GridapLFEM.%j.out
 #SBATCH --error=GridapLFEM.%j.err
 
-source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
+source $HOME/GridapLFEM.jl/run/lfem_env.sh
 
-# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ------------------------
+# --- MPI process grid (PX*PY MUST equal the rank count given to lfem_run) ---
 export LFEM_PX=20
 export LFEM_PY=5             # 20*5 = 100 ranks; mesh 1500x100 -> 75x20 cells/rank
 
@@ -35,4 +35,4 @@ export LFEM_PY=5             # 20*5 = 100 ranks; mesh 1500x100 -> 75x20 cells/ra
 # export LFEM_LS_MAXITER=4000
 # export LFEM_NL_TOL=1e-6
 
-mpiexecjl -n 100 julia --project=$HOME/GridapLFEM.jl $HOME/GridapLFEM.jl/examples/distributed/run_bathymetry_dist.jl
+lfem_run 100 examples/distributed/run_bathymetry_dist.jl

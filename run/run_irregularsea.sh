@@ -1,16 +1,16 @@
 #!/bin/bash
 
 #SBATCH --job-name="LFEM_irregularsea"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=119:59:00
 #SBATCH --ntasks-per-node=128
 #SBATCH --cpus-per-task=1
 #SBATCH --output=GridapLFEM.%j.out
 #SBATCH --error=GridapLFEM.%j.err
 
-source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
+source $HOME/GridapLFEM.jl/run/lfem_env.sh
 
-# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ------------------------
+# --- MPI process grid (PX*PY MUST equal the rank count given to lfem_run) ---
 export LFEM_PX=32
 export LFEM_PY=4             # 32*4 = 128 ranks; mesh 2000x100
 
@@ -36,4 +36,4 @@ export LFEM_PY=4             # 32*4 = 128 ranks; mesh 2000x100
 # export LFEM_LS_MAXITER=4000
 # export LFEM_NL_TOL=1e-6
 
-mpiexecjl -n 128 julia --project=$HOME/GridapLFEM.jl $HOME/GridapLFEM.jl/examples/distributed/run_irregular_sea_dist.jl
+lfem_run 128 examples/distributed/run_irregular_sea_dist.jl

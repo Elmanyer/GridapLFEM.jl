@@ -8,6 +8,6 @@
 #SBATCH --output=GridapLFEM.%j.out
 #SBATCH --error=GridapLFEM.%j.err
 
-source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
+source $HOME/GridapLFEM.jl/run/lfem_env.sh
 
-mpiexecjl -n 128 julia --project=$HOME/GridapLFEM.jl $HOME/GridapLFEM.jl/examples/distributed/run_plane_wave_dist.jl
+lfem_run 128 examples/distributed/run_plane_wave_dist.jl

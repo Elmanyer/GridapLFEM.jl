@@ -1,16 +1,16 @@
 #!/bin/bash
 
 #SBATCH --job-name="LFEM_ichump"
-#SBATCH --partition=fat_rome
+#SBATCH --partition=rome
 #SBATCH --time=24:00:00
 #SBATCH --ntasks-per-node=16
 #SBATCH --cpus-per-task=1
 #SBATCH --output=GridapLFEM.%j.out
 #SBATCH --error=GridapLFEM.%j.err
 
-source $HOME/GridapLFEM.jl/compile/load_modules_snellius.sh
+source $HOME/GridapLFEM.jl/run/lfem_env.sh
 
-# --- MPI process grid (PX*PY MUST equal mpiexecjl -n) ------------------------
+# --- MPI process grid (PX*PY MUST equal the rank count given to lfem_run) ---
 export LFEM_PX=4
 export LFEM_PY=4              # 4*4 = 16 ranks; mesh 100x100 -> 25x25 cells/rank
 
@@ -27,4 +27,4 @@ export LFEM_PY=4              # 4*4 = 16 ranks; mesh 100x100 -> 25x25 cells/rank
 # export LFEM_LS_MAXITER=4000
 # export LFEM_NL_TOL=1e-6
 
-mpiexecjl -n 16 julia --project=$HOME/GridapLFEM.jl $HOME/GridapLFEM.jl/examples/distributed/run_ic_hump_dist.jl
+lfem_run 16 examples/distributed/run_ic_hump_dist.jl

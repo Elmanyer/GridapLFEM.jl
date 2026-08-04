@@ -4,14 +4,17 @@ A precompiled **system image** (`GridapLFEM_sysimage.so`) bakes the whole compil
 solver stack (Gridap + GridapDistributed + GridapSolvers + the LFE-M residual/Jacobians)
 into one file, so every MPI rank **loads** the code instead of JIT-compiling it.
 
+**Every launcher in `run/` and `run/dist_small/` uses the image** — via the shared helper
+`run/lfem_env.sh`. Build it once (Steps 1–2), then just `sbatch` the case you want.
+
 **Why it matters here**
 
-- **No OOM.** Without the sysimage, 32–64 ranks each JIT-compile the full FEM stack
+- **No OOM.** Without the sysimage, 32–128 ranks each JIT-compile the full FEM stack
   at once (~4–8 GB/rank) and blow past node memory. With it, ranks share the mmap'd
   image (~1–2 GB, shared) — no compile, no memory spike.
-- **Cheaper.** No ~30–45 min per-rank compile billed on every run. Lets you run on the
-  normal `rome` partition (budget **L1**, ~196k SBU) instead of scarce `fat_rome`
-  (budget **L2**, ~27k SBU).
+- **Cheaper.** No ~30–45 min per-rank compile billed on every run. All jobs now run on the
+  normal `rome` partition (budget **L1**, ~196k SBU) at the node-default 2 GB/core, instead of
+  scarce `fat_rome` (budget **L2**, ~27k SBU) with inflated memory requests.
 - **Correct MPI.** Built and launched against the cluster's **system OpenMPI**, not the
   bundled JLL — the mismatch that otherwise crashes runs at launch.
 
@@ -27,8 +30,8 @@ into one file, so every MPI rank **loads** the code instead of JIT-compiling it.
 | `compile.jl` | `create_sysimage(...)` with an **MPI preflight** that refuses to build unless MPI binds system OpenMPI. |
 | `compile_snellius.sh` | SLURM job that runs the three build steps end to end (partition `rome`). |
 
-The launcher that **uses** the image:
-`../run/dist_small/run_lin_periodic_plane_small_sysimage.sh`.
+The image is **used** by every launcher in `../run/` and `../run/dist_small/`, through the shared
+helper **`../run/lfem_env.sh`** — see "How the launchers use the image" below.
 
 ---
 
@@ -103,16 +106,71 @@ a completed build is a correct build.
 
 ## Step 3 — launch a run against the image
 
+Every launcher already uses the image; just submit the case you want:
+
 ```bash
 cd ~/GridapLFEM.jl
-sbatch run/dist_small/run_lin_periodic_plane_small_sysimage.sh
+sbatch run/dist_small/run_lin_periodic_plane_small.sh   # small-domain case
+sbatch run/run_irregularsea.sh                          # production case
 ```
 
-The launcher sources the same module, passes the same `--project`, and adds
-`-J .../GridapLFEM_sysimage.so`. No compile, no OOM, on `rome`/L1.
+No compile, no OOM, on `rome`/L1.
 
-To make the other cases use the image, add the same two things to their launchers:
-`source .../load_modules_snellius.sh` and `-J .../GridapLFEM_sysimage.so`.
+---
+
+## How the launchers use the image
+
+All launchers in `run/` and `run/dist_small/` are thin SLURM wrappers around one shared helper,
+**`run/lfem_env.sh`**, which holds the three build↔run invariants in a single place. A launcher is
+just its `#SBATCH` header, the case's env-var overrides, and one call:
+
+```bash
+source $HOME/GridapLFEM.jl/run/lfem_env.sh    # (1) same modules  (2) resolves the sysimage
+
+export LFEM_PX=8
+export LFEM_PY=4            # 8*4 = 32 ranks
+export LFEM_REGIME=linear   # case-specific overrides only
+
+lfem_run 32 examples/distributed_small/run_periodic_plane_small.jl
+```
+
+`lfem_run <nranks> <script.jl>` (script path relative to the project root) expands to the
+`mpiexecjl --project=… -n <nranks> julia --project=… -J<sysimage> <script>` invocation, after
+checking that both the image and the script exist — a missing image **fails the job immediately**
+with the build command to run, instead of silently falling back to a 45-min-per-rank JIT compile.
+It also prints a `[lfem_env]` banner (project, cluster, image, ranks, script) at the top of the
+job's `.out`, so what a run actually loaded is on the record.
+
+Helper knobs, exported before sourcing (all optional):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LFEM_PROJ` | `$HOME/GridapLFEM.jl` | project root (holds `LocalPreferences.toml`) |
+| `LFEM_CLUSTER` | `snellius` | selects `compile/load_modules_<cluster>.sh` (`blue` for DelftBlue) |
+| `LFEM_SYSIMAGE` | `$LFEM_PROJ/GridapLFEM_sysimage.so` | alternate image (e.g. testing a rebuild side by side) |
+| `LFEM_NO_SYSIMAGE` | unset | `=1` drops `-J` and runs the old JIT path — an escape hatch for when the image is stale or mid-rebuild; expect the full compile cost and memory spike back |
+
+To add a case, copy the nearest launcher, adjust the `#SBATCH` header and the exported
+`LFEM_*` overrides, and point `lfem_run` at the parametric script in `examples/distributed_small/`
+(or `examples/distributed/`). Nothing sysimage-specific needs repeating.
+
+---
+
+## Partition and memory (post-sysimage)
+
+The launchers request **`rome`** (budget L1, ~196k SBU) rather than the scarce `fat_rome` (L2,
+~27k SBU). `fat_rome` was only ever needed because 32–128 ranks JIT-compiling the FEM stack
+simultaneously each took ~4–8 GB and OOM'd the node — with the image there is no compile and no
+spike.
+
+For the same reason the launchers set **no `--mem-per-cpu`** and take the `rome` node default
+(2 GB/core): the image is mmap-shared across the ranks on a node, so per-rank *private* memory is
+just the local mesh partition and Krylov vectors. Asking for more than the default does not buy
+free memory — SLURM bills the extra as additional cores per rank, which is exactly the cost the
+sysimage was introduced to avoid. Only raise it if a genuinely large case is killed for memory,
+and confirm with `sacct -j <id> --format=MaxRSS` first.
+
+(DelftBlue's `run_blue.sh` keeps `--mem-per-cpu=3900M`, which *is* that cluster's per-core default.)
 
 ---
 
@@ -121,6 +179,11 @@ To make the other cases use the image, add the same two things to their launcher
 Rebuild only after: a change to `src/*.jl`, a package upgrade, or a change of the OpenMPI
 module (then update the `libmpi` path in `set_preferences.jl` first). Editing a run script
 or environment variables needs **no** rebuild.
+
+**The image is not versioned against `src/`** — nothing detects that you edited the solver and
+forgot to rebuild, and the job will happily run the *old* baked code. After touching `src/*.jl`,
+rebuild before submitting; if you need to run against edited sources immediately, launch with
+`LFEM_NO_SYSIMAGE=1` (JIT path, correct but slow) rather than trusting a stale image.
 
 ---
 
@@ -151,6 +214,12 @@ startup. There are two independent causes:
 (`reason=budget` ⇒ walltime/CPU × rate exceeds the partition's budget; lower `--time`,
 use `rome`/L1).
 
-**Memory / billing.** The image is mmap-shared across ranks on a node, so per-rank private
-memory is small. On `rome` (2 GB/core) keep `--mem-per-cpu` near 2–4 GB; asking more bills
-you for extra cores. Right-size with `sacct -j <id> --format=MaxRSS` after a run.
+**Memory / billing.** See "Partition and memory" above: take the node default, don't add
+`--mem-per-cpu`, and right-size with `sacct -j <id> --format=MaxRSS` after a run.
+
+**`[lfem_env] ERROR: sysimage not found`.** The job stops before launching because
+`GridapLFEM_sysimage.so` is missing from the project root — build it (Step 2), or set
+`LFEM_NO_SYSIMAGE=1` to run the JIT path meanwhile. This is deliberate: the alternative is a
+silent 45-min-per-rank compile that then OOMs.
+
+**Run behaves like an older version of the solver.** A stale image — see "When to rebuild".
