@@ -132,21 +132,14 @@ GridapLFEM.jl/
 │   └── dist_small/              20 small-domain (50×20) observation/comparison jobs
 ├── postprocessing/GridapLFEMPost # self-contained VTK/CSV analysis + plotting library (own env)
 ├── compile/                      # cluster sysimage build (compile.jl, warmup.jl, module loaders) + README
-├── WaveSpec.jl/                  # vendored stochastic sea-state package (Pkg.develop'd, repo version)
-├── building_files/               # LaTeX project (zip), design records, prototype, notebook
-│   ├── LFEM_discretisation.zip   authoritative LaTeX derivation (compiles; §8 = this solver, §9 = validation)
-│   ├── LFEM_Gridap.md            clean synthesis of the derivation → the scalar residual
-│   ├── algebraic_residual_math.md   operator simplifications used to write the residual
-│   ├── boundary_wave_generation.md  Dirichlet-generation math note (:model/:airy polarization)
-│   ├── DESIGN_RECORDS.md         consolidated design/implementation records (residual, distributed,
-│   │                               nonlinear pressure, BC generation, periodic BC, flat_bed switch)
-│   ├── LFEM_runs.md              small-domain observation/comparison run-suite plan
-│   ├── algebraic_lfem2D.jl / test_algebraic_lfem2D.jl   single-file residual prototype + its test
-│   └── test_2HDmodel.ipynb       early exploratory notebook
 ├── Project.toml / Manifest.toml  package manifest (name/uuid/version) + its environment
-├── output/                       # VTK run output (created on demand)
 └── CLAUDE.md                     # up-to-date status/notes for this folder
 ```
+
+Not shown (present locally, excluded by `.gitignore`): `WaveSpec.jl/` — the vendored stochastic
+sea-state dependency, `Pkg.develop`ed from its GitHub repository version; `building_files/` — the
+LaTeX derivation project and the design/plan records; and `output/` — VTK run output, created on
+demand.
 
 ---
 
