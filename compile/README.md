@@ -4,6 +4,16 @@ A precompiled **system image** (`GridapLFEM_sysimage.so`) bakes the whole compil
 solver stack (Gridap + GridapDistributed + GridapSolvers + the LFE-M residual/Jacobians)
 into one file, so every MPI rank **loads** the code instead of JIT-compiling it.
 
+> **This only became true on 2026-08-04.** `GridapLFEM` used to be loaded with
+> `include(src/GridapLFEM.jl)`, creating a fresh `Main.GridapLFEM` in every process.
+> PackageCompiler retains code belonging to the *packages* it bakes, so the solver's types and —
+> far more expensive — every Gridap FEM specialisation keyed on them were **not** in the image and
+> were recompiled in each rank on each run. The image removed the library compile but never the
+> application compile; 32–64 ranks each doing that is what OOM-killed the jobs (exit 137).
+> `GridapLFEM` is now a real package and is listed in `create_sysimage`, which is what makes the
+> claim above hold. If you ever see ranks in `typeinf`/`optimize` in a backtrace, the solver is not
+> in the image — check `compile.jl`'s package preflight.
+
 **Every launcher in `run/` and `run/dist_small/` uses the image** — via the shared helper
 `run/lfem_env.sh`. Build it once (Steps 1–2), then just `sbatch` the case you want.
 

@@ -9,10 +9,10 @@
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_vertical.jl
 # ==============================================================
 
-if !isdefined(Main, :GridapLFEM)
-    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-end
-using .GridapLFEM
+using GridapLFEM
+using Gridap.TensorValues   # VectorValue — used below to evaluate φ_int at σ=0,1.
+                            # GridapLFEM does not re-export Gridap's names, so a
+                            # consumer that constructs Gridap values imports them.
 using LinearAlgebra, Printf
 
 println("=" ^ 60)

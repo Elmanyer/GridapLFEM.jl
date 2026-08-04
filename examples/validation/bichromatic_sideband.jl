@@ -20,10 +20,7 @@
 #  RUN:  julia --project=. GridapLFEM.jl/examples/validation/bichromatic_sideband.jl
 # ==============================================================
 
-if !isdefined(Main, :GridapLFEM)
-    include(joinpath(@__DIR__, "..", "..", "src", "GridapLFEM.jl"))
-end
-using .GridapLFEM
+using GridapLFEM
 using Gridap
 using Printf, LinearAlgebra
 

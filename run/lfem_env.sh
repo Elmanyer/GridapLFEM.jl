@@ -201,8 +201,12 @@ lfem_run() {
         lfem_check_sysimage_freshness "$LFEM_SYSIMAGE" "$LFEM_PROJ/src"
     fi
 
-    # (3) --project must be the project holding LocalPreferences.toml, on BOTH
-    #     mpiexecjl and julia; -J adds the image built with (1)+(2) active.
+    # (3) --project must be the project holding LocalPreferences.toml AND the
+    #     GridapLFEM package itself. It is given to mpiexecjl only: mpiexecjl
+    #     strips every --project=* from the forwarded arguments and re-exports the
+    #     choice to the ranks as JULIA_PROJECT, so a second --project after
+    #     `julia` is silently dropped — passing it was misleading, not effective.
+    #     -J adds the image built with (1)+(2) active.
     mpiexecjl --project="$LFEM_PROJ" -n "$nranks" \
-        julia --project="$LFEM_PROJ" ${jflag[@]+"${jflag[@]}"} "$script" "$@"
+        julia ${jflag[@]+"${jflag[@]}"} "$script" "$@"
 }

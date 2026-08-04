@@ -19,10 +19,7 @@
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_vertical_profile.jl
 # ==============================================================
 
-if !isdefined(Main, :GridapLFEM)
-    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-end
-using .GridapLFEM
+using GridapLFEM
 using Gridap
 using Printf, LinearAlgebra
 

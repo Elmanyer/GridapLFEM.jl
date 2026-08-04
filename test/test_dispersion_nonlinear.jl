@@ -27,10 +27,7 @@
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_dispersion_nonlinear.jl
 # ==============================================================
 
-if !isdefined(Main, :GridapLFEM)
-    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-end
-using .GridapLFEM
+using GridapLFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 66)

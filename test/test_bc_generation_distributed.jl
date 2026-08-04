@@ -14,8 +14,7 @@
 #        GridapLFEM.jl/test/test_bc_generation_distributed.jl
 # ==============================================================
 
-include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-using .GridapLFEM
+using GridapLFEM
 using Printf
 
 # sequential reference: same config via setup_and_run (LU+Newton) — see the

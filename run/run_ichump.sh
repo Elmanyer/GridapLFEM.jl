@@ -3,8 +3,15 @@
 #SBATCH --job-name="LFEM_ichump"
 #SBATCH --partition=rome
 #SBATCH --time=24:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=16
 #SBATCH --ntasks-per-node=16
 #SBATCH --cpus-per-task=1
+# Memory headroom while the ranks may still compile. Sized so it FITS a rome
+# node (256 GB / 128 cores): 16 ranks x 4 GB over 1 node(s) = 64 GB/node.
+# Once a sysimage CONTAINING the solver is proven to remove the per-rank
+# compile, drop this and let the 2 GB/core node default apply.
+#SBATCH --mem-per-cpu=4G
 #SBATCH --output=GridapLFEM.%j.out
 #SBATCH --error=GridapLFEM.%j.err
 

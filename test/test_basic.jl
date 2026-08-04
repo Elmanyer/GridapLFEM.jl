@@ -11,10 +11,7 @@
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_basic.jl
 # ==============================================================
 
-if !isdefined(Main, :GridapLFEM)
-    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-end
-using .GridapLFEM
+using GridapLFEM
 using Printf
 
 println("=" ^ 60)

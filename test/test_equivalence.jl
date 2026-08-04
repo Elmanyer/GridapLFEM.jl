@@ -16,11 +16,8 @@
 if !isdefined(Main, :LFEModel2D)
     include(joinpath(@__DIR__, "..", "..", "LFE-M_2D_solver", "src", "LFEModel2D.jl"))
 end
-if !isdefined(Main, :GridapLFEM)
-    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-end
 using .LFEModel2D                      # oracle (unqualified: residual_lfem, LFEMProblemLFEM, …)
-import .GridapLFEM as ALG             # package under test (qualified)
+import GridapLFEM as ALG             # package under test (qualified)
 using Gridap
 using Gridap.ODEs
 using LinearAlgebra, Printf

@@ -14,8 +14,7 @@
 #        GridapLFEM.jl/test/test_basic_distributed.jl
 # ==============================================================
 
-include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-using .GridapLFEM
+using GridapLFEM
 using Printf
 
 # sequential references (same config via setup_and_run, LU + Newton, 120 steps)

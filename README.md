@@ -143,7 +143,7 @@ GridapLFEM.jl/
 │   ├── LFEM_runs.md              small-domain observation/comparison run-suite plan
 │   ├── algebraic_lfem2D.jl / test_algebraic_lfem2D.jl   single-file residual prototype + its test
 │   └── test_2HDmodel.ipynb       early exploratory notebook
-├── Project.toml / Manifest.toml  standalone environment (pinned to the parent versions)
+├── Project.toml / Manifest.toml  package manifest (name/uuid/version) + its environment
 ├── output/                       # VTK run output (created on demand)
 └── CLAUDE.md                     # up-to-date status/notes for this folder
 ```
@@ -152,33 +152,36 @@ GridapLFEM.jl/
 
 ## Environment / activation
 
-`GridapLFEM.jl/` is **not a registered Julia package** (its `Project.toml` has no
-`name`/`uuid`/`version`) — loading it is always done by file-path `include(...)` +
-`using .GridapLFEM` (note the leading dot), never `using GridapLFEM` after `Pkg.add`. Two
-environments can supply the dependencies for that `include`:
-
-- **The parent repository's environment** (`../Project.toml`, i.e. `TS_2HDmodel/`) — what every result
-  in [Validation](#validation) was run against and what the [Quick start](#quick-start) / cluster
-  examples assume (`--project=.` from the repo root).
-- **This folder's own environment** (`GridapLFEM.jl/Project.toml` + `Manifest.toml`) — a
-  self-contained, standalone environment pinned to the **exact same** package versions as the parent
-  (Gridap 0.19.11, GridapDistributed 0.4.13, GridapSolvers 0.6.2, PartitionedArrays 0.3.5,
-  MPI 0.20.26) so results are identical either way. Useful for extracting this solver independently.
-
-Either way the loading code is the same:
+`GridapLFEM.jl/` **is a Julia package** — `name = "GridapLFEM"`,
+`uuid = 43e94d05-4d7d-4679-96a4-d46e2615da34`, `version = 0.1.0`. Activate this directory as the
+project and load it by name:
 
 ```julia
-include("src/GridapLFEM.jl")   # or "GridapLFEM.jl/src/GridapLFEM.jl" from one level up
-using .GridapLFEM
+# julia --project=/path/to/GridapLFEM.jl
+using GridapLFEM
 ```
+
+Never `include("src/GridapLFEM.jl")`. Being a package is not cosmetic: it is what allows
+PackageCompiler to bake the solver *and its Gridap specialisations* into the cluster system image
+(`compile/`), and what gives sequential runs a cached precompile (~3.5 s to load). An `include`d
+module is rebuilt in every process — which is what made the 32–64 rank cluster runs recompile the
+whole FEM stack per rank and get OOM-killed.
+
+This directory is **both the package and the working environment**: the tests, examples and compile
+tooling are run directly against it (`julia --project=. test/test_basic.jl`), which is why `Test`,
+`BlockArrays`, `MPIPreferences` and `Preferences` sit in `[deps]` rather than `[extras]`.
+
+> **Dependency versions.** `[compat]` admits two minors on purpose. This environment currently
+> resolves **Gridap 0.20.8 / GridapSolvers 0.7.1**, while the parent repository environment
+> (`../Project.toml`) is on **Gridap 0.19.11 / GridapSolvers 0.6.2**. A system image is only valid
+> for the versions it was built against — build it in the environment you run in.
 
 ---
 
 ## Quick start
 
 ```julia
-include("GridapLFEM.jl/src/GridapLFEM.jl")
-using .GridapLFEM
+using GridapLFEM
 
 # Sequential run: nonlinear plane wave in a flat-bed flume
 diags, vert, prob = setup_and_run(
@@ -300,7 +303,11 @@ solve is GMRES+Jacobi+Newton. It drops `gauges` (global reductions instead).
 ## Validation
 
 All gates below are standalone Julia scripts in `test/`; run with
-`julia --project=. GridapLFEM.jl/test/<name>.jl` (distributed ones via `mpiexecjl`, see file headers).
+`julia --project=GridapLFEM.jl GridapLFEM.jl/test/<name>.jl` from the parent repo, or
+`julia --project=. test/<name>.jl` from inside `GridapLFEM.jl/` (distributed ones via `mpiexecjl`,
+see file headers). The project must be the **package** environment — since the migration the tests
+do `using GridapLFEM`, which the parent repository's environment cannot resolve unless you also
+`Pkg.develop(path="GridapLFEM.jl")` there.
 The full suite is **21 tests + `test/cluster/`**; representative highlights:
 
 | Test | What it checks | Result |

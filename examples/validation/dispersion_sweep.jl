@@ -17,10 +17,7 @@
 #  Env: LFEM_M (vertical layers, default 2), LFEM_KD (comma-sep kd list).
 # ==============================================================
 
-if !isdefined(Main, :GridapLFEM)
-    include(joinpath(@__DIR__, "..", "..", "src", "GridapLFEM.jl"))
-end
-using .GridapLFEM
+using GridapLFEM
 using Printf, LinearAlgebra
 
 M      = parse(Int, get(ENV, "LFEM_M", "2"))

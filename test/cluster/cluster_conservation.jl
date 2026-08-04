@@ -26,7 +26,7 @@
 # ==============================================================
 
 include(joinpath(@__DIR__, "..", "..", "examples", "distributed", "_dist_common.jl"))
-using .GridapLFEM
+using GridapLFEM
 using Gridap
 using PartitionedArrays, MPI
 using LinearAlgebra, Printf

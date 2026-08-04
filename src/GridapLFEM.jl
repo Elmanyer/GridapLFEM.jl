@@ -17,9 +17,16 @@
 #  u[1]=η, u[2]=𝖴x, u[3]=𝖴y. This keeps the assembly well-typed and compact,
 #  and lets the identical code run sequentially and distributed.
 #
-#  Usage:
-#    include("GridapLFEM.jl/src/GridapLFEM.jl"); using .GridapLFEM
+#  Usage (GridapLFEM is a Julia package; activate this directory as the project):
+#    julia --project=/path/to/GridapLFEM.jl
+#    using GridapLFEM
 #    diags, vert, prob = setup_and_run(M=2, T_wave=1.6, A_wave=0.001)
+#
+#  It is loaded with `using GridapLFEM`, never `include`d: being a real package is
+#  what lets PackageCompiler bake the solver AND its Gridap specialisations into
+#  the cluster system image (see compile/), and what gives every sequential run a
+#  cached precompile. An `include()`d module is rebuilt in every process, which is
+#  what used to OOM-kill the 32-64 rank runs.
 # ==============================================================
 
 module GridapLFEM

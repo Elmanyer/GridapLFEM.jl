@@ -3,10 +3,15 @@
 #SBATCH --job-name="LFEM_lin_plane"
 #SBATCH --partition=rome
 #SBATCH --time=119:59:00
-#SBATCH --nodes=1
 #SBATCH --ntasks=32
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=32
 #SBATCH --cpus-per-task=1
+# Memory headroom while the ranks may still compile. Sized so it FITS a rome
+# node (256 GB / 128 cores): 32 ranks x 4 GB over 1 node(s) = 128 GB/node.
+# Once a sysimage CONTAINING the solver is proven to remove the per-rank
+# compile, drop this and let the 2 GB/core node default apply.
+#SBATCH --mem-per-cpu=4G
 #SBATCH --output=%x.%j.out
 #SBATCH --error=%x.%j.err
 

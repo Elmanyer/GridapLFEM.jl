@@ -1,11 +1,20 @@
 # ==============================================================
 #  compile.jl — build the GridapLFEM system image
 #
-#  GridapLFEM is loaded by include() (it is NOT a Pkg.add'd package), so we bake
-#  the DEPENDENCY packages into the sysimage and let warmup.jl trace-compile the
-#  LFE-M solver code (residual, Jacobians, time loops, reconstruction) on top of
-#  them, for BOTH the sequential (CellField) and distributed (DistributedCellField)
-#  code paths.
+#  GridapLFEM is a Julia PACKAGE (name+uuid in ../Project.toml), so it is baked
+#  into the image alongside its dependencies, and warmup.jl then trace-compiles
+#  the LFE-M solver kernels (residual, Jacobians, time loops, reconstruction) for
+#  BOTH the sequential (CellField) and distributed (DistributedCellField) paths.
+#
+#  WHY THIS MATTERS (the bug this fixed): the solver used to be loaded with
+#  `include(src/GridapLFEM.jl)`, creating a fresh `Main.GridapLFEM` in every
+#  process. PackageCompiler only retains code belonging to the packages it bakes,
+#  so the solver's types and — far more expensive — every Gridap FEM
+#  specialisation keyed on them were recompiled in EVERY rank at EVERY run. The
+#  image removed the library compile but never the application compile, and
+#  32-64 ranks each doing that OOM-killed the jobs (exit 137). Listing
+#  :GridapLFEM below is what actually delivers "the ranks load, they do not
+#  compile".
 #
 #  PREREQUISITE: LocalPreferences.toml must already pin MPI to the system OpenMPI,
 #  otherwise the sysimage bakes in the bundled MPICH and crashes under the cluster
@@ -43,6 +52,23 @@ occursin("Open MPI", _LIBVER) || error("""
 @info "MPI preflight OK — baking sysimage against SYSTEM OpenMPI" MPIPreferences.binary libmpi=MPIPreferences.libmpi version=_LIBVER
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ── PACKAGE PREFLIGHT ─────────────────────────────────────────────────────────
+# The whole point of the build is to bake the SOLVER, not just its dependencies.
+# If GridapLFEM is not resolvable as a package in this environment (e.g. the
+# active project is not the package root, or name/uuid were lost from
+# Project.toml), create_sysimage would either fail late or — worse — silently
+# produce an image without the solver, reintroducing the per-rank compile + OOM.
+# Fail loudly here instead.
+let id = Base.identify_package("GridapLFEM")
+    id === nothing && error("""
+        GridapLFEM is not resolvable as a package from the active project
+            $(Base.active_project())
+        Expected `name = "GridapLFEM"` and a `uuid` in its Project.toml.
+        Build with:  mpiexecjl --project=<GridapLFEM.jl> -n 1 julia --project=<GridapLFEM.jl> compile/compile.jl""")
+    @info "package preflight OK — the solver will be baked into the image" uuid = id.uuid
+end
+using GridapLFEM   # must load cleanly before we try to bake it
+
 using PackageCompiler
 
 # include_transitive_dependencies=false is LOAD-BEARING for system MPI:
@@ -56,7 +82,8 @@ using PackageCompiler
 # packages + what they load are still baked; genuinely-unused deps just recompile
 # on demand at runtime (negligible).
 create_sysimage(
-    [:Gridap, :GridapDistributed, :GridapSolvers, :PartitionedArrays,
+    [:GridapLFEM,                                    # the solver itself — load-bearing
+     :Gridap, :GridapDistributed, :GridapSolvers, :PartitionedArrays,
      :MPI, :BlockArrays, :WaveSpec];
     sysimage_path                 = joinpath(@__DIR__, "..", "GridapLFEM_sysimage.so"),
     precompile_execution_file     = joinpath(@__DIR__, "warmup.jl"),

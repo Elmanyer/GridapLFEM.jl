@@ -1,3 +1,15 @@
+name = "GridapLFEM"
+uuid = "43e94d05-4d7d-4679-96a4-d46e2615da34"
+authors = ["Pau Manyer <p.manyerfuertes@tudelft.nl>", "Oriol Colomés <j.o.colomesgene@tudelft.nl>"]
+version = "0.1.0"
+
+# NOTE — this environment is BOTH the package and the working environment used to
+# run the tests, examples and cluster/compile tooling directly
+# (`julia --project=. test/test_basic.jl`, `julia --project=. compile/set_preferences.jl`).
+# `Test`, `BlockArrays`, `MPIPreferences` and `Preferences` are therefore kept in
+# [deps] rather than [extras]/[targets]: under [extras] they are only visible to
+# `Pkg.test()` and those direct invocations would fail. `BlockArrays` is needed by
+# the differently-structured oracle `LFEModel2D` that test_equivalence.jl loads.
 [deps]
 BlockArrays = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
 Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
@@ -12,3 +24,23 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WaveSpec = "908d4cf6-a6c0-449c-92e4-852c8f288332"
+
+# Bounds on the stack the solver is validated against and that the cluster system
+# image is built from. Deliberately admits BOTH minors in play: this environment
+# currently resolves Gridap 0.20.8 / GridapSolvers 0.7.1, while the parent
+# environment ../ (and the prose in CLAUDE.md) is on Gridap 0.19.11 /
+# GridapSolvers 0.6.2. The ranges keep both resolvable without forcing a
+# downgrade, while still preventing an unbounded jump to a new minor — which
+# would invalidate the sysimage and, for Gridap, the transient-API assumptions.
+# NOTE: a sysimage is only valid for the versions it was built against; build it
+# in the same environment you run in.
+[compat]
+BlockArrays = "1"
+Gridap = "0.19, 0.20"
+GridapDistributed = "0.4"
+GridapSolvers = "0.6, 0.7"
+MPI = "0.20"
+MPIPreferences = "0.1"
+PartitionedArrays = "0.3"
+Preferences = "1"
+julia = "1.10"

@@ -33,8 +33,7 @@
 # ==============================================================
 
 const ROOT = normpath(joinpath(@__DIR__, "..", ".."))
-include(joinpath(ROOT, "src", "GridapLFEM.jl"))
-using .GridapLFEM
+using GridapLFEM
 using Printf
 
 genv(k, d)   = get(ENV, k, string(d))

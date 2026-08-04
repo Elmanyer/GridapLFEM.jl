@@ -13,8 +13,7 @@
 #        GridapLFEM.jl/test/test_nlpressure_distributed.jl
 # ==============================================================
 
-include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-using .GridapLFEM
+using GridapLFEM
 using Printf
 
 # sequential reference (same config, run once via setup_and_run): see

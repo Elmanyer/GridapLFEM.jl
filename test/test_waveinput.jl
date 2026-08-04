@@ -13,10 +13,7 @@
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_waveinput.jl
 # ==============================================================
 
-if !isdefined(Main, :GridapLFEM)
-    include(joinpath(@__DIR__, "..", "src", "GridapLFEM.jl"))
-end
-using .GridapLFEM
+using GridapLFEM
 using LinearAlgebra, Printf
 using Gridap: VectorValue
 import Gridap
