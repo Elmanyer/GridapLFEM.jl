@@ -254,10 +254,16 @@ lfem_run 32 examples/distributed_small/run_periodic_plane_small.jl
 
 Helper knobs: `LFEM_PROJ`, `LFEM_CLUSTER` (`snellius`/`blue`), `LFEM_SYSIMAGE`, and
 `LFEM_NO_SYSIMAGE=1` to drop `-J` and fall back to the JIT path (useful while the image is stale or
-rebuilding — the image is **not** versioned against `src/`, so rebuild after editing the solver). A
-missing image aborts the job immediately rather than silently taking the slow path. Full build
-walkthrough and troubleshooting: `compile/README.md`. Per-case physics/geometry env vars:
-`examples/distributed/README.md`, `examples/distributed_small/`.
+rebuilding). A missing image aborts the job immediately rather than silently taking the slow path.
+
+Because the image bakes a *compiled copy* of `src/*.jl`, editing the solver without rebuilding would
+otherwise make the job run the old code silently. The helper therefore checks freshness before
+launching and **warns** if the image no longer matches `src/`: exactly, by comparing a hash of
+`src/*.jl` against the stamp written at build time (so a `touch` or re-clone does not cry wolf), or
+by mtime when an image predates that stamp. Set `LFEM_STRICT_SYSIMAGE=1` to abort instead of warning
+— worth it for long production jobs. Full build walkthrough and troubleshooting:
+`compile/README.md`. Per-case physics/geometry env vars: `examples/distributed/README.md`,
+`examples/distributed_small/`.
 
 ---
 
@@ -366,6 +372,7 @@ records are in `building_files/DESIGN_RECORDS.md`.
   `spectrum`), which makes `build_airy_state` error and blocks every Dirichlet **sea-state** run.
   The repo version carries the fix and is what is vendored here — if sea-state runs start failing
   in `change_seed!`, check that `WaveSpec.jl/` has not been reset to a release tag.
-- The cluster **system image is not versioned against `src/`**: nothing detects that the solver was
-  edited after the image was built, and the job will run the stale baked code. Rebuild
-  (`compile/compile_snellius.sh`) after touching `src/*.jl`, or launch with `LFEM_NO_SYSIMAGE=1`.
+- The cluster **system image must be rebuilt after editing `src/*.jl`** — it bakes a compiled copy of
+  the solver, so a stale image runs old code. This is now *detected* (the launchers warn, or abort
+  under `LFEM_STRICT_SYSIMAGE=1`) but not prevented: rebuild with `compile/compile_snellius.sh`, or
+  launch with `LFEM_NO_SYSIMAGE=1` to run the current sources via JIT.

@@ -28,7 +28,7 @@ into one file, so every MPI rank **loads** the code instead of JIT-compiling it.
 | `set_preferences.jl` | Pin `MPI.jl` to the **system** OpenMPI via `MPIPreferences.use_system_binary()` (writes `LocalPreferences.toml`, forces recompile). |
 | `warmup.jl` | Tiny sequential + distributed solves (both regimes) that trace-compile the LFE-M code into the image. |
 | `compile.jl` | `create_sysimage(...)` with an **MPI preflight** that refuses to build unless MPI binds system OpenMPI. |
-| `compile_snellius.sh` | SLURM job that runs the three build steps end to end (partition `rome`). |
+| `compile_snellius.sh` | SLURM job that runs the build steps end to end (partition `rome`), then stamps the image with a hash of `src/*.jl` for the launchers' staleness check. |
 
 The image is **used** by every launcher in `../run/` and `../run/dist_small/`, through the shared
 helper **`../run/lfem_env.sh`** — see "How the launchers use the image" below.
@@ -149,6 +149,7 @@ Helper knobs, exported before sourcing (all optional):
 | `LFEM_CLUSTER` | `snellius` | selects `compile/load_modules_<cluster>.sh` (`blue` for DelftBlue) |
 | `LFEM_SYSIMAGE` | `$LFEM_PROJ/GridapLFEM_sysimage.so` | alternate image (e.g. testing a rebuild side by side) |
 | `LFEM_NO_SYSIMAGE` | unset | `=1` drops `-J` and runs the old JIT path — an escape hatch for when the image is stale or mid-rebuild; expect the full compile cost and memory spike back |
+| `LFEM_STRICT_SYSIMAGE` | unset | `=1` turns the "image is stale w.r.t. `src/`" warning into a hard abort (see "When to rebuild") |
 
 To add a case, copy the nearest launcher, adjust the `#SBATCH` header and the exported
 `LFEM_*` overrides, and point `lfem_run` at the parametric script in `examples/distributed_small/`
@@ -180,10 +181,38 @@ Rebuild only after: a change to `src/*.jl`, a package upgrade, or a change of th
 module (then update the `libmpi` path in `set_preferences.jl` first). Editing a run script
 or environment variables needs **no** rebuild.
 
-**The image is not versioned against `src/`** — nothing detects that you edited the solver and
-forgot to rebuild, and the job will happily run the *old* baked code. After touching `src/*.jl`,
-rebuild before submitting; if you need to run against edited sources immediately, launch with
-`LFEM_NO_SYSIMAGE=1` (JIT path, correct but slow) rather than trusting a stale image.
+**Staleness is detected, not prevented.** Every launcher runs
+`lfem_check_sysimage_freshness` (in `run/lfem_env.sh`) before starting the ranks, and **warns** if
+the image no longer matches `src/`:
+
+```
+[lfem_env] WARNING: the system image appears STALE.
+[lfem_env]   checked: content stamp
+[lfem_env]   reason : src/*.jl content changed since the build (baked ff68b3a48579…, now ad42e9e9c1ca…)
+[lfem_env]   The image bakes a compiled copy of src/*.jl, so this job would
+[lfem_env]   run the OLD solver code — not your current sources.
+```
+
+Two mechanisms, strongest first:
+
+1. **Content stamp** (used whenever it exists). `compile_snellius.sh` calls
+   `lfem_write_sysimage_stamp` after a successful build, writing
+   `GridapLFEM_sysimage.so.src.sha256` — a hash of every `src/*.jl`. At launch the hash is
+   recomputed and compared, so **only a real source change trips it**: a `touch`, a re-clone, or a
+   `git checkout` that restores identical content does not. Edits, added files and deleted files are
+   all caught.
+2. **mtime fallback** (no stamp — an image built before this check existed). Warns if any `src/*.jl`
+   is newer than the image. Coarser: it can cry wolf after anything that rewrites mtimes without
+   changing content. Rebuild once to get a stamp and the exact check.
+
+The check **warns and continues** — a stale image still runs, and only you know whether the change
+mattered. Set **`LFEM_STRICT_SYSIMAGE=1`** to abort instead; worth doing for long production jobs,
+where discovering the staleness afterwards costs the entire run. When the image is current the
+banner simply reads `[lfem_env] freshness: image matches src/ (content stamp)`.
+
+So: after touching `src/*.jl`, rebuild before submitting; to run edited sources immediately without
+rebuilding, launch with `LFEM_NO_SYSIMAGE=1` (JIT path — correct but slow; the freshness check is
+skipped there, since no image is used).
 
 ---
 
@@ -222,4 +251,10 @@ use `rome`/L1).
 `LFEM_NO_SYSIMAGE=1` to run the JIT path meanwhile. This is deliberate: the alternative is a
 silent 45-min-per-rank compile that then OOMs.
 
-**Run behaves like an older version of the solver.** A stale image — see "When to rebuild".
+**Run behaves like an older version of the solver.** A stale image — the job's `.out` will carry the
+`[lfem_env] WARNING: the system image appears STALE` block. Rebuild, or use `LFEM_NO_SYSIMAGE=1`.
+See "When to rebuild".
+
+**Freshness says stale right after a `git pull`/re-clone that changed nothing in `src/`.** You are on
+the coarse mtime fallback because the image predates the content stamp. Rebuild once (the build now
+writes `GridapLFEM_sysimage.so.src.sha256`) and the check becomes content-based and exact.

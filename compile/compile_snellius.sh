@@ -41,4 +41,11 @@ julia --project="$PROJ" -e 'using Pkg; haskey(Pkg.project().dependencies, "Packa
 #    path too; the full cold compile happens here, once.
 mpiexecjl --project="$PROJ" -n 1 julia --project="$PROJ" "$PROJ/compile/compile.jl"
 
+# 4) Stamp the image with a hash of src/*.jl, so the launchers can detect later
+#    that the solver was edited and the image is stale (run/lfem_env.sh,
+#    lfem_check_sysimage_freshness). Without the stamp they fall back to a
+#    coarser mtime comparison.
+source "$PROJ/run/lfem_env.sh"
+lfem_write_sysimage_stamp "$PROJ/GridapLFEM_sysimage.so" "$PROJ/src"
+
 echo "Sysimage built: $PROJ/GridapLFEM_sysimage.so"

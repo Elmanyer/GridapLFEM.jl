@@ -19,3 +19,9 @@ source "$PROJ/compile/load_modules_blue.sh"
 julia --project="$PROJ" "$PROJ/compile/set_preferences.jl"
 julia --project="$PROJ" -e 'using Pkg; haskey(Pkg.project().dependencies, "PackageCompiler") || Pkg.add("PackageCompiler")'
 mpiexecjl --project="$PROJ" -n 1 julia --project="$PROJ" "$PROJ/compile/compile.jl"
+
+# Stamp the image with a hash of src/*.jl so the launchers can detect staleness
+# (run/lfem_env.sh, lfem_check_sysimage_freshness).
+export LFEM_CLUSTER=blue
+source "$PROJ/run/lfem_env.sh"
+lfem_write_sysimage_stamp "$PROJ/GridapLFEM_sysimage.so" "$PROJ/src"
