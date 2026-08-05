@@ -101,7 +101,10 @@ function setup_and_run_distributed(;
     nl_iter      :: Int     = 50,          # max Newton iterations per stage
     nl_tol       :: Float64 = 1e-6,        # Newton residual tolerance (‖r‖₂) — production default
     ls_rtol      :: Float64 = 1e-9,        # GMRES relative tolerance (kept tight for good Newton steps)
-    ls_maxiter   :: Int     = 2000,        # GMRES iteration cap per Newton step
+    ls_maxiter   :: Int     = 1000,        # GMRES iteration cap per Newton step (a TIME bound)
+    krylov_m     :: Int     = 100,         # GMRES Krylov basis size, restart=true (a MEMORY bound:
+                                           #   m+1 vectors + a dense (m+1)×m Hessenberg per rank).
+                                           #   Distinct from ls_maxiter — see build_ode_solver_distributed.
     print_every  :: Int     = 1,           # print a step report every N steps (print_dt overrides)
     check_every  :: Int     = 50,          # re-verify the governing equations every N steps (0 = off)
     check_tol    :: Float64 = 1e-8,        # tolerance for that verification (‖R‖∞)
@@ -277,7 +280,8 @@ function setup_and_run_distributed(;
                       nl_iter=nl_iter,          # max Newton iterations per stage
                       nl_tol=nl_tol,            # Newton residual tolerance (‖r‖₂)
                       ls_rtol=ls_rtol,          # GMRES relative tolerance
-                      ls_maxiter=ls_maxiter,    # GMRES iteration cap per Newton step
+                      ls_maxiter=ls_maxiter,    # GMRES iteration cap per Newton step (time bound)
+                      krylov_m=krylov_m,        # GMRES Krylov basis size, restart=true (memory bound)
                       monitor=monitor)          # wrap the Newton solver to harvest per-step stats
         checker = check_every > 0 ?
                   ResidualChecker(prob, U, V, trian, dΩh, dt, theta,
@@ -315,8 +319,8 @@ function setup_and_run_distributed(;
             print_solver_banner(
                 @sprintf("NewtonSolver (GridapSolvers, exact hand Jacobians) | max iters = %d | atol (‖r‖₂) = %.1e, rtol = 1.0e-10",
                          nl_iter, nl_tol),
-                @sprintf("GMRES + Jacobi preconditioner | max iters = %d | rtol = %.1e, atol = 1.0e-14",
-                         ls_maxiter, ls_rtol);
+                @sprintf("GMRES(%d) restarted + Jacobi preconditioner | max iters = %d | rtol = %.1e, atol = 1.0e-14",
+                         krylov_m, ls_maxiter, ls_rtol);
                 solver_type=solver_type, theta=theta, dt=dt, t0=0.0, T_final=T_final,
                 print_every=print_every, print_dt=print_dt,
                 check_every=check_every, check_tol=check_tol)

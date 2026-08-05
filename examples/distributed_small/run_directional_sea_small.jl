@@ -79,7 +79,7 @@ diags, vert, prob = setup_and_run_distributed(
     rho=rho_val(),
     solver_type=solver_sym(), tableau=tableau_sym(),
     nl_iter=nl_iter_val(), nl_tol=nl_tol_val(),
-    ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(),
+    ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(),
     print_every=genv_i("LFEM_PRINT_EVERY", 10))
 
 is_rank0() && @printf("directional_sea [%s] done: %d steps, %d snapshots to %s\n",

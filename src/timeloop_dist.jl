@@ -43,7 +43,7 @@ end
 
 """
     build_ode_solver_distributed(dt; solver_type, theta, tableau, nl_iter,
-                                     nl_tol, ls_rtol, ls_maxiter, monitor)
+                                     nl_tol, ls_rtol, ls_maxiter, krylov_m, monitor)
 
 Distributed ODE solver factory (template: GridapSWE.jl). Wraps
 NewtonSolver(GMRES + Jacobi preconditioner) — the scalable GridapSWE-pattern
@@ -51,6 +51,35 @@ linear stack. Integrators: `:sdirk` (fully-implicit `RungeKutta(nls, ls, dt,
 tableau)`, default; `:SDIRK_2_2` = L-stable 2nd-order, more stable than
 Crank–Nicolson) and `:theta` (Crank–Nicolson). Pass a `SolverMonitor` as
 `monitor` to collect per-step convergence statistics (RK: over the stages).
+
+# GMRES parameters — `krylov_m` and `ls_maxiter` are NOT the same thing
+`GMRESSolver`'s first POSITIONAL argument is `m`, the size of the stored Krylov
+basis (a *memory* bound), while `maxiter` is a KEYWORD giving the iteration
+budget (a *time* bound, library default **100**). Passing `ls_maxiter`
+positionally therefore reserved an `ls_maxiter`-vector basis while silently
+leaving the iteration cap at 100 — which is the bug this signature fixes:
+
+  * `get_solver_caches` allocates `V = [allocate_in_domain(A) for i in 1:m+1]`
+    **and** a dense local `H = zeros(m+1, m)` up front. With `m = 2000` on a
+    200×40 Q2 mesh over 32 ranks that is ≈139 MB/rank (108.5 MB basis + 30.5 MB
+    Hessenberg) per numerical setup, of which ~96 % could never be reached.
+    Churned across stages/steps it ratcheted RSS past the 2 GB/core cgroup limit
+    and the runs were OOM-killed mid-integration (exit 137) after ~140 steps.
+  * every linear solve stopped at exactly 100 iterations — the `gmres=100`
+    pinned on every line of the run logs — so `ls_rtol` was never reached, Newton
+    got poor steps and needed 8–10 iterations, at ~25–31 s/step.
+
+`restart=true` bounds the basis at `krylov_m+1` vectors: GMRES(m) restarts every
+`krylov_m` iterations and runs up to `ls_maxiter` in total. The alternative
+(`restart=false`, the library default) lets the basis GROW past `m` via
+`expand_krylov_caches!`, which is exactly the unbounded-memory behaviour to
+avoid here. Restarting discards the accumulated basis and so loses GMRES's
+global optimality — it can stagnate — but that is not a regression relative to
+the previous behaviour: the first `krylov_m` iterations are identical, and
+everything beyond them is progress the truncated-at-100 configuration never
+made. If the iteration count now sits at the cap, the fix is a stronger
+preconditioner (Jacobi is weak for this coupled non-hydrostatic operator), not a
+larger basis.
 """
 function build_ode_solver_distributed(dt::Float64;
                                           solver_type :: Symbol  = :sdirk,
@@ -59,10 +88,15 @@ function build_ode_solver_distributed(dt::Float64;
                                           nl_iter     :: Int     = 50,
                                           nl_tol      :: Float64 = 1e-6,
                                           ls_rtol     :: Float64 = 1e-9,
-                                          ls_maxiter  :: Int     = 2000,
+                                          ls_maxiter  :: Int     = 1000,
+                                          krylov_m    :: Int     = 100,
                                           monitor                = nothing)
-    ls  = GMRESSolver(ls_maxiter; Pr=JacobiLinearSolver(), rtol=ls_rtol,
-                      atol=1e-14, verbose=false)
+    ls  = GMRESSolver(krylov_m;                  # basis size (memory bound)
+                      Pr      = JacobiLinearSolver(),
+                      restart = true,            # cap the basis; do NOT let it grow
+                      maxiter = ls_maxiter,      # iteration budget (time bound)
+                      rtol    = ls_rtol,
+                      atol    = 1e-14, verbose=false)
     nls = NewtonSolver(ls; maxiter=nl_iter, atol=nl_tol, rtol=1e-10, verbose=false)
     if monitor !== nothing
         monitor.inner = nls

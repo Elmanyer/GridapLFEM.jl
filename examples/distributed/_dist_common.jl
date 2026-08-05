@@ -62,14 +62,21 @@ flat_bed_flag(default::Int=1) = genv_b("LFEM_FLAT_BED", default)
 #    LFEM_TABLEAU     RK tableau (solver=sdirk)       SDIRK_2_2
 #    LFEM_NL_ITER     max Newton iterations / stage    50
 #    LFEM_NL_TOL      Newton tolerance (production)    1e-6
-#    LFEM_LS_MAXITER  max GMRES iterations / Newton    2000
+#    LFEM_LS_MAXITER  max GMRES iterations / Newton    1000   (TIME bound)
 #    LFEM_LS_RTOL     GMRES relative tolerance         1e-9
+#    LFEM_KRYLOV_M    GMRES basis size, restart=true    100   (MEMORY bound)
+#      NOTE LFEM_KRYLOV_M and LFEM_LS_MAXITER are different things: the basis
+#      costs m+1 distributed vectors plus a dense (m+1)×m Hessenberg PER RANK at
+#      every numerical setup, so it drives memory; LFEM_LS_MAXITER only decides
+#      how long GMRES may iterate. Conflating them (passing the iteration cap as
+#      the basis size) is what OOM-killed the 32-rank runs.
 solver_sym()     = Symbol(genv("LFEM_SOLVER", "sdirk"))
 tableau_sym()    = Symbol(genv("LFEM_TABLEAU", "SDIRK_2_2"))
 nl_iter_val()    = genv_i("LFEM_NL_ITER", 50)
 nl_tol_val()     = genv_f("LFEM_NL_TOL", 1e-6)
-ls_maxiter_val() = genv_i("LFEM_LS_MAXITER", 2000)
+ls_maxiter_val() = genv_i("LFEM_LS_MAXITER", 1000)
 ls_rtol_val()    = genv_f("LFEM_LS_RTOL", 1e-9)
+krylov_m_val()   = genv_i("LFEM_KRYLOV_M", 100)
 
 # rank-0 detection BEFORE MPI.Init (OpenMPI / MPICH set these per rank).
 is_rank0() = get(ENV, "OMPI_COMM_WORLD_RANK",

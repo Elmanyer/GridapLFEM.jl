@@ -164,10 +164,14 @@ This directory is **both the package and the working environment**: the tests, e
 tooling are run directly against it (`julia --project=. test/test_basic.jl`), which is why `Test`,
 `BlockArrays`, `MPIPreferences` and `Preferences` sit in `[deps]` rather than `[extras]`.
 
-> **Dependency versions.** `[compat]` admits two minors on purpose. This environment currently
-> resolves **Gridap 0.20.8 / GridapSolvers 0.7.1**, while the parent repository environment
-> (`../Project.toml`) is on **Gridap 0.19.11 / GridapSolvers 0.6.2**. A system image is only valid
-> for the versions it was built against — build it in the environment you run in.
+> **Dependency versions.** This environment **and the cluster** run **Gridap 0.20.x /
+> GridapDistributed 0.4.17 / GridapSolvers 0.7.1 / PartitionedArrays 0.3.5 / MPI 0.20.26**.
+> `[compat]` also admits `Gridap 0.19` / `GridapSolvers 0.6`, because the two stacks were *measured*
+> equivalent (2026-08-05): `test_basic.jl` gives identical `max η = 0.00410 m` and `408` Newton
+> iterations under both, and the package precompiles on both. The parent repository environment
+> (`../Project.toml`) is a **separate** environment for the legacy 1D/2D solvers and remains on
+> Gridap 0.19.11 / GridapSolvers 0.6.2; it does not need to match. A system image is only valid for
+> the versions it was built against — build it in the environment you run in.
 
 ---
 
@@ -348,7 +352,7 @@ records are in `building_files/DESIGN_RECORDS.md`.
   Gridap's block-array `copyto!` isn't implemented for that combination. Expand such derivatives by
   hand using linearity of the vertical contraction in the test, `∂ₐ(W⋅𝓣) = (∂ₐW)⋅𝓣`, and
   `Σₐ Ψ·∂ₐUₐ = Ψ·DU` (see `nlpressure.jl` for worked examples).
-- **AD Jacobians are not viable** on this residual under Gridap 0.19.11 — the multifield autodiff
+- **AD Jacobians are not viable** on this residual under Gridap 0.19.11 (not re-tested on 0.20.x) — the multifield autodiff
   split cannot dualize through `∂t(u)` (a missing `TransientMultiFieldCellField` constructor). Hand
   Jacobians (`jacobian_u`, `jacobian_u_t`) are the design; they are exact for everything except the
   `O(A³)` nonlinear-pressure terms, which are treated quasi-Newton.

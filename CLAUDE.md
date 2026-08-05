@@ -40,7 +40,7 @@ modes are 1-based `j=1..Nσ`, one per node.
 
 | File | What it is |
 |------|-----------|
-| `Project.toml` / `Manifest.toml` | **The Julia package manifest** — `name = "GridapLFEM"`, `uuid = 43e94d05-4d7d-4679-96a4-d46e2615da34`, `version = 0.1.0` (migrated 2026-08-04; see `building_files/PACKAGE_MIGRATION_PLAN.md`). The solver is loaded with **`using GridapLFEM`**, never `include()`. Being a real package is what lets PackageCompiler bake the solver *and its Gridap specialisations* into the cluster sysimage — under the previous `include()` loading they lived in a throw-away `Main.GridapLFEM`, were discarded from the image, and were recompiled in every rank (the cause of the 2026-08-04 OOM kills). It also gives every sequential run a cached precompile (~3.5 s to load instead of a cold compile). This directory is **both the package and the working environment**: tests, examples and the compile tooling are run directly against it (`julia --project=. test/test_basic.jl`), so `Test`, `BlockArrays`, `MPIPreferences` and `Preferences` are kept in `[deps]` rather than `[extras]`/`[targets]` — under `[extras]` those direct invocations would not resolve. `BlockArrays` is needed by the differently-structured **oracle** `LFEModel2D` that `test_equivalence.jl` loads. `[compat]` bounds the stack; it deliberately admits **both** minors in play, because this environment resolves Gridap 0.20.8 / GridapSolvers 0.7.1 while the parent `../` is on Gridap 0.19.11 / GridapSolvers 0.6.2 — a sysimage is only valid for the versions it was built against, so build it in the environment you run in. If you add a new `using X` to any `src/*.jl`, add it to `[deps]` here too. |
+| `Project.toml` / `Manifest.toml` | **The Julia package manifest** — `name = "GridapLFEM"`, `uuid = 43e94d05-4d7d-4679-96a4-d46e2615da34`, `version = 0.1.0` (migrated 2026-08-04; see `building_files/PACKAGE_MIGRATION_PLAN.md`). The solver is loaded with **`using GridapLFEM`**, never `include()`. Being a real package is what lets PackageCompiler bake the solver *and its Gridap specialisations* into the cluster sysimage — under the previous `include()` loading they lived in a throw-away `Main.GridapLFEM`, were discarded from the image, and were recompiled in every rank (the cause of the 2026-08-04 OOM kills). It also gives every sequential run a cached precompile (~3.5 s to load instead of a cold compile). This directory is **both the package and the working environment**: tests, examples and the compile tooling are run directly against it (`julia --project=. test/test_basic.jl`), so `Test`, `BlockArrays`, `MPIPreferences` and `Preferences` are kept in `[deps]` rather than `[extras]`/`[targets]` — under `[extras]` those direct invocations would not resolve. `BlockArrays` is needed by the differently-structured **oracle** `LFEModel2D` that `test_equivalence.jl` loads. `[compat]` admits **both** minors (`Gridap = "0.19, 0.20"`, `GridapSolvers = "0.6, 0.7"`) because they were measured to give identical results (§Solver conventions); this environment and the cluster both run Gridap 0.20.x / GridapSolvers 0.7.1, while the parent `../` — a separate environment for the legacy solvers — stays on 0.19.11 / 0.6.2. A sysimage is only valid for the versions it was built against, so build it in the environment you run in. If you add a new `using X` to any `src/*.jl`, add it to `[deps]` here too. |
 | `LFEM_discretisation.zip` (LaTeX project) | The authoritative LaTeX derivation, a multi-file project (compiles with pdflatex). **Structure** (Overleaf layout, adopted 2026-08-04): `main.tex` (preamble/macros) inputs the chapter files — `SigmaEulerModel.tex` (chapter `σ-Euler Model`, two sections: governing equations, σ-transformation), then the wrapper `\chapter{Vertical Multilayer Discretisation}` declared in `main.tex` whose five **sections** live in `VerticalFESemiDiscretisation/` (`VerticalFEapprox`, `wDerivation`, `pDerivation`, `VerticalProjection`, `VerticalSemiDiscreteSystem` — the last incl. the **flat-bed reduction** of the full nonlinear model as subsections), then the standalone root-level chapters `LinearModel.tex` and **`StokesWaveFourierAnalysis.tex`** (the analytical theory chapter, mirroring Yang & Liu §3 for an **arbitrary-order** vertical basis: the Stokes–Fourier hierarchy; the dispersion functional `R(μ)=Φᵀ(M+μ|B|)⁻¹Φ` and four basis-independent properties — basis/space invariance, the variational bound `Cm ≤ Ce`, the `[Nσ/(Nσ+1)]` Padé-type structure, exact shallow-water + `O((kd)²)` consistency; group velocity and shoaling gradient; the **second-order bound-harmonic transfer function** with its hand-assembled forcing, reproducing Stokes to 1% and the published LFE-2 nonlinear range `kd=6.0`; third-order solvability + wave–current outlook; and the **vertical grid optimisation** — minimax formulation, the design rule `Δσ_top ≈ 2.94/kd_max`, and "grading beats order" at fixed DOF), and finally `NumericalImplementation/` — `GlobalResidual`, **`GridapImplementation.tex` (§8** — stacked layout, residual implementation, 𝓛/𝓝 pressure treatment, the `regime`/`nl_pressure`/**`flat_bed`** model-setups subsection, wave generation/sponge/BC incl. Dirichlet boundary generation with the `:model`/`:airy` polarization) and **`ValidationTests.tex` (§9** — the validation report incl. the BC-generation gates, Goda–Suzuki, spectral fidelity). Sign convention: `R_P` is a positive integral **subtracted** in the global sum, uniformly with `R_lin`/`R_nonlin`. All prior standalone `*Improved.tex`/`.md` section drafts are integrated into this zip. The document is a **`report`** (chapters + table of contents); the `§8`/`§9` labels above are the corresponding chapters. **Conventions** (enforced 2026-08-04, verified mechanically): structural labels carry a prefix matching their level — `\label{chap: …}` / `\label{sec: …}` / `\label{subsec: …}`, always `prefix: name` with a space; every chapter/section/subsection cross-reference is written `\S\ref{…}` (no `Section~\ref{}`/`Chapter~\ref{}` prose forms; ranges are `\S\ref{a}--\S\ref{b}`). Header numbering is the **report-class default**; the Roman-chapter/custom scheme is retained commented-out in `main.tex`. Both the `.zip` and an unzipped working copy `LFEM_discretisation/` live in `building_files/` — **the folder is the working copy; edit it and re-zip to sync** (the `.zip` is only an export/import channel for Overleaf; if the two disagree, the folder is authoritative). The `.cls`/toolchain needs `newtx`, so the document does not compile on this dev machine; `StokesWaveFourierAnalysis.tex` requires `multirow`. |
 | `LFEM_Gridap.md` | Synthesis of the derivation §1–§8 leading to the single scalar residual, in the LaTeX notation; §9 bridges that notation to the solver code. |
 | `algebraic_residual_math.md` | Operator reference: how each §8 residual term is written with native Gridap tensor ops (no MultiField decomposition, no vertical-index loops) — the `L`/`N` pressure stacks, the leading-pressure `R_P`, IBP of second-derivative terms, and the verified Gridap operator table. |
@@ -146,9 +146,11 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
   record: `building_files/PACKAGE_MIGRATION_PLAN.md`.
   Two pre-existing problems surfaced by the migration, both fixed/recorded: `test_vertical.jl` used
   `VectorValue` without importing it (it failed identically under the old loading — the documented
-  "15/15 PASS" was stale; now genuinely 15/15), and this environment has drifted to
-  **Gridap 0.20.8 / GridapSolvers 0.7.1** while the parent `../` and all prose say 0.19.11 / 0.6.2
-  (`[compat]` now admits both rather than forcing a downgrade).
+  "15/15 PASS" was stale; now genuinely 15/15), and an apparent dependency drift to
+  **Gridap 0.20.8 / GridapSolvers 0.7.1** against prose claiming 0.19.11 / 0.6.2.
+  **Reconciled 2026-08-05** (see §Solver conventions): the cluster also runs GridapSolvers 0.7.1, so
+  the prose — not the environment — was stale; and the two stacks were measured to give *identical*
+  results, so `[compat]` keeps both minors on evidence rather than as a hedge.
 - **Launcher memory re-sized** — `--mem-per-cpu=4G` restored, but sized to *fit* a rome node
   (256 GB / 128 cores): ranks are spread `nodes × ntasks-per-node` so no launcher requests more than
   256 GB/node (128 ranks ⇒ 2×64). Dropping the memory request was correct only under the false
@@ -456,9 +458,11 @@ seven booleans directly, for the rare combination the high-level interface delib
 the integrator form its per-stage system `J = ∂R/∂u + (1/aΔt)∂R/∂u̇` directly. The advection block is
 differentiated in full (quadratic Newton); the slope-pressure packages are linearised with `H` frozen
 in the u̇-carrying terms (a quasi-Newton choice that keeps the Jacobian sparse). Automatic
-differentiation is not used because Gridap 0.19.11's multifield AD cannot dualize through `∂t(u)`
-(there is no `TransientMultiFieldCellField` constructor for the dual), so the hand Jacobians are the
-design; `build_ode_operator_ad` exists only as a cross-check path.
+differentiation is not used because Gridap's multifield AD cannot dualize through `∂t(u)` (there is
+no `TransientMultiFieldCellField` constructor for the dual), so the hand Jacobians are the design;
+`build_ode_operator_ad` exists only as a cross-check path. That limitation was established on
+Gridap 0.19.11 and has **not been re-tested on 0.20.x** — but the hand Jacobians are the intended
+design either way, so it is not on the critical path.
 
 **Coding rule (block arrays):** never apply `∇` to an `Operation`-composed expression containing a
 test basis — expand by hand via `∂_a(W⋅𝓣) = (∂_aW)⋅𝓣` (see `nlpressure.jl`).
@@ -507,10 +511,25 @@ is robust in the stiff deep-water regime; `:theta` selects Crank–Nicolson. Dri
 * **MPI:** launch with `~/.julia/bin/mpiexecjl` so the runtime matches the MPI build; the first
   full-FEM compile takes tens of minutes; Julia buffers stdout to files (use `flush`); `MPI_Finalize`
   prints a benign OFI error and exits 143.
-* **Stack:** Gridap 0.19.11, GridapDistributed 0.4.13, GridapSolvers 0.6.2, PartitionedArrays 0.3.5,
-  MPI 0.20.26. Run Julia via the `julia-mcp` tool. Transient API: `TransientFEOperator(res,jac,jac_t,
-  U,V)`, `res(t,u,v)` with `∂t(u)`, `TransientCellField` in `Gridap.ODEs`, `solve(solver,op,t0,tF,u0)`
-  iterator yields `(t,uh)`.
+* **Stack (reconciled 2026-08-05):** this package's environment **and the cluster** run
+  **Gridap 0.20.x, GridapDistributed 0.4.17, GridapSolvers 0.7.1**, PartitionedArrays 0.3.5,
+  MPI 0.20.26. `[compat]` admits `Gridap = "0.19, 0.20"` and `GridapSolvers = "0.6, 0.7"` because the
+  two stacks were **measured equivalent** (see below), not as a hedge. The parent environment `../`
+  is a *different* environment for the legacy 1D/2D solvers and stays on Gridap 0.19.11 /
+  GridapSolvers 0.6.2 — it does not need to match, and the previous claim that the two envs were
+  "pinned to the same versions" was stale. Run Julia via the `julia-mcp` tool. Transient API:
+  `TransientFEOperator(res,jac,jac_t, U,V)`, `res(t,u,v)` with `∂t(u)`, `TransientCellField` in
+  `Gridap.ODEs`, `solve(solver,op,t0,tF,u0)` iterator yields `(t,uh)`.
+* **Gridap minor equivalence (measured 2026-08-05).** `test_basic.jl` run in two pinned
+  environments gives **identical** results — `max η = 0.00410 m`, `408` Newton iterations
+  (`3.40`/step), `gauge amp = 0.00212 m` — under *both* `Gridap 0.19.11 + GridapSolvers 0.6.2` and
+  `Gridap 0.20.8 + GridapSolvers 0.7.1`, and the package precompiles cleanly on both. The Gridap
+  minor therefore has **no effect** on this solver's results, and is *not* the explanation for the
+  stale reference constants in `test_basic_distributed.jl` (see Under development).
+* **Identifying the cluster's versions without shell access:** Julia package directory slugs are
+  content-addressed and stable across machines, so a cluster traceback names its versions. The OOM
+  logs reference `GridapSolvers/WuCdi` = **0.7.1**, `PartitionedArrays/MVmxR` = 0.3.5, `MPI/pvbg6` =
+  0.20.26 — which is how the cluster stack above was established.
 
 **Field reconstruction** (`src/reconstruct.jl`): the eliminated vertical kinematics are rebuilt for
 output. `w` is the exact modal vertical-velocity FE; the total pressure is `p = ρgH(1−σ)`
