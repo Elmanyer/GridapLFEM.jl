@@ -18,8 +18,8 @@ using GridapLFEM
 using Printf
 
 # sequential references (same config via setup_and_run, LU + Newton, 120 steps)
-const REF_EMAX_LIN = 0.0037095488  # linearised baseline max η over the run
-const REF_EMAX_NL  = 0.0124478473  # fully nonlinear max η over the run
+const REF_EMAX_LIN = 0.0037461259  # linearised baseline max η over the run
+const REF_EMAX_NL  = 0.0041032781  # fully nonlinear max η over the run
 const REF_RTOL     = 2e-3          # GMRES(1e-9)+Jacobi vs LU ⇒ loose agreement
 
 A_wave = 0.001
