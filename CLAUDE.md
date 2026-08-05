@@ -46,7 +46,7 @@ modes are 1-based `j=1..Nσ`, one per node.
 | `algebraic_residual_math.md` | Operator reference: how each §8 residual term is written with native Gridap tensor ops (no MultiField decomposition, no vertical-index loops) — the `L`/`N` pressure stacks, the leading-pressure `R_P`, IBP of second-derivative terms, and the verified Gridap operator table. |
 | `DESIGN_RECORDS.md` | Consolidated **historical design records** for the completed features — algebraic residual + Jacobians, package layout, distributed solver, nonlinear-pressure completion, boundary wave generation, periodic-y BC, the `flat_bed` switch, and the production sea-state scripts. Provenance only (*why* the code is shaped as it is); the code, this `CLAUDE.md`, and the LaTeX derivation are authoritative. |
 | `src/` (`GridapLFEM.jl` + submodules) | **The self-contained serial + distributed solver package** (`module GridapLFEM`): vertical tensors (incl. `Pcal`), constant-tensor + `Operation` helpers, stacked FE spaces (distributed-safe MultiField dispatch + transient-Dirichlet inflow variants), the loop-free residual + hand Jacobians (the same code runs distributed — `Operation` is forwarded for `DistributedCellField`), the time loops (default fully-implicit `RungeKutta(:SDIRK_2_2)`, `:theta` Crank–Nicolson selectable via `solver_type`; sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…`) plus reconstructed `w_s<σ>`/`p_s<σ>` fields (`reconstruct.jl`), and `waveinput.jl` (Dirichlet boundary wave generation + WaveSpec.jl coupling: component tables, `:model`/`:airy` polarizations, ramp, relaxation zone). Drivers: `setup_and_run` and `setup_and_run_distributed`. |
-| `test/` (21 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` 10/10 (cross-check virtual-work, ≤7e-15), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` (4 ranks), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_mms` 3/3 (unsteady nonlinear MMS), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, `test_dispersion_nonlinear` 3/3 (full-NL⇒Airy, kd=1/3/5 err 0.93/0.36/3.05%), `test_shallow_water` 6/6 (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch:** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. |
+| `test/` (21 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` 10/10 (cross-check virtual-work, ≤7e-15), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` 6/6 (4 ranks; rel ~1e-5 vs the sequential references), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_mms` 3/3 (unsteady nonlinear MMS), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, `test_dispersion_nonlinear` 3/3 (full-NL⇒Airy, kd=1/3/5 err 0.93/0.36/3.05%), `test_shallow_water` 6/6 (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch:** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. |
 | `examples/` (+ `validation/`, `distributed/`) | Sequential: `plane_wave.jl`, `ring_wave.jl`, `periodic_plane_wave.jl`, and BC-generation `bc_plane_wave.jl`, `bc_irregular_sea.jl` (JONSWAP, gauge CSV), `bc_directional_sea.jl`; `examples/distributed/` — 6 env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry, `run_irregular_sea_dist.jl`, `run_directional_sea_dist.jl` — sea-state env vars + `build_airy_state()` in `_dist_common.jl`) + README; `examples/validation/` — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + `dispersion_sweep.jl` + `spectral_fidelity.jl` (JONSWAP component-wise amplitude+dispersion transfer) + README; `examples/distributed_small/` — **5 parametric** small-domain (50×20 m) scripts (`run_periodic_plane_small` [interior line source], `run_ring_small` [point source], `run_bc_plane_small` [`:bc_gen` boundary plane wave], `run_directional_sea_small`, `run_irregular_sea_small` [`:bc_gen` WaveSpec sea]) grouped by wave-generation type; the 20 observation/comparison cases are their **launchers** in `run/dist_small/`, each overriding only the env vars that change (regime / nl_pressure / flat_bed→bar / amplitude / period). See the "Current Implementation Stage" small-domain-suite entry. |
 | `postprocessing/` (`GridapLFEMPost`) | Self-contained postprocessing library with its own environment (ReadVTK, Plots+GR, FFTW, Interpolations — pinned separately from the solver). Reads VTK (`solution.pvd`/`sol_t_*.vtu`) + CSV → `WaveSimulation` (auto-`regularize!`s the duplicated Q2 node cloud to a Cartesian grid). Modules: `io, probes, spectral, diagnostics, reconstruct, plotting, seastate`. Gauges/DFT/celerity/harmonics/radial/conservation; heatmap/animation(GIF)/Hovmöller/dispersion/profile plots; `seastate.jl` — Welch PSD, JONSWAP target overlay, spectral moments/Hs, zero-upcrossing heights, Rayleigh exceedance (+ `spectral_validation.jl` example). `reconstruct.jl` rebuilds `w(σ)`/`p_nh(σ)` from the stored velocity modes at any σ (analytic σ-basis, Gauss quad, no Gridap; matches solver `w_s` to 4–8%). No dependency on the solver. |
 | `WaveSpec.jl/` (repo-vendored package) | Stochastic sea-state synthesis (CMOE-TUDelft; JONSWAP/TMA/… spectra, sampling strategies, angular spreading, `AiryState`). Tracks the **GitHub repository version, not a tagged release** — the release's `change_seed!` reads a non-existent `state.spec` field and breaks every sea-state run; the repo version has the fix. `Pkg.develop`ed in both environments; `using WaveSpec` is re-exported by `GridapLFEM`. The `WaveInput` converter (`src/waveinput.jl`) snapshots seeded amplitudes/phases into plain arrays and re-solves the wavenumbers with the solver's `g` (WaveSpec uses 9.80665). |
@@ -132,16 +132,34 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
 (`GridapLFEMPost`) and the authoritative LaTeX derivation are in place and compile-checked.
 
 **Recently completed (this branch).**
+- **Distributed GMRES configuration fixed** (2026-08-05, `f7fe62d`) — `ls_maxiter` was being passed
+  as `GMRESSolver`'s positional `m` (basis size) instead of the `maxiter` keyword (see §7). Now
+  `GMRESSolver(krylov_m=100; restart=true, maxiter=ls_maxiter, …)`, with `ls_maxiter` **2000 → 1000**
+  (measured convergence is ~150 iterations, so ~7× headroom). Measured on the 4-rank distributed
+  test: `gmres` no longer pinned (149–152, converging), **Newton 8–10 → 4 per step**, 120/120 steps,
+  caches **139 MB → 5.6 MB per rank**. `krylov_m` is a kwarg on both drivers, forwarded through all
+  12 distributed run scripts, and settable as `LFEM_KRYLOV_M`. The banner previously advertised a
+  2000-iteration cap that never existed; it now reports `GMRES(m) restarted`.
+- **`test_basic_distributed.jl` reference amplitudes re-measured** (`4bf90fd`) —
+  `REF_EMAX_LIN = 0.0037461259`, `REF_EMAX_NL = 0.0041032781`, obtained by running the *sequential*
+  solver (LU + Newton) with the distributed test's exact configuration. Verified 6/6 PASS at
+  rel ≈ 1e-5, three orders inside `REF_RTOL = 2e-3` (so that tolerance did **not** need loosening).
+  The previous constants were traced by bisection (see the open-boundary entry below).
 - **`GridapLFEM` is now a Julia package** (2026-08-04) — `name`/`uuid`/`version` in `Project.toml`,
   loaded everywhere with `using GridapLFEM`; the 36 consumers (21 tests + `test/cluster/`,
   13 examples, `compile/warmup.jl`, `examples/distributed/_dist_common.jl`) were migrated off
   `include(src/GridapLFEM.jl)` + `using .GridapLFEM`, and `:GridapLFEM` was added to
   `create_sysimage` with a preflight that fails the build if the package is not resolvable.
-  **This is the fix for the 2026-08-04 cluster OOM kills**: an `include()`d module lives in a
-  throw-away `Main.GridapLFEM`, so neither the solver nor — far more expensive — the Gridap FEM
-  specialisations keyed on its types were retained in the sysimage, and every rank recompiled them
-  (ranks were caught in `typeinf`/`optimize` at kill time). The package also precompiles natively
-  (**3.5 s** to load). `test_equivalence.jl` keeps its `include()` of the *oracle*
+  **Why it matters:** an `include()`d module lives in a throw-away `Main.GridapLFEM`, so neither the
+  solver nor — far more expensive — the Gridap FEM specialisations keyed on its types were retained
+  in the sysimage, and every rank recompiled them (ranks were caught in `typeinf`/`optimize` in one
+  kill-time traceback). The package also precompiles natively (**3.5 s** to load).
+  **Correction of an earlier claim:** this was first recorded here as *the* fix for the 2026-08-04
+  cluster OOM kills. That attribution was wrong. The demonstrated OOM mechanism is the GMRES cache
+  over-allocation above (139 MB/rank per numerical setup, churned across stages and steps until RSS
+  crossed the 2 GB/core limit) — the failing job advanced **140 steady steps** before dying, whereas
+  a compile spike occurs before step 1. Both defects were real and both are fixed; packaging alone
+  would not have prevented the OOM. `test_equivalence.jl` keeps its `include()` of the *oracle*
   `../LFE-M_2D_solver/` — that is a genuinely external second implementation. Plan and design
   record: `building_files/PACKAGE_MIGRATION_PLAN.md`.
   Two pre-existing problems surfaced by the migration, both fixed/recorded: `test_vertical.jl` used
@@ -239,6 +257,18 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
   abstract** on the arbitrary-order model was drafted (`building_files/CFC2027_LFEMultilayer_abstract/`).
 
 **Under development / open:**
+- **Re-run the small-domain suite with both 2026-08 fixes in place.** Every cluster run on record
+  predates at least one of: the surface-damping sponge (`95f5ec6`), the GMRES configuration fix
+  (`f7fe62d`), and the `mu_max` 8→40 raise. The archived outputs are therefore *not* a baseline —
+  `small_irregular_nonlinear_full_flat_Hs0.2_M2` (NaN at t=13.8) is a diagnosed pre-fix failure, not
+  a solver defect. What to check on the re-run: `gmres=` no longer pinned, Newton ~4/step, and
+  `max|η|` in the last 5 m staying at incident-wave level rather than exceeding it.
+- **Is the sysimage actually removing the per-rank compile?** The package migration makes it
+  *possible* (`:GridapLFEM` is baked, behind a preflight) but this has not been confirmed by a
+  cluster run. Until it is, the launchers keep `--mem-per-cpu=4G`; drop it once confirmed.
+- **`Hs=0.2 m` at `d=3.5 m` with `nl_pressure=:full`** is far outside the conservative `A ≤ 0.001`
+  guidance and is the most aggressive case in the suite — if it still destabilises after the fixes,
+  the sponge/relaxation widths for the longest components are the next thing to size (see §8).
 - At-scale physical benchmarks on the cluster (Stokes harmonics, Dingemans bar) — scripts exist
   (`examples/validation/`, `examples/distributed/`); quantitative overlays on the paper's data pending.
 - Production-length (200+ Tp) irregular/directional sea runs — scripts ready and now **unblocked**
@@ -471,10 +501,22 @@ test basis — expand by hand via `∂_a(W⋅𝓣) = (∂_aW)⋅𝓣` (see `nlpr
 fully-implicit `RungeKutta(nls, ls, dt, :SDIRK_2_2)` (L-stable 2nd-order, diagonally implicit), which
 is robust in the stiff deep-water regime; `:theta` selects Crank–Nicolson. Driver kwargs
 (both drivers): `solver_type=:sdirk` (default), `tableau=:SDIRK_2_2`, `nl_iter=50`, `nl_tol=1e-6`
-(production; convergence/physical-reproducibility tests pin `1e-8`), distributed `ls_maxiter=2000` /
-`ls_rtol=1e-9` (the GMRES solve is kept accurate so Newton gets good steps), `print_every`,
-`check_every=50`, `check_tol=1e-8`. The distributed run scripts expose these as
-`LFEM_SOLVER/TABLEAU/NL_ITER/NL_TOL/LS_MAXITER/LS_RTOL` env vars.
+(production; convergence/physical-reproducibility tests pin `1e-8`), distributed `ls_maxiter=1000` /
+`krylov_m=100` / `ls_rtol=1e-9` (the GMRES solve is kept accurate so Newton gets good steps),
+`print_every`, `check_every=50`, `check_tol=1e-8`. The distributed run scripts expose these as
+`LFEM_SOLVER/TABLEAU/NL_ITER/NL_TOL/LS_MAXITER/LS_RTOL/LFEM_KRYLOV_M` env vars.
+
+**`krylov_m` vs `ls_maxiter` — two different bounds (do not conflate).** `GMRESSolver`'s first
+POSITIONAL argument is `m`, the stored **Krylov basis size** (a *memory* bound: it allocates `m+1`
+distributed vectors **and a dense local `(m+1)×m` Hessenberg per rank**, up front in
+`get_solver_caches`); `maxiter` is a **keyword** giving the iteration budget (a *time* bound), whose
+library default is **100**. The distributed factory therefore builds
+`GMRESSolver(krylov_m; restart=true, maxiter=ls_maxiter, …)`. `restart=true` is load-bearing: the
+library default `restart=false` lets the basis *grow* past `m` via `expand_krylov_caches!`, i.e.
+unbounded memory. Passing the iteration cap positionally (the pre-2026-08-05 bug) reserved a
+2000-vector basis — 139 MB/rank where 5.6 MB was needed — while silently capping every solve at 100
+iterations, so `ls_rtol` was never reached. Symptom to watch for: **`gmres=` pinned at exactly the
+same number every step**, with Newton needing 8–24 iterations instead of 3–5.
 
 **Runtime monitoring** (`src/monitor.jl`, serial + distributed):
 * `SolverMonitor` — a transparent `NonlinearSolver` wrapper (pass via `monitor=`) that harvests per
@@ -502,6 +544,19 @@ is robust in the stiff deep-water regime; `:theta` selects Crank–Nicolson. Dri
   a spurious-forcing mode that an initial perturbation excites directly, so closed-basin IC cases run
   with solid x-walls.
 * **`A_wave ≤ 0.001`** keeps the fully nonlinear runs stable over long integrations.
+* **The open-boundary mode is η-dominated — the sponge MUST damp η, not just velocity.** At a free
+  (`x_wall_bc=false`) outflow the model supports a boundary-localised mode that carries large surface
+  displacement with little velocity, so a velocity-only sponge (`∫ μ (W⋅𝗠U)`) is structurally blind
+  to it and **no value of `mu_max` absorbs it**. The `+∫ μ q η` continuity term (giving
+  `ηt = … − μη`) is what absorbs it; it is not optional. **How to recognise it in a run** (diagnosed
+  on `output/small_irregular_nonlinear_full_flat_Hs0.2_M2`, a job that predated the fix and NaN'd at
+  t=13.8): bin `max|η|` by `x` from the VTK output — the mode peaks **at the last boundary node and
+  decays exponentially inward**, is spatially **disconnected** from the incident field (60× its
+  immediate upstream neighbour while the wave front is still mid-domain), grows with an e-folding
+  time comparable to `Tp`, and has `|u|/|η| ≈ 0.4` against ≈ `ω/kd` (≈0.9) for a genuine wave and
+  ≈1.9 in the incident train. Once it exceeds the sea state, `eta_max` in the log stops reporting the
+  physics and reports the mode. Sponge width matters too: it must cover the **longest** component
+  (`kd_min` ⇒ λ_max), not the peak — 12 m is under one wavelength for `kd=0.9` at `d=3.5`.
 * **`B_stored = −B̃` (the stored dispersion tensor ≤ 0)** and the explicit `(−1)` factors in the `R_P`
   and slope-pressure terms give those terms their correct sign — they are load-bearing.
 * **Distributed linear solve = `NewtonSolver(GMRESSolver(Pr=Jacobi))`** (GridapSolvers) — a direct LU
@@ -525,7 +580,7 @@ is robust in the stiff deep-water regime; `:theta` selects Crank–Nicolson. Dri
   (`3.40`/step), `gauge amp = 0.00212 m` — under *both* `Gridap 0.19.11 + GridapSolvers 0.6.2` and
   `Gridap 0.20.8 + GridapSolvers 0.7.1`, and the package precompiles cleanly on both. The Gridap
   minor therefore has **no effect** on this solver's results, and is *not* the explanation for the
-  stale reference constants in `test_basic_distributed.jl` (see Under development).
+  reference constants in `test_basic_distributed.jl`, which were traced instead to `95f5ec6` and have since been re-measured.
 * **Identifying the cluster's versions without shell access:** Julia package directory slugs are
   content-addressed and stable across machines, so a cluster traceback names its versions. The OOM
   logs reference `GridapSolvers/WuCdi` = **0.7.1**, `PartitionedArrays/MVmxR` = 0.3.5, `MPI/pvbg6` =

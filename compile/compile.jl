@@ -10,11 +10,12 @@
 #  `include(src/GridapLFEM.jl)`, creating a fresh `Main.GridapLFEM` in every
 #  process. PackageCompiler only retains code belonging to the packages it bakes,
 #  so the solver's types and — far more expensive — every Gridap FEM
-#  specialisation keyed on them were recompiled in EVERY rank at EVERY run. The
-#  image removed the library compile but never the application compile, and
-#  32-64 ranks each doing that OOM-killed the jobs (exit 137). Listing
+#  specialisation keyed on them were recompiled in EVERY rank at EVERY run: the
+#  image removed the library compile but never the application compile. Listing
 #  :GridapLFEM below is what actually delivers "the ranks load, they do not
-#  compile".
+#  compile". (The 2026-08-04 exit-137 kills were first blamed on this; the
+#  demonstrated cause was instead a GMRES cache over-allocation — see krylov_m
+#  vs ls_maxiter in timeloop_dist.jl. Both were real and both are fixed.)
 #
 #  PREREQUISITE: LocalPreferences.toml must already pin MPI to the system OpenMPI,
 #  otherwise the sysimage bakes in the bundled MPICH and crashes under the cluster

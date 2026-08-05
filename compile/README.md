@@ -9,10 +9,16 @@ into one file, so every MPI rank **loads** the code instead of JIT-compiling it.
 > PackageCompiler retains code belonging to the *packages* it bakes, so the solver's types and —
 > far more expensive — every Gridap FEM specialisation keyed on them were **not** in the image and
 > were recompiled in each rank on each run. The image removed the library compile but never the
-> application compile; 32–64 ranks each doing that is what OOM-killed the jobs (exit 137).
-> `GridapLFEM` is now a real package and is listed in `create_sysimage`, which is what makes the
-> claim above hold. If you ever see ranks in `typeinf`/`optimize` in a backtrace, the solver is not
-> in the image — check `compile.jl`'s package preflight.
+> application compile. `GridapLFEM` is now a real package and is listed in `create_sysimage`, which
+> is what makes the claim above hold. If you ever see ranks in `typeinf`/`optimize` in a backtrace,
+> the solver is not in the image — check `compile.jl`'s package preflight.
+>
+> **Note on the 2026-08-04 OOM kills (exit 137).** They were first attributed to this missing
+> application compile. That was wrong: the demonstrated mechanism was a GMRES cache
+> over-allocation (139 MB/rank per numerical setup, churned until RSS crossed the 2 GB/core
+> limit) — the failing jobs advanced ~140 steady steps before dying, whereas a compile spike
+> occurs before step 1. Both defects were real and both are fixed; see `krylov_m` vs `ls_maxiter`
+> in the root `CLAUDE.md` §7.
 
 **Every launcher in `run/` and `run/dist_small/` uses the image** — via the shared helper
 `run/lfem_env.sh`. Build it once (Steps 1–2), then just `sbatch` the case you want.
