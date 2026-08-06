@@ -109,6 +109,11 @@ export run_time_loop
 export SolverMonitor, take_step_stats!
 export ResidualChecker, check_residuals
 export print_solver_banner, step_report, check_report, final_report
+# Field diagnostics: max|η| location + interior/damped split, |u|/|η|, mass and
+# energy invariants, per-rank RSS, relative divergence guard, CSV step log.
+export RunDiagnostics, build_run_diagnostics, field_diagnostics
+export resolve_eta_ref, rss_bytes, masked_max, x_at_max
+export diag_csv_row, close_diagnostics
 
 # Utilities
 export find_wavenumber

@@ -289,6 +289,11 @@ function setup_and_run(;
     print_every  :: Int     = 1,          # print a step report every N steps (1 = every step)
     check_every  :: Int     = 50,         # re-verify the governing equations every N steps (0 = off)
     check_tol    :: Float64 = 1e-8,       # tolerance for that verification (‖R‖∞)
+    # ---- Field diagnostics (monitor.jl: max|η| location, invariants, RSS) -----
+    diag_every   :: Int     = 0,          # sample every N steps (0 → = print_every; −1 = disabled)
+    diag_csv     :: Bool    = true,       # write output_dir/diagnostics.csv (needs save_every≥0 dir)
+    eta_ref                 = nothing,    # reference amplitude for the divergence guard (auto)
+    div_factor   :: Float64 = 20.0,       # abort when max|η| > div_factor · eta_ref
     # ---- Reconstructed field output (at the Nσ vertical σ-nodes) --------------
     write_w        :: Bool    = false,    # also write vertical-velocity fields w_s<σ> to VTK
     write_pressure :: Bool    = false,    # also write total-pressure fields p_s<σ> to VTK
@@ -538,6 +543,18 @@ function setup_and_run(;
                 string(round.(recon.levels; digits=3)))
     end
 
+    # Field diagnostics: max|η| location + interior/damped split, |u|/|η|, mass
+    # and energy invariants, process RSS, and the relative divergence guard.
+    # `diag_every=0` follows `print_every` so every reported line is complete;
+    # a negative value switches the whole block off.
+    diag_n   = diag_every == 0 ? max(print_every, 1) : diag_every
+    eta_ref_v = resolve_eta_ref(eta_ref, A_wave, wi, eta0_func, domain)
+    rundiag  = diag_n > 0 ?
+               build_run_diagnostics(prob, wi !== nothing ? U(0.0) : U, trian, dΩh;
+                                     eta_ref=eta_ref_v, div_factor=div_factor,
+                                     output_dir=output_dir, diag_csv=diag_csv,
+                                     u0=u0) : nothing
+
     # Print the solver-configuration banner (integrator, tolerances, dt/steps).
     println()
     print_solver_banner(
@@ -545,7 +562,9 @@ function setup_and_run(;
                  nl_iter, nl_tol),
         "LU direct factorisation (sequential)";
         solver_type=solver_type, theta=theta, dt=dt, t0=0.0, T_final=T_final,
-        print_every=print_every, check_every=check_every, check_tol=check_tol)
+        print_every=print_every, check_every=check_every, check_tol=check_tol,
+        monitor=monitor, diag_every=max(diag_n, 0), eta_ref=eta_ref_v,
+        div_limit=rundiag === nothing ? NaN : rundiag.div_limit)
 
     # --- March the transient problem from 0 to T_final, collecting per-step
     #     diagnostics and writing VTK/gauge output as requested. ---------------
@@ -567,7 +586,9 @@ function setup_and_run(;
                             monitor=monitor,            # wrap the Newton solver to harvest per-step stats
                             checker=checker,            # optional independent re-assembly of the governing equations for verification
                             check_every=check_every,    # re-verify the governing equations every N steps (0 = off)
-                            check_tol=check_tol)        # tolerance for that verification (‖R‖∞)
+                            check_tol=check_tol,        # tolerance for that verification (‖R‖∞)
+                            rundiag=rundiag,            # field-diagnostics state (max|η| location, invariants, RSS)
+                            diag_every=max(diag_n, 0))  # sample the field diagnostics every N steps (0 = off)
 
     return diags, vert, prob
 end

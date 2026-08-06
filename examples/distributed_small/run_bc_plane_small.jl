@@ -80,6 +80,8 @@ diags, vert, prob = setup_and_run_distributed(
     solver_type=solver_sym(), tableau=tableau_sym(),
     nl_iter=nl_iter_val(), nl_tol=nl_tol_val(),
     ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(),
+    diag_every=diag_every_val(), diag_csv=diag_csv_flag(),
+    div_factor=div_factor_val(), eta_ref=eta_ref_val(),
     print_every=genv_i("LFEM_PRINT_EVERY", 10))
 
 is_rank0() && @printf("bc_plane [%s] done: %d steps, %d snapshots to %s\n",

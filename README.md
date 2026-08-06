@@ -120,16 +120,21 @@ GridapLFEM.jl/
 │   ├── timeloop_dist.jl         distributed mesh + GMRES+Jacobi+Newton solver + time loop
 │   └── utilities_dist.jl        setup_and_run_distributed
 ├── test/                         # 21 test files + test/cluster/ — see Validation
+│   └── local/                   4 machinery gates on quasi-1D flumes + runner (minutes, 6 cores)
 ├── examples/
 │   ├── plane_wave.jl · ring_wave.jl · periodic_plane_wave.jl     sequential interior-source
 │   ├── bc_plane_wave.jl · bc_irregular_sea.jl · bc_directional_sea.jl   sequential BC generation
+│   ├── inspect_run.jl            stdlib-only: diagnostics.csv → a health verdict for any run
 │   ├── validation/               physical benchmarks (Stokes, bar, soliton, ring, sideband) + README
 │   ├── distributed/              8 env-configurable cluster MPI scripts + README
-│   └── distributed_small/        5 parametric small-domain (50×20) scripts (line/point/bc-plane/dir/irreg)
+│   ├── distributed_small/        5 parametric small-domain (50×20) scripts (line/point/bc-plane/dir/irreg)
+│   ├── local_1d/                 parametric quasi-1D flume (local sequential + cluster MPI)
+│   └── local_2d/                 parametric small 2-D case (25×10 m, 6 ranks)
 ├── run/                          # SLURM launchers — all sysimage-based (see Running on a cluster)
 │   ├── lfem_env.sh              shared helper: modules + sysimage + lfem_run <nranks> <script.jl>
 │   ├── run_*.sh                 9 production cases (snellius; run_blue.sh = DelftBlue)
-│   └── dist_small/              20 small-domain (50×20) observation/comparison jobs
+│   ├── dist_small/              20 small-domain (50×20) jobs + 7 quasi-1D flume jobs
+│   └── local/                   lfem_local.sh + 15 workstation launchers (≤6 cores) + README
 ├── postprocessing/GridapLFEMPost # self-contained VTK/CSV analysis + plotting library (own env)
 ├── compile/                      # cluster sysimage build (compile.jl, warmup.jl, module loaders) + README
 ├── Project.toml / Manifest.toml  package manifest (name/uuid/version) + its environment
@@ -228,8 +233,15 @@ with a PMIx version mismatch. `nx`/`ny` in `partition` must divide evenly by `px
 On the cluster, runs are launched from `run/` and **always against a prebuilt system image**
 (`GridapLFEM_sysimage.so`). Without it every rank JIT-compiles the full Gridap FEM stack: ~30–45 min
 of wall time per run and a ~4–8 GB/rank memory spike that OOM'd whole nodes at 32–128 ranks. With
-it the ranks mmap one shared, already-compiled image — no compile, no spike, and the jobs fit the
-cheap `rome`/L1 budget at the node-default 2 GB/core.
+it the ranks mmap one shared, already-compiled image — no compile, no spike — and the jobs fit the
+cheap `rome`/L1 budget.
+
+> **Memory: the launchers request `--mem-per-cpu=4G`, and that is not optional.** Running at the
+> `rome` node default (2 GB/core) was tried in 2026-08 and the job was OOM-killed with the same
+> error as the earlier crashes. The compile spike is therefore not the only consumer, and the
+> attribution experiment (per-rank JIT vs GMRES cache vs a per-step leak vs a baseline footprint
+> above 2 GB/core) is open — see `building_files/LOCAL_VALIDATION_PLAN.md` §2.2. Each launcher
+> sizes its request to fit a `rome` node (256 GB / 128 cores).
 
 ```bash
 # 1. build the image once (~45-60 min; rebuild after changing src/*.jl or upgrading packages)
@@ -290,6 +302,8 @@ by mtime when an image predates that stamp. Set `LFEM_STRICT_SYSIMAGE=1` to abor
 | `solver_type`, `tableau` | time integrator: `:sdirk` (default, `SDIRK_2_2`, L-stable) \| `:theta` (Crank–Nicolson); `:rk3` (`SDIRK_3_4`) sequential-only |
 | `write_w`, `write_pressure`, `rho` | reconstruct vertical velocity / total pressure at every σ-node into VTK |
 | `save_every`, `output_dir`, `gauges` | VTK snapshot cadence, output directory, point-gauge stations (sequential only) |
+| **`diag_every`, `diag_csv`** | field-diagnostics sampling (`0` → follow `print_every`, `−1` → off) and the `diagnostics.csv` step log: **where** max\|η\| sits, its interior/damped split, \|u\|/\|η\|, mass & energy, GMRES saturation, per-rank RSS. Overhead measured within noise |
+| **`eta_ref`, `div_factor`** | the *relative* divergence guard — abort at `div_factor·eta_ref` (default 20×) instead of the blind absolute `1e4`. `eta_ref` is inferred from the forcing when omitted (`A_wave` / the sea state's `Hs` / peak `η₀`) |
 
 Distributed adds `cpu_grid=(px,py)` and Krylov controls (`nl_iter`, `nl_tol`, `ls_rtol`,
 `ls_maxiter`, `nlp_cg_rtol`, `nlp_cg_maxiter`), plus the same `solver_type`/`tableau`; the linear
@@ -311,7 +325,7 @@ The full suite is **21 tests + `test/cluster/`**; representative highlights:
 |---|---|---|
 | `test_vertical.jl` | vertical tensor identities, dispersion bridge vs Yang & Liu Table 1 | 15/15 PASS |
 | `test_primitives.jl` | tensor index order, `∂x/∂y` orientation, contraction semantics | 9/9 PASS |
-| `test_equivalence.jl` | virtual-work match vs an independent per-layer assembly, 3 configs | 10/10 PASS, rel ≤ 7e-15 |
+| `test_equivalence.jl` | virtual-work match vs an independent per-layer assembly, 3 configs | **⚠ FAILING at HEAD (2026-08-06): 1 PASS / 9 FAIL**, rel 2e-2 … 1.5. Vertical tensors still match; the *residual* diverges, even in the simplest linear/flat/no-advection config. Pre-existing (reproduced on a pristine tree) — see Known issues |
 | `test_dispersion.jl` | FEM phase speed vs linear theory at kd=3 | PASS, err 0.90% |
 | `test_dispersion_curve.jl` | `Cm/Ce(kd)` sweep vs Airy, LFE-2/3/4 applicable-kd | 9/9 PASS (10.8/39.2/127.9) |
 | `test_dispersion_nonlinear.jl` | full-NL solver ⇒ Airy at vanishing amplitude (kd 1/3/5) | 3/3 PASS |
@@ -331,6 +345,29 @@ The full suite is **21 tests + `test/cluster/`**; representative highlights:
 | `test_nlpressure_distributed.jl` | 4-rank MPI, full nonlinear pressure vs sequential | 3/3 PASS |
 | `test_bc_generation_distributed.jl` | 4-rank MPI Dirichlet generation vs sequential | 4/4 PASS, rel 3.1e-8 |
 | `cluster/cluster_conservation.jl` · `cluster/cluster_mms.jl` | long-run mass conservation / nonlinear MMS at scale | dist |
+
+### The local suite — `test/local/`
+
+A second, faster tier that gates the solver's **internal machinery** rather than its physics, on
+quasi-1D flumes small enough to run in minutes on a workstation. It exists because the components
+that failed on the cluster — the sponge, the relaxation zone, the open-boundary behaviour — failed
+*silently*, and a multi-hour job is the wrong instrument for finding out why.
+
+| Test | What it gates | Result |
+|---|---|---|
+| `test_reststate_1d.jl` | an undisturbed surface stays at rest to machine precision, flat bed **and** sloping bed (the IBP energy-form gravity term must cancel exactly) | **8/8**, `max\|η\| = 0` exactly |
+| `test_sponge_1d.jl` | the envelope inside the sponge follows the quadratic-μ damping law `ln a ∝ −μ_max(x−x_R)³/(3w²c_g)` across `μ_max = 5/20/40`; decay monotone and saturating; reflection < 5 %; **η damped, not just u** | `R² = 0.9995/0.9866/0.9835`, reflection 1.0–1.4 % |
+| `test_relaxation_1d.jl` | inside the inflow zone the state *is* the prescribed incident wave; and the zone absorbs an outgoing wave — measured as the energy left in the basin after a hump release, against a `relax_bc=false` control | **9/9**; amplitude err ≤ 0.1 %, phase 0.9°, absorption **145×** the control |
+| `test_boundary_modes_1d.jl` | the open-boundary mode's five-clause signature (growth rate, boundary localisation, location of max\|η\|, kinematic ratio, invariants), **with a negative control that must fail** so a future regression cannot silence the detector | **16/16**; control detected in **6 s** of simulated time |
+
+```bash
+test/local/run_local_tests.sh              # all four, 4 concurrent processes
+JOBS=6 test/local/run_local_tests.sh sponge relaxation
+```
+
+They run **sequentially** (one process per test, several cases inside each): every measurement is
+gauge-based and only the sequential driver evaluates point gauges. The cores go to running tests
+concurrently, not to MPI. They are not part of the 21-file suite gate yet.
 
 The reference for `test_equivalence.jl` is an independent per-layer assembly of the same weak form in
 `../LFE-M_2D_solver/`, differently structured, so agreement to machine precision cross-checks the
@@ -370,6 +407,15 @@ records are in `building_files/DESIGN_RECORDS.md`.
 ---
 
 ## Known issues
+
+- **⚠ The oracle-equivalence acceptance test is failing at HEAD** (`test_equivalence.jl`:
+  1 PASS / 9 FAIL, `rel = 2e-2 … 1.5` against a `1e-10` gate; discovered 2026-08-06). The vertical
+  tensors still match the oracle exactly, so Stage 1 is sound — the **residual assembly** disagrees,
+  and it already disagrees in the simplest configuration (linear core, flat bed, no advection, no
+  pressure package: `rel = 1.2e-1`). Confirmed **pre-existing** by re-running against a pristine
+  tree: bit-for-bit identical failures. The previously documented "10/10 PASS, rel ≤ 7e-15" was
+  stale. Full detail, evidence and investigation leads: `CLAUDE.md`, "Under development / open".
+
 
 - The vendored **`WaveSpec.jl`** must track the **GitHub repository version, not a tagged release**:
   the release's `change_seed!` accesses a non-existent `state.spec` field (the struct field is

@@ -7,10 +7,13 @@
 #SBATCH --ntasks=100
 #SBATCH --ntasks-per-node=50
 #SBATCH --cpus-per-task=1
-# Memory headroom while the ranks may still compile. Sized so it FITS a rome
+# Memory: the rome node default (2 GB/core) was TESTED (2026-08) and the job was
+# still OOM-killed. This request is therefore NOT provisional headroom for a
+# compile spike -- it is required until the consumption is attributed; see
+# building_files/LOCAL_VALIDATION_PLAN.md section 2.2. Sized so it FITS a rome
 # node (256 GB / 128 cores): 100 ranks x 4 GB over 2 node(s) = 200 GB/node.
-# Once a sysimage CONTAINING the solver is proven to remove the per-rank
-# compile, drop this and let the 2 GB/core node default apply.
+# Do NOT drop this on the argument that the sysimage removes the per-rank
+# compile: that argument was tested and refuted.
 #SBATCH --mem-per-cpu=4G
 #SBATCH --output=GridapLFEM.%j.out
 #SBATCH --error=GridapLFEM.%j.err

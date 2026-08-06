@@ -100,6 +100,19 @@ function build_ode_solver_distributed(dt::Float64;
     nls = NewtonSolver(ls; maxiter=nl_iter, atol=nl_tol, rtol=1e-10, verbose=false)
     if monitor !== nothing
         monitor.inner = nls
+        # Read the configuration back OUT of the constructed solver objects (B1).
+        # The pre-2026-08-05 bug was a kwarg the caller believed it had passed
+        # (`ls_maxiter`) landing on GMRESSolver's positional `m`; a banner built
+        # from the kwargs cannot show that, one built from `ls` can.
+        lt = ls.log.tols
+        monitor.ls_desc = @sprintf(
+            "GMRES(m=%d, restart=%s) + Jacobi preconditioner | max iters = %d | rtol = %.1e, atol = %.1e",
+            ls.m, string(ls.restart), lt.maxiter, lt.rtol, lt.atol)
+        nt = nls.log.tols
+        monitor.nls_desc = @sprintf(
+            "NewtonSolver (GridapSolvers, exact hand Jacobians) | max iters = %d | atol (‖r‖₂) = %.1e, rtol = %.1e",
+            nt.maxiter, nt.atol, nt.rtol)
+        monitor.lin_cap = lt.maxiter          # L1: the cap the saturation flag tests against
         nls = monitor
     end
     if solver_type == :sdirk
@@ -162,7 +175,9 @@ function run_time_loop_dist(ranks, op, solver, u0,
                                 monitor               = nothing,   # SolverMonitor
                                 checker               = nothing,   # ResidualChecker
                                 check_every:: Int     = 0,
-                                check_tol  :: Float64 = 1e-8)
+                                check_tol  :: Float64 = 1e-8,
+                                rundiag               = nothing,   # RunDiagnostics
+                                diag_every :: Int     = 0)
     if i_am_main(ranks)
         mkpath(output_dir)
     end
@@ -200,18 +215,30 @@ function run_time_loop_dist(ranks, op, solver, u0,
 
             do_print = print_dt === nothing ? (step % print_every == 0) :
                                               (t_n - t_last_print >= Float64(print_dt))
+            # COLLECTIVE — the sampling condition depends only on `step`, which is
+            # identical on every rank, so this must NOT be rank-guarded.
+            fd = (rundiag !== nothing && diag_every > 0 && step % diag_every == 0) ?
+                 field_diagnostics(rundiag, u_n) : nothing
+            if fd !== nothing && i_am_main(ranks)
+                diag_csv_row(rundiag, step, t_n, fd, stats)
+            end
             if do_print
                 if i_am_main(ranks)
                     wall  = time() - wall0
                     eta_s = steps_total > step ? (wall/step)*(steps_total - step) : NaN
                     println(step_report(step, t_n, emax, stats;
-                                            eta_s=eta_s, tag="[dist]"))
+                                            eta_s=eta_s, tag="[dist]", fd=fd))
                     flush(stdout)
                 end
                 t_last_print = t_n
             end
             if stats !== nothing && !stats.converged && i_am_main(ranks)
                 println("  *** WARNING: nonlinear solver did NOT converge at step $step (t=$t_n) ***")
+                flush(stdout)
+            end
+            if stats !== nothing && stats.lin_sat && i_am_main(ranks)
+                println("  *** WARNING: GMRES hit its iteration cap ($(stats.lin_cap)) at step $step ",
+                        "— the solve was TRUNCATED, ls_rtol was never reached ***")
                 flush(stdout)
             end
 
@@ -257,9 +284,11 @@ function run_time_loop_dist(ranks, op, solver, u0,
                 update_nlp_state!(nlp[1], nlp[2], u_n)
             end
 
-            if isnan(emax) || emax > 1e4
+            # D1: RELATIVE divergence guard (see the sequential twin).
+            div_limit = rundiag === nothing ? 1.0e4 : rundiag.div_limit
+            if isnan(emax) || emax > div_limit
                 if i_am_main(ranks)
-                    @warn "Diverged at t=$t_n (eta_max=$emax)"
+                    @warn "Diverged at t=$t_n (eta_max=$emax, limit=$div_limit)"
                 end
                 break
             end
@@ -278,7 +307,8 @@ function run_time_loop_dist(ranks, op, solver, u0,
     if i_am_main(ranks)
         print(final_report(step, isempty(diags) ? t0 : diags[end].t,
                                time() - wall0, nl_total, t_solve_tot, n_vtk;
-                               tag="[dist]"))
+                               tag="[dist]", rundiag=rundiag))
+        close_diagnostics(rundiag)
         flush(stdout)
     end
     return diags

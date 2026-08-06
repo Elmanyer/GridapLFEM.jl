@@ -108,6 +108,11 @@ function setup_and_run_distributed(;
     print_every  :: Int     = 1,           # print a step report every N steps (print_dt overrides)
     check_every  :: Int     = 50,          # re-verify the governing equations every N steps (0 = off)
     check_tol    :: Float64 = 1e-8,        # tolerance for that verification (‖R‖∞)
+    # ---- Field diagnostics (monitor.jl: max|η| location, invariants, rank RSS) -
+    diag_every   :: Int     = 0,           # sample every N steps (0 → = print_every; −1 = disabled)
+    diag_csv     :: Bool    = true,        # write output_dir/diagnostics.csv on rank 0
+    eta_ref                 = nothing,     # reference amplitude for the divergence guard (auto)
+    div_factor   :: Float64 = 20.0,        # abort when max|η| > div_factor · eta_ref
 )
     n_procs = prod(cpu_grid)                 # total MPI ranks implied by the process grid
 
@@ -314,6 +319,20 @@ function setup_and_run_distributed(;
                     string(write_w), string(write_pressure),
                     string(round.(recon.levels; digits=3)))
         end
+        # Field diagnostics. COLLECTIVE construction (it interpolates into the
+        # distributed multifield space), so it is built on ALL ranks; only rank 0
+        # opens the CSV.
+        diag_n    = diag_every == 0 ? max(print_every, 1) : diag_every
+        # dom_flat, not `domain`: the driver accepts BOTH a nested ((x0,x1),(y0,y1))
+        # and a flat (x0,x1,y0,y1) tuple, and only the normalised form is safe here.
+        eta_ref_v = resolve_eta_ref(eta_ref, A_wave, wi, eta0_func, dom_flat)
+        rundiag   = diag_n > 0 ?
+                    build_run_diagnostics(prob, space_at(U, 0.0), trian, dΩh;
+                                          ranks=ranks, eta_ref=eta_ref_v,
+                                          div_factor=div_factor, output_dir=output_dir,
+                                          diag_csv=diag_csv, is_main=i_am_main(ranks),
+                                          u0=u0) :
+                    nothing
         if i_am_main(ranks)
             println()
             print_solver_banner(
@@ -323,7 +342,9 @@ function setup_and_run_distributed(;
                          krylov_m, ls_maxiter, ls_rtol);
                 solver_type=solver_type, theta=theta, dt=dt, t0=0.0, T_final=T_final,
                 print_every=print_every, print_dt=print_dt,
-                check_every=check_every, check_tol=check_tol)
+                check_every=check_every, check_tol=check_tol,
+                monitor=monitor, diag_every=max(diag_n, 0), eta_ref=eta_ref_v,
+                div_limit=rundiag === nothing ? NaN : rundiag.div_limit)
             println("\n=== Time loop (algebraic, distributed) ===")
             flush(stdout)
         end
@@ -347,7 +368,9 @@ function setup_and_run_distributed(;
                     monitor     = monitor,      # wrap the Newton solver to harvest per-step stats
                     checker     = checker,      # optional independent re-assembly of the governing equations
                     check_every = check_every,  # re-verify the governing equations every N steps (0 = off)
-                    check_tol   = check_tol)    # tolerance for that verification (‖R‖∞)
+                    check_tol   = check_tol,    # tolerance for that verification (‖R‖∞)
+                    rundiag     = rundiag,      # field-diagnostics state (max|η| location, invariants, RSS)
+                    diag_every  = max(diag_n, 0)) # sample the field diagnostics every N steps (0 = off)
 
         return (diags, vert, prob)
     end

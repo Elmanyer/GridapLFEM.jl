@@ -35,6 +35,14 @@ function build_ode_solver(dt::Float64;
                    iterations=nl_iter, ftol=nl_tol, store_trace=true)
     if monitor !== nothing
         monitor.inner = nls
+        # Read the configuration back OUT of the constructed solver for the
+        # banner (B1): what the object holds, not what the caller passed.
+        kw = hasproperty(nls, :kwargs) ? nls.kwargs : Dict()
+        monitor.nls_desc = @sprintf(
+            "Newton (NLsolve, exact hand Jacobians) | max iters = %s | ftol (‖r‖∞) = %.1e",
+            string(get(kw, :iterations, nl_iter)), Float64(get(kw, :ftol, nl_tol)))
+        monitor.ls_desc  = "LU direct factorisation (sequential)"
+        monitor.lin_cap  = 0                      # direct solve: no iteration cap
         nls = monitor
     end
     if solver_type == :sdirk
@@ -123,7 +131,9 @@ function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
                            monitor               = nothing,   # SolverMonitor
                            checker               = nothing,   # ResidualChecker
                            check_every:: Int     = 0,
-                           check_tol  :: Float64 = 1e-8)
+                           check_tol  :: Float64 = 1e-8,
+                           rundiag               = nothing,   # RunDiagnostics
+                           diag_every :: Int     = 0)
     mkpath(output_dir)
     odesol = solve(solver, op, t0, T_final, u0)
 
@@ -164,15 +174,25 @@ function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
 
             do_print = print_dt === nothing ? (step % print_every == 0) :
                                               (t_n - t_last_print >= Float64(print_dt))
+            # Field diagnostics (collective in the distributed twin): sampled on
+            # the same steps that get reported, so every log line is complete.
+            fd = (rundiag !== nothing && diag_every > 0 && step % diag_every == 0) ?
+                 field_diagnostics(rundiag, u_n) : nothing
+            fd === nothing || diag_csv_row(rundiag, step, t_n, fd, stats)
             if do_print
                 wall  = time() - wall0
                 eta_s = steps_total > step ? (wall/step)*(steps_total - step) : NaN
-                println(step_report(step, t_n, emax, stats; eta_s=eta_s))
+                println(step_report(step, t_n, emax, stats; eta_s=eta_s, fd=fd))
                 flush(stdout)
                 t_last_print = t_n
             end
             if stats !== nothing && !stats.converged
                 println("  *** WARNING: nonlinear solver did NOT converge at step $step (t=$t_n) ***")
+                flush(stdout)
+            end
+            if stats !== nothing && stats.lin_sat
+                println("  *** WARNING: linear solver hit its iteration cap ($(stats.lin_cap)) at step $step ",
+                        "— the solve was TRUNCATED, Newton is getting poor steps ***")
                 flush(stdout)
             end
 
@@ -217,8 +237,12 @@ function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
                 update_nlp_state!(nlp[1], nlp[2], u_n)
             end
 
-            if isnan(emax) || emax > 1e4
-                @warn "Diverged at t=$t_n (eta_max=$emax)"
+            # D1: RELATIVE divergence guard. With a reference amplitude the limit
+            # is div_factor·η_ref, so a linear A=1e-3 run is stopped at ~2 cm
+            # instead of running for hours up to the blind absolute 1e4.
+            div_limit = rundiag === nothing ? 1.0e4 : rundiag.div_limit
+            if isnan(emax) || emax > div_limit
+                @warn "Diverged at t=$t_n (eta_max=$emax, limit=$div_limit)"
                 break
             end
         end
@@ -234,7 +258,9 @@ function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
     end
 
     print(final_report(step, isempty(diags) ? t0 : diags[end].t,
-                           time() - wall0, nl_total, t_solve_tot, n_vtk))
+                           time() - wall0, nl_total, t_solve_tot, n_vtk;
+                           rundiag=rundiag))
+    close_diagnostics(rundiag)
     flush(stdout)
     return diags
 end

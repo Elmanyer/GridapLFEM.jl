@@ -70,6 +70,22 @@ flat_bed_flag(default::Int=1) = genv_b("LFEM_FLAT_BED", default)
 #      every numerical setup, so it drives memory; LFEM_LS_MAXITER only decides
 #      how long GMRES may iterate. Conflating them (passing the iteration cap as
 #      the basis size) is what OOM-killed the 32-rank runs.
+# ---- Field diagnostics (monitor.jl) -----------------------------------------
+#    LFEM_DIAG_EVERY  sample every N steps            0 → follow LFEM_PRINT_EVERY
+#                                                     −1 → disable the whole block
+#    LFEM_DIAG_CSV    write <outdir>/diagnostics.csv  1
+#    LFEM_DIV_FACTOR  abort at div_factor·eta_ref     20
+#    LFEM_ETA_REF     override the amplitude scale    (unset → inferred from the
+#                                                      forcing: A_wave / Hs / peak η₀)
+#  The diagnostics are ON by default and cost within noise (measured −0.8 %/+2.2 %).
+#  They are what makes a failed cluster run diagnosable from its log alone: WHERE
+#  max|η| sits, its interior/damped split, |u|/|η|, mass & energy, GMRES
+#  saturation, and per-rank RSS. Read one with examples/inspect_run.jl.
+diag_every_val() = genv_i("LFEM_DIAG_EVERY", 0)
+diag_csv_flag()  = genv_b("LFEM_DIAG_CSV", 1)
+div_factor_val() = genv_f("LFEM_DIV_FACTOR", 20.0)
+eta_ref_val()    = haskey(ENV, "LFEM_ETA_REF") ? genv_f("LFEM_ETA_REF", 0.0) : nothing
+
 solver_sym()     = Symbol(genv("LFEM_SOLVER", "sdirk"))
 tableau_sym()    = Symbol(genv("LFEM_TABLEAU", "SDIRK_2_2"))
 nl_iter_val()    = genv_i("LFEM_NL_ITER", 50)
