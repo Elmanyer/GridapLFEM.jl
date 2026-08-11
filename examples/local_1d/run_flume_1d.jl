@@ -42,8 +42,9 @@
 #    LFEM_D            still-water depth [m]       3.5
 #    LFEM_TWAVE        period [s]                  1.6   (⇒ kd=5.5, λ=4.0 m)
 #    LFEM_AWAVE        amplitude [m]               0.001
-#    LFEM_PERIODS      duration in wave periods    16
+#    LFEM_PERIODS      duration in wave periods    16 inner / 26 bc,sea (transit-based)
 #    LFEM_RELAX        inflow relaxation zone      1 for bc/sea, 0 for inner
+#    LFEM_XWM          interior source position    sponge_wL + 6 m (must clear the sponge)
 #    LFEM_HBAR/XBAR/WBAR   bar shape (FLAT_BED=0)  1.0 / 30 / 5
 #  plus every knob of examples/distributed/_dist_common.jl (solver, tolerances,
 #  sea state, output).
@@ -78,7 +79,16 @@ d       = genv_f("LFEM_D", 3.5)
 Twave   = genv_f("LFEM_TWAVE", 1.6)
 Awave   = genv_f("LFEM_AWAVE", 0.001)
 dt      = genv_f("LFEM_DT", 0.04)
-periods = genv_f("LFEM_PERIODS", 16.0)
+#  DEFAULT DURATION IS SET FROM THE TRANSIT TIME, and it differs by generation
+#  type. At kd=5.5 the group velocity is only c_g≈1.25 m/s, so filling the flume
+#  from the source to the far sponge takes:
+#      interior source at x≈18 → sponge at 45 : 27 m / 1.25 = 21.6 s = 13.5 T
+#      boundary source at x=0  → sponge at 45 : 45 m / 1.25 = 36.0 s = 22.5 T
+#  Running a BC case for 16 T therefore leaves the far half of the domain EMPTY,
+#  and `max|η|` keeps creeping up as the front advances — which reads as a
+#  spurious "growth rate" (+0.028/s measured) even though the amplitude is
+#  rock-steady at A. Measured that way once; defaults now cover the transit.
+periods = genv_f("LFEM_PERIODS", wave_gen_kind == "inner" ? 16.0 : 26.0)
 Tfinal  = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods*Twave
 save_ev = genv_i("LFEM_SAVE_EVERY", 10)
 mumax   = genv_f("LFEM_MUMAX", 40.0)
@@ -111,8 +121,15 @@ vert0 = assemble_vertical_tensors(M, 1, cbdy_override() === nothing ?
                                   [0.0, 0.728, 1.0] : cbdy_override())
 if wave_gen_kind == "inner"
     wave_bc  = nothing
-    x_wm     = genv_f("LFEM_XWM", 0.2*Lx)
     spL      = genv_f("LFEM_SPONGE_L", 12.0)
+    #  THE SOURCE MUST CLEAR THE SPONGE. The old default `0.2*Lx` happened to
+    #  equal `sponge_wL` at both the previous (50 m / 10 m) and the re-sized
+    #  (60 m / 12 m) geometry, putting the Gaussian line source exactly on the
+    #  sponge edge: the run then reports max|η| pinned at x = x_wm with
+    #  eta_max_damped/eta_max_int ≈ 0.95, i.e. the wave is being absorbed as
+    #  fast as it is made and there is no clean plane wave to measure.
+    #  Default is now the sponge edge + 1.5 wavelengths (λ = 4.0 m at kd=5.5).
+    x_wm     = genv_f("LFEM_XWM", spL + 6.0)
     use_relax = genv_b("LFEM_RELAX", 0)
 elseif wave_gen_kind == "bc"
     wave_bc  = WaveInput(vert0; A=Awave, T=Twave, d=d,
@@ -128,6 +145,14 @@ else                                      # sea
     use_relax = genv_b("LFEM_RELAX", 1)
 end
 spR = genv_f("LFEM_SPONGE_R", 15.0)
+
+# Refuse a geometry where the interior source sits inside (or within half a
+# wavelength of) the left sponge — it silently destroys the case.
+if wave_gen_kind == "inner" && x_wm < spL + 2.0
+    error("LFEM_XWM ($(x_wm) m) is inside or too close to the left sponge " *
+          "(width $(spL) m). The source would be absorbed as fast as it radiates. " *
+          "Move it to at least $(spL + 2.0) m, or shrink LFEM_SPONGE_L.")
+end
 
 # Gauge rake (SEQUENTIAL ONLY — the distributed driver evaluates no points).
 # Stations at 20/40/60/80 % of the flume plus a Goda-Suzuki pair at mid-length.
@@ -178,7 +203,7 @@ if use_mpi
     nx % px == 0 || error("LFEM_NX ($nx) must be divisible by LFEM_PX ($px)")
     diags, vert, prob = setup_and_run_distributed(;
         cpu_grid=(px, 1), domain=(0.0, Lx, 0.0, Ly), partition=(nx, ny),
-        ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(),
+        ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(), precond=precond_sym(),
         common...)
 else
     diags, vert, prob = setup_and_run(;

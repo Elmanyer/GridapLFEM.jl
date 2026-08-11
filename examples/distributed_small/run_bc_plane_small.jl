@@ -79,7 +79,7 @@ diags, vert, prob = setup_and_run_distributed(
     write_w=write_w_flag(), write_pressure=write_p_flag(), rho=rho_val(),
     solver_type=solver_sym(), tableau=tableau_sym(),
     nl_iter=nl_iter_val(), nl_tol=nl_tol_val(),
-    ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(),
+    ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(), precond=precond_sym(),
     diag_every=diag_every_val(), diag_csv=diag_csv_flag(),
     div_factor=div_factor_val(), eta_ref=eta_ref_val(),
     print_every=genv_i("LFEM_PRINT_EVERY", 10))

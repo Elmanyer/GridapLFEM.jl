@@ -37,7 +37,7 @@ solver's own residual assembled on `u*`, injected by wrapping the residual
 same hand Jacobians, the standard distributed Newton/GMRES iterator drives it — so this exercises the
 **distributed** nonlinear assembly, the frozen-projection (CG+Jacobi) machinery for the `∇H`/`𝓟`
 nonlinear-pressure components, and the GMRES+Jacobi+Newton stack, end-to-end, over a long nonlinear
-run. Its sequential twin `../test_mms.jl` verifies the same on one node.
+run. Its sequential twin `../test_selfconsistency.jl` verifies the same on one node.
 
 ## The physical benchmarks at scale
 

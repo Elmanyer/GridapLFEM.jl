@@ -51,7 +51,7 @@ archived cluster failures needed and did not have:
 | column | question it answers |
 |---|---|
 | `eta_max`, `x_at_max` | how big, and **where** — a maximum pinned at a domain edge is the boundary mode, not a wave |
-| `eta_max_int`, `eta_max_damped` | interior vs sponge/relaxation zone. `damped/interior > 1` means the maximum is *inside* the absorber |
+| `eta_max_int`, `eta_max_damped` | interior vs sponge/relaxation zone. **Read this as "≫1 means trouble", not "<1 means fine".** μ→0 at the sponge *entrance*, so once a wave train reaches the sponge it is at full amplitude there and the ratio sits naturally at ~0.6–0.8, oscillating with wave phase (measured on a healthy 2-D plane wave: 0.59–0.74). A boundary mode gives ~65. A ratio near 1 **combined with `x_at_max` pinned at a fixed x** is the thing to worry about — that pattern also appears if the interior source has been placed inside the sponge, which is a configuration error, not a solver fault |
 | `u_max` | with `eta_max`, the kinematic ratio: a real wave gives `ω/tanh(kd)`; the η-dominated mode gives far less |
 | `mass`, `mass_drift`, `energy` | the cheapest early warning of an instability |
 | `lin_min`, `lin_max`, `lin_sat` | GMRES iteration range and whether it hit its cap. `lin_sat=1` means the solve was **truncated** and Newton is getting poor steps — the defect that hid for months |

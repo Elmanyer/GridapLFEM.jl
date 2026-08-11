@@ -128,9 +128,6 @@ function gate_case(cc, label, r; open_x::Bool=true)
     return cc.fail - n_fail_before
 end
 
-median_of(v) = (s = sort(v); n = length(s);
-                isodd(n) ? s[(n+1)÷2] : 0.5*(s[n÷2] + s[n÷2+1]))
-
 # =====================================================================
 #  (i) open x-ends with a strong sponge — the configuration that failed
 # =====================================================================

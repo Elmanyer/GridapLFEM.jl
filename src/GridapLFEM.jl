@@ -101,7 +101,7 @@ export nlp_gradH_frozen_contrib, nlp_P_frozen_contrib
 export build_nlp_ctx, update_nlp_state!
 
 # Time integration
-export build_ode_solver
+export build_ode_solver, build_preconditioner
 export make_initial_conditions
 export run_time_loop
 

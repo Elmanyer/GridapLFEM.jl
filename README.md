@@ -305,9 +305,17 @@ by mtime when an image predates that stamp. Set `LFEM_STRICT_SYSIMAGE=1` to abor
 | **`diag_every`, `diag_csv`** | field-diagnostics sampling (`0` → follow `print_every`, `−1` → off) and the `diagnostics.csv` step log: **where** max\|η\| sits, its interior/damped split, \|u\|/\|η\|, mass & energy, GMRES saturation, per-rank RSS. Overhead measured within noise |
 | **`eta_ref`, `div_factor`** | the *relative* divergence guard — abort at `div_factor·eta_ref` (default 20×) instead of the blind absolute `1e4`. `eta_ref` is inferred from the forcing when omitted (`A_wave` / the sea state's `Hs` / peak `η₀`) |
 
-Distributed adds `cpu_grid=(px,py)` and Krylov controls (`nl_iter`, `nl_tol`, `ls_rtol`,
-`ls_maxiter`, `nlp_cg_rtol`, `nlp_cg_maxiter`), plus the same `solver_type`/`tableau`; the linear
-solve is GMRES+Jacobi+Newton. It drops `gauges` (global reductions instead).
+Distributed adds `cpu_grid=(px,py)`, the Krylov controls (`nl_iter`, `nl_tol`, `ls_rtol`,
+`ls_maxiter`, `krylov_m`, `nlp_cg_rtol`, `nlp_cg_maxiter`) and **`precond`**
+(`:jacobi` | `:schwarz` | `:gs`), plus the same `solver_type`/`tableau`; the linear solve is
+GMRES+Jacobi+Newton. It drops `gauges` (global reductions instead).
+
+> **Solver tolerances (defaults changed 2026-08-11, on measurement).** `ls_rtol = 1e-6`,
+> `nl_tol = 1e-5` — one order of separation, linear strictly tighter than nonlinear. The previous
+> `1e-9`/`1e-6` pair drove the linear solve three orders past anything Newton could use: relaxing it
+> cut GMRES iterations by **40 %** with `max|η|` identical to seven significant figures and Newton
+> unchanged. See `building_files/LOCAL_TESTS_RESULTS.md` §5.4. Tests that need a sharper answer pin
+> `nl_tol = 1e-8` explicitly.
 
 ---
 
@@ -325,7 +333,7 @@ The full suite is **21 tests + `test/cluster/`**; representative highlights:
 |---|---|---|
 | `test_vertical.jl` | vertical tensor identities, dispersion bridge vs Yang & Liu Table 1 | 15/15 PASS |
 | `test_primitives.jl` | tensor index order, `∂x/∂y` orientation, contraction semantics | 9/9 PASS |
-| `test_equivalence.jl` | virtual-work match vs an independent per-layer assembly, 3 configs | **⚠ FAILING at HEAD (2026-08-06): 1 PASS / 9 FAIL**, rel 2e-2 … 1.5. Vertical tensors still match; the *residual* diverges, even in the simplest linear/flat/no-advection config. Pre-existing (reproduced on a pristine tree) — see Known issues |
+| `test_equivalence.jl` | virtual-work match vs the older per-layer solver | **RETIRED — not a correctness gate.** The external solver was not maintained in step with the weak form (it lacks the leading-pressure term `R_P`), so a disagreement measures its age, not a defect here |
 | `test_dispersion.jl` | FEM phase speed vs linear theory at kd=3 | PASS, err 0.90% |
 | `test_dispersion_curve.jl` | `Cm/Ce(kd)` sweep vs Airy, LFE-2/3/4 applicable-kd | 9/9 PASS (10.8/39.2/127.9) |
 | `test_dispersion_nonlinear.jl` | full-NL solver ⇒ Airy at vanishing amplitude (kd 1/3/5) | 3/3 PASS |
@@ -334,7 +342,7 @@ The full suite is **21 tests + `test/cluster/`**; representative highlights:
 | `test_energy.jl` | non-dissipativity / amplitude preservation | 3/3 PASS |
 | `test_conservation.jl` | mass conservation, closed basin, nonlinear advection | PASS, drift 7.8e-16 |
 | `test_nlpressure.jl` | exact-IBP identity, structural scaling, dynamics (all pressure tiers) | 9/9 PASS |
-| `test_mms.jl` | unsteady nonlinear manufactured solution over a curved bed | 3/3 PASS (~3e-9) |
+| `test_selfconsistency.jl` | **support, not model validation**: hand Jacobians are exact derivatives of the residual; multi-step integration self-consistent. Its forcing *is* the solver's own residual, so a wrong residual would still pass — see the file header | 3/3 PASS (~3e-9) |
 | `test_convergence.jl` | Richardson temporal order (→2) | 2/2 PASS (q≈1.72) |
 | `test_vertical_profile.jl` | reconstructed `w(σ)` vs Airy `sinh` shape | 7/7 PASS |
 | `test_basic.jl` | smoke run, linear + fully nonlinear | 6/6 PASS |
@@ -408,13 +416,18 @@ records are in `building_files/DESIGN_RECORDS.md`.
 
 ## Known issues
 
-- **⚠ The oracle-equivalence acceptance test is failing at HEAD** (`test_equivalence.jl`:
-  1 PASS / 9 FAIL, `rel = 2e-2 … 1.5` against a `1e-10` gate; discovered 2026-08-06). The vertical
-  tensors still match the oracle exactly, so Stage 1 is sound — the **residual assembly** disagrees,
-  and it already disagrees in the simplest configuration (linear core, flat bed, no advection, no
-  pressure package: `rel = 1.2e-1`). Confirmed **pre-existing** by re-running against a pristine
-  tree: bit-for-bit identical failures. The previously documented "10/10 PASS, rel ≤ 7e-15" was
-  stale. Full detail, evidence and investigation leads: `CLAUDE.md`, "Under development / open".
+- **`test_equivalence.jl` is retired and must not be read as a correctness gate.** It compared the
+  package residual against the older per-layer solver in `../LFE-M_2D_solver/`. That external code
+  was not maintained in step with the model as the weak form was completed — most consequentially
+  it lacks the leading-pressure term `R_P` — so the two no longer discretise the same equations and
+  its 1/10 result measures the reference's age, not a defect here. The construction (layout-
+  independent virtual work) remains the right instrument should a *current* second implementation
+  ever exist.
+- **The residual has no independent verification yet.** Every passing test compares the solver
+  against theory *using the solver's own residual*, which cannot detect a residual that is
+  self-consistently wrong. Closing this is the analytic MMS specified in
+  `building_files/LFEM_discretisation/.../ValidationTests.tex` ("Analytic (verification) MMS"):
+  forcing derived from the governing equations, with a measured order of accuracy.
 
 
 - The vendored **`WaveSpec.jl`** must track the **GitHub repository version, not a tagged release**:

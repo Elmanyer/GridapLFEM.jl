@@ -285,7 +285,11 @@ function setup_and_run(;
     use_ad       :: Bool    = false,      # build Jacobians by AD instead of the hand Jacobians
     show_trace   :: Bool    = false,      # print the Newton iteration trace
     nl_iter      :: Int     = 50,         # max Newton iterations per stage
-    nl_tol       :: Float64 = 1e-6,       # Newton residual tolerance (‖r‖∞) — production default
+    nl_tol       :: Float64 = 1e-5,       # Newton residual tolerance (‖r‖∞). Production default,
+                                          #   measured 2026-08-11: the linear solve is driven to
+                                          #   ls_rtol one order TIGHTER, so Newton is never limited
+                                          #   by the linear solve. Tests that need a sharper answer
+                                          #   pin 1e-8 explicitly.
     print_every  :: Int     = 1,          # print a step report every N steps (1 = every step)
     check_every  :: Int     = 50,         # re-verify the governing equations every N steps (0 = off)
     check_tol    :: Float64 = 1e-8,       # tolerance for that verification (‖R‖∞)

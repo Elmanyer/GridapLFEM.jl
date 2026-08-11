@@ -2,7 +2,7 @@
 #  cluster_mms.jl — DISTRIBUTED unsteady, nonlinear Manufactured Solution
 #                   (validates the full nonlinear solver at scale, many steps)
 #
-#  The distributed twin of test/test_mms.jl, run through the REAL distributed
+#  The distributed twin of test/test_selfconsistency.jl, run through the REAL distributed
 #  solver stack (GMRES + Jacobi + Newton). A smooth, finite-amplitude, UNSTEADY
 #  manufactured solution u*(x,t) — degree-2 in space (exactly Q2-representable,
 #  velocity vanishing on the closed walls), oscillating in time, over a curved

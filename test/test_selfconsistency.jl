@@ -1,10 +1,37 @@
 # ==============================================================
-#  test_mms.jl — UNSTEADY, NONLINEAR Manufactured-Solution recovery
+#  test_selfconsistency.jl — RESIDUAL SELF-CONSISTENCY
+#     (hand Jacobians + multi-step time integration)
 #
-#  Residual-based MMS with a genuinely UNSTEADY, finite-amplitude manufactured
-#  solution marched over MANY Crank–Nicolson steps, so it validates that the
-#  NONLINEAR time-dependent flow is solved correctly (not just the linear
-#  operator, not just a single step).
+#  WHAT THIS TEST IS, AND WHAT IT IS NOT.  It marches an unsteady,
+#  finite-amplitude field u* over many implicit steps and recovers it to
+#  machine precision.  That construction is often called "residual-based MMS",
+#  and this file used to be named test_mms.jl — but it is NOT a
+#  manufactured-solution validation of the model, and the rename is deliberate.
+#
+#  The reason is structural.  The forcing is f = R(u*), assembled with the
+#  SOLVER'S OWN residual.  Writing R = R_true + E for whatever the
+#  implementation gets wrong (a sign, a missing term, a transposed tensor slot):
+#
+#      R(u) - f = [R_true(u) + E(u)] - [R_true(u*) + E(u*)]
+#
+#  which still vanishes at u = u*.  THE ERROR CANCELS AGAINST ITSELF.  A wrong
+#  residual passes this test at machine precision, and refining h produces a
+#  flat line rather than a convergence slope.
+#
+#  What it DOES certify — and nothing else in the suite does:
+#    * jacobian_u and jacobian_u_t are the exact derivatives of global_residual
+#      (Newton would not reach machine precision otherwise);
+#    * the multi-step theta/RK bookkeeping is self-consistent;
+#    * assembly is deterministic and the nonlinear blocks are really evaluated.
+#  Those are defects that would otherwise surface only as unexplained Newton
+#  stagnation in production, so the test earns its place — as a CODE-SUPPORT
+#  test, not a model validation.
+#
+#  The genuine verification of the discretised operator is the ANALYTIC MMS,
+#  whose forcing is derived from the governing equations independently of this
+#  code and which measures an ORDER OF ACCURACY.  It is specified in
+#  building_files/LFEM_discretisation/NumericalImplementation/ValidationTests.tex
+#  (section "Analytic (verification) MMS") and is not yet implemented.
 #
 #  Method. Pick a smooth space-time field u*(x,t) — degree-2 in space (exactly
 #  Q2-representable; velocity vanishing on the closed walls), oscillating in
@@ -32,7 +59,7 @@
 #  nonlinear terms are a SIGNIFICANT fraction of the residual (genuinely
 #  nonlinear); (3) the native nonlinear-pressure block is computed (nonzero).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_mms.jl
+#  RUN:  julia --project=. GridapLFEM.jl/test/test_selfconsistency.jl
 # ==============================================================
 
 using GridapLFEM
@@ -43,7 +70,7 @@ using LinearAlgebra, Printf
 FULL = lowercase(get(ENV, "MMS_FULL", "0")) in ("1","true","yes")
 
 println("=" ^ 66)
-println("  test_mms.jl — unsteady NONLINEAR manufactured-solution recovery",
+println("  test_selfconsistency.jl — residual self-consistency (Jacobians + stepping)",
         FULL ? "  [FULL 𝓝]" : "")
 println("=" ^ 66)
 
@@ -151,5 +178,6 @@ println()
 println("=" ^ 66)
 @printf("  Results: %d PASS,  %d FAIL\n", n_pass, n_fail)
 println("=" ^ 66)
-n_fail > 0 ? error("test_mms: $n_fail failed!") :
-             println("  Unsteady nonlinear flow solved correctly (u* recovered over the run).")
+n_fail > 0 ? error("test_selfconsistency: $n_fail failed!") :
+             println("  Jacobians and time stepping are self-consistent (u* recovered over the run).\n" *
+                     "  NOTE: this does NOT verify the residual's coefficients — see the header.")

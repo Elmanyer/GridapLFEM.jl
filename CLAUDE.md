@@ -46,12 +46,12 @@ modes are 1-based `j=1..Nσ`, one per node.
 | `algebraic_residual_math.md` | Operator reference: how each §8 residual term is written with native Gridap tensor ops (no MultiField decomposition, no vertical-index loops) — the `L`/`N` pressure stacks, the leading-pressure `R_P`, IBP of second-derivative terms, and the verified Gridap operator table. |
 | `DESIGN_RECORDS.md` | Consolidated **historical design records** for the completed features — algebraic residual + Jacobians, package layout, distributed solver, nonlinear-pressure completion, boundary wave generation, periodic-y BC, the `flat_bed` switch, and the production sea-state scripts. Provenance only (*why* the code is shaped as it is); the code, this `CLAUDE.md`, and the LaTeX derivation are authoritative. |
 | `src/` (`GridapLFEM.jl` + submodules) | **The self-contained serial + distributed solver package** (`module GridapLFEM`): vertical tensors (incl. `Pcal`), constant-tensor + `Operation` helpers, stacked FE spaces (distributed-safe MultiField dispatch + transient-Dirichlet inflow variants), the loop-free residual + hand Jacobians (the same code runs distributed — `Operation` is forwarded for `DistributedCellField`), the time loops (default fully-implicit `RungeKutta(:SDIRK_2_2)`, `:theta` Crank–Nicolson selectable via `solver_type`; sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…`) plus reconstructed `w_s<σ>`/`p_s<σ>` fields (`reconstruct.jl`), and `waveinput.jl` (Dirichlet boundary wave generation + WaveSpec.jl coupling: component tables, `:model`/`:airy` polarizations, ramp, relaxation zone). Drivers: `setup_and_run` and `setup_and_run_distributed`. |
-| `test/` (21 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` **⚠ 1/10 — FAILING at HEAD 2026-08-06** (was documented 10/10 ≤7e-15; see the open item), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` 6/6 (4 ranks; rel ~1e-5 vs the sequential references), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_mms` 3/3 (unsteady nonlinear MMS), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, `test_dispersion_nonlinear` 3/3 (full-NL⇒Airy, kd=1/3/5 err 0.93/0.36/3.05%), `test_shallow_water` 6/6 (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch:** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. **`test/local/`** (new 2026-08-06): the LOCAL validation suite — quasi-1D flumes (`Ly=3, ny=3`, y-periodic) that gate the solver's *internal machinery* in minutes on 6 cores instead of hours on the cluster: `test_reststate_1d` (rest state, flat + sloping bed), `test_sponge_1d` (the sponge's damping law vs its μ-profile, + reflection), `test_relaxation_1d` (inflow zone: generation fidelity + absorption, differential against `relax_bc=false`), `test_boundary_modes_1d` (the open-boundary-mode signature, **with a negative control that must fail**), shared helpers in `_local_common.jl`, runner `run_local_tests.sh` (process-level concurrency, not MPI — these need point gauges, which only the sequential driver has). |
+| `test/` (21 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` **RETIRED** (the external per-layer reference predates the completion of the weak form — it lacks `R_P` — so its 1/10 result measures the reference's age, not a defect here), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` 6/6 (4 ranks; rel ~1e-5 vs the sequential references), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_selfconsistency` 3/3 (**renamed from `test_mms`**: it is a Jacobian/time-stepping self-consistency check, NOT a manufactured-solution validation — its forcing is the solver's own residual, so the error cancels and a wrong residual still passes), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, `test_dispersion_nonlinear` 3/3 (full-NL⇒Airy, kd=1/3/5 err 0.93/0.36/3.05%), `test_shallow_water` 6/6 (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch:** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. **`test/local/`** (new 2026-08-06): the LOCAL validation suite — quasi-1D flumes (`Ly=3, ny=3`, y-periodic) that gate the solver's *internal machinery* in minutes on 6 cores instead of hours on the cluster: `test_reststate_1d` (rest state, flat + sloping bed), `test_sponge_1d` (the sponge's damping law vs its μ-profile, + reflection), `test_relaxation_1d` (inflow zone: generation fidelity + absorption, differential against `relax_bc=false`), `test_boundary_modes_1d` (the open-boundary-mode signature, **with a negative control that must fail**), `test_2d_reduces_to_1d` (**written, not yet run** — a y-invariant 2-D run must reproduce the flume to 1e-6; the sharpest check of the 2-D machinery, because it tests a *symmetry the model must respect* rather than theory via the solver's own residual), shared helpers in `_local_common.jl`, runner `run_local_tests.sh` (process-level concurrency, not MPI — these need point gauges, which only the sequential driver has). |
 | `examples/` (+ `validation/`, `distributed/`) | Sequential: `plane_wave.jl`, `ring_wave.jl`, `periodic_plane_wave.jl`, and BC-generation `bc_plane_wave.jl`, `bc_irregular_sea.jl` (JONSWAP, gauge CSV), `bc_directional_sea.jl`; `examples/distributed/` — 6 env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry, `run_irregular_sea_dist.jl`, `run_directional_sea_dist.jl` — sea-state env vars + `build_airy_state()` in `_dist_common.jl`) + README; `examples/validation/` — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + `dispersion_sweep.jl` + `spectral_fidelity.jl` (JONSWAP component-wise amplitude+dispersion transfer) + README; `examples/distributed_small/` — **5 parametric** small-domain (50×20 m) scripts (`run_periodic_plane_small` [interior line source], `run_ring_small` [point source], `run_bc_plane_small` [`:bc_gen` boundary plane wave], `run_directional_sea_small`, `run_irregular_sea_small` [`:bc_gen` WaveSpec sea]) grouped by wave-generation type; the 20 observation/comparison cases are their **launchers** in `run/dist_small/`, each overriding only the env vars that change (regime / nl_pressure / flat_bed→bar / amplitude / period). See the "Current Implementation Stage" small-domain-suite entry. **`examples/local_1d/run_flume_1d.jl`** — the parametric **quasi-1D flume** (narrow domain, `ny≥3`, y-periodic; the solver is structurally 2-D, so this is how a 1-D horizontal problem is posed — it is *not* a 1-D model, see the script header), sequential-with-gauges locally and MPI `(px,1)` on the cluster, `LFEM_WAVE_GEN ∈ {inner,bc,sea}`. **`examples/local_2d/run_small_2d.jl`** — the parametric small 2-D case (25×10 m, 6 ranks as `3×2`), `LFEM_WAVE_GEN ∈ {line,point,bc,sea}`, each case a scaled-down sibling of a named `run/dist_small/` job. **`examples/inspect_run.jl`** — stdlib-only reader that turns a run's `diagnostics.csv` into a health verdict (works on cluster output too). |
 | `postprocessing/` (`GridapLFEMPost`) | Self-contained postprocessing library with its own environment (ReadVTK, Plots+GR, FFTW, Interpolations — pinned separately from the solver). Reads VTK (`solution.pvd`/`sol_t_*.vtu`) + CSV → `WaveSimulation` (auto-`regularize!`s the duplicated Q2 node cloud to a Cartesian grid). Modules: `io, probes, spectral, diagnostics, reconstruct, plotting, seastate`. Gauges/DFT/celerity/harmonics/radial/conservation; heatmap/animation(GIF)/Hovmöller/dispersion/profile plots; `seastate.jl` — Welch PSD, JONSWAP target overlay, spectral moments/Hs, zero-upcrossing heights, Rayleigh exceedance (+ `spectral_validation.jl` example). `reconstruct.jl` rebuilds `w(σ)`/`p_nh(σ)` from the stored velocity modes at any σ (analytic σ-basis, Gauss quad, no Gridap; matches solver `w_s` to 4–8%). No dependency on the solver. |
 | `WaveSpec.jl/` (repo-vendored package) | Stochastic sea-state synthesis (CMOE-TUDelft; JONSWAP/TMA/… spectra, sampling strategies, angular spreading, `AiryState`). Tracks the **GitHub repository version, not a tagged release** — the release's `change_seed!` reads a non-existent `state.spec` field and breaks every sea-state run; the repo version has the fix. `Pkg.develop`ed in both environments; `using WaveSpec` is re-exported by `GridapLFEM`. The `WaveInput` converter (`src/waveinput.jl`) snapshots seeded amplitudes/phases into plain arrays and re-solves the wavenumbers with the solver's `g` (WaveSpec uses 9.80665). |
 | `compile/` (cluster sysimage build) | Builds a precompiled system image so distributed cluster ranks **load** the solver instead of JIT-compiling it (removes the ~30–45 min/rank compile and the associated OOM). `set_preferences.jl` pins MPI.jl to the **system** OpenMPI via `use_system_binary()`; `compile.jl` bakes the deps + traces `warmup.jl`, with an MPI preflight and **`include_transitive_dependencies=false`** — load-bearing: it stops PackageCompiler force-loading `OpenMPI_jll`, whose baked initializer would otherwise `dlopen` the JLL artifact and crash the image at launch (`undefined symbol: opal_single_threaded`). `compile_snellius.sh` runs the chain; full walkthrough + troubleshooting in `compile/README.md`. |
-| `run/local/` | **Local launchers (this workstation, ≤6 cores)** — `lfem_local.sh` (the helper: project resolution, a hard rank cap, `lfem_local_run` sequential / `lfem_local_mpi` MPI, exit-143 handling for the benign `MPI_Finalize` OFI error) plus 7 `run_1d_*.sh` and 8 `run_2d_*.sh` case launchers and a `README.md`. Deliberately shares no code with `run/lfem_env.sh`, which is cluster-only (modules + sysimage). The point is a minutes-long feedback loop instead of the multi-hour cluster one. |
+| `run/local/` | **Local launchers (this workstation, ≤6 cores)** — `lfem_local.sh` (the helper: project resolution, a hard rank cap, `lfem_local_run` sequential / `lfem_local_mpi` MPI, exit-143 handling for the benign `MPI_Finalize` OFI error) plus 7 `run_1d_*.sh` (**sequential** — measured faster than any MPI split, see the scaling entry) and 8 `run_2d_*.sh` (12-rank MPI) case launchers, `run_all_1d.sh` (runs the 1-D set side by side), **`bench_solver_config.sh`** (compares preconditioner × `ls_rtol` configurations on one fixed case and reports iterations, wall time *and* `max|η|`, so a cheaper setting is rejected if it changes the answer), and a `README.md` documenting how to read `diagnostics.csv`. Deliberately shares no code with `run/lfem_env.sh`, which is cluster-only (modules + sysimage). The point is a minutes-long feedback loop instead of the multi-hour cluster one. |
 | `run/` (+ `run/dist_small/`) | The SLURM launchers: 9 production cases in `run/` (plane/ring/periodic-plane wave, IC hump, bathymetry, irregular + directional sea, and the DelftBlue `run_blue.sh`) and 20 small-domain observation/comparison cases in `run/dist_small/`. **All of them run against the prebuilt sysimage**, through the shared helper **`run/lfem_env.sh`**: it loads the cluster modules the image was built with, resolves + verifies `GridapLFEM_sysimage.so`, and exposes `lfem_run <nranks> <script.jl>` (the `mpiexecjl --project=… -n … julia --project=… -J<sysimage> …` invocation). A launcher is therefore only its `#SBATCH` header, its `LFEM_*` env overrides, and one `lfem_run` call — nothing sysimage-specific is repeated. Helper knobs: `LFEM_PROJ`, `LFEM_CLUSTER` (`snellius`/`blue`), `LFEM_SYSIMAGE`, `LFEM_NO_SYSIMAGE=1` (escape hatch: drop `-J` and JIT-compile, for when the image is stale or mid-rebuild) and `LFEM_STRICT_SYSIMAGE=1` (below). A missing image **fails the job immediately** rather than falling back to a silent 45-min/rank compile. It also runs `lfem_check_sysimage_freshness` before launching and **warns if the image is stale w.r.t. `src/`** — the image bakes a *compiled copy* of the solver, so editing `src/*.jl` without rebuilding would otherwise run old code silently. Exact check: `compile_*.sh` calls `lfem_write_sysimage_stamp` after a successful build, writing `GridapLFEM_sysimage.so.src.sha256` (hash of all `src/*.jl`); the launcher recomputes and compares, so edits/additions/deletions trip it but a `touch`, re-clone or content-restoring `git checkout` does not. Images predating the stamp fall back to an mtime comparison (coarser, can cry wolf). Warns and continues by default; `LFEM_STRICT_SYSIMAGE=1` makes it a hard abort (use for long production jobs). |
 | `boundary_wave_generation.md` | Dirichlet boundary wave generation math note (nodal trace, `:model` discrete-eigenmode polarization derivation, ramp, well-posedness/reflection, relaxation zone, WaveSpec contract, validation map). The design record is in `DESIGN_RECORDS.md`. |
 | `LFEM_runs.md` | Plan/record for the small-domain observation + comparison run suite (all three batches; `examples/distributed_small/` + `run/dist_small/`). |
@@ -123,16 +123,83 @@ report incl. BC gates — compile-checked), `LFEM_Gridap.md`, `algebraic_residua
 
 ## Current Implementation Stage
 
-**Working & validated.** The 2-D LFE-M solver is complete and validated in **both** serial and
-distributed forms: the stacked loop-free residual + hand Jacobians, the full nonlinear physics
-(advection, the complete leading pressure `R_P`, all eight 𝓝 nonlinear-pressure components), the
-SDIRK/θ time integrators, wavemaker/sponge/wall/periodic BCs, and Dirichlet boundary wave generation
-with WaveSpec coupling. The `test/` suite (21 files + `cluster/`) passes — cross-check virtual-work
-equivalence **⚠ now failing at HEAD (see the open item)**, asymptotic consistency (full-NL⇒Airy, kd→0⇒√(gd)), unsteady nonlinear MMS ~3e-9,
-BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. Postprocessing
-(`GridapLFEMPost`) and the authoritative LaTeX derivation are in place and compile-checked.
+**Working.** The 2-D LFE-M solver is feature-complete in **both** serial and distributed forms: the
+stacked loop-free residual + hand Jacobians, the full nonlinear physics (advection, the complete
+leading pressure `R_P`, all eight 𝓝 nonlinear-pressure components), the SDIRK/θ time integrators,
+wavemaker/sponge/wall/periodic BCs, and Dirichlet boundary wave generation with WaveSpec coupling.
+The `test/` suite (21 files + `cluster/` + `test/local/`) passes: asymptotic consistency
+(full-NL⇒Airy, kd→0⇒√(gd)), BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement
+≤5e-9, the 51-gate local machinery suite, and 13 local observation cases (§ campaign entry above).
+Postprocessing (`GridapLFEMPost`) and the authoritative LaTeX derivation are in place and
+compile-checked.
+
+**What "validated" does and does not mean here — read this before claiming correctness.** All of the
+above is **self-consistency**: each test compares the solver against an analytical or physical
+expectation *using the solver's own residual*. That is genuinely strong evidence — a wrong residual
+would have to be wrong in a way that preserves the dispersion relation, the shallow-water limit, the
+Airy vertical profile, the rest state, mass conservation, and the `O(A²)` ordering of every physics
+tier simultaneously. But it is not **verification**: no test currently in the repository would
+detect a residual that is self-consistently wrong, because the one test designed to do so
+(`test_equivalence.jl`, against an external second implementation) has been retired with a stale
+reference. Closing that is the top open item, and the method is fully specified (analytic MMS).
 
 **Recently completed (this branch).**
+- **LOCAL OBSERVATION CAMPAIGN — 13 cases run and analysed** (2026-08-06 → 08-11). Full results and
+  the reasoning behind every number: **`building_files/LOCAL_TESTS_RESULTS.md`**. Read that file
+  first if you are picking this up. Headlines:
+  * **7 quasi-1-D cases** (60×3 m, dx=0.25 = 16 cells/λ, sequential LU, 16 periods) and **6 small
+    2-D cases** (40×15 m, dx=dy=0.417, 98.6k DOFs, 12 ranks, 10 periods). **All 13 completed** —
+    bounded, no NaN, no GMRES saturation, no boundary mode, including `nl_pressure=:full` over a bar
+    at 10× amplitude.
+  * **The physics-tier ladder collapses to the linear result**, as `O(A²)` requires: 0.78 % spread
+    1-D, 1.94 % 2-D. Crucially it *separates* advection from nonlinear pressure by two orders —
+    advection contributes 0.77 % (1-D) / 1.84 % (2-D), the whole `{1,2,4,5}` hierarchy a further
+    **0.013 % / 0.094 %**. **Practical consequence: run production at `nl_pressure=:native` unless
+    the amplitude justifies `:full`** — and these cases *cannot validate* `:full`, its effect being
+    below everything else's noise.
+  * **1-D and 2-D agree to 2–3 %** on the same interior source, through *different linear solvers*
+    (LU vs GMRES) at *different resolutions* — a meaningful cross-check of the 2-D machinery.
+  * **Kinematics track Airy**: `|u|/|η|` = 2.91–3.59 vs `ω/tanh(kd) = 3.93`; the clean
+    single-direction BC trains give the closest values (3.28–3.50).
+  * **The two generation mechanisms differ by design and by a factor ≈3.7**: interior Gaussian line
+    source gives **3.9 × A** (it radiates both ways and superposes), Dirichlet BC gives **1.05 × A**
+    (it prescribes). An interior-source run's `A_wave` is *not* the wave amplitude in the domain.
+  * **Three diagnostic-interpretation rules**, each learned from a measurement that misled first:
+    (i) never read `growth` without `x_at_max` — a rising `eta_max` with a *moving* `x_at_max` is a
+    filling domain, with a *pinned* one at a boundary it is the spurious mode; (ii) `dmp/int` means
+    "≫1 is trouble", never "<1 is fine" (healthy band measured **0.29–0.96**; the boundary mode
+    gives ~65); (iii) mass drift is an invariant **only** in a closed unforced basin (1.2e-17 there)
+    — in a forced run it measures *injected* mass and should scale with `A` (confirmed: 10× the
+    amplitude gave exactly 10× the drift).
+  * **The `c_g` transit trap is the standing hazard of this regime.** At `kd = 5.5`,
+    `c_g = 1.25 m/s`, so filling a flume takes tens of seconds. It produced misleading measurements
+    **three separate times**. Always budget `t_settle ≈ (x_sponge − x_source)/c_g + 3T` before
+    reading a steady state. The 1-D driver's default duration is now transit-aware (16 periods for
+    interior generation, **26** for boundary/sea).
+- **Solver-configuration benchmark — `ls_rtol` was three orders over-tight** (2026-08-11). Measured
+  on one fixed 2-D case: relaxing `ls_rtol` 1e-9 → 1e-6 cuts GMRES **491–515 → 294–314 iterations
+  (−40 %)** with `max|η|` **identical to 7 significant figures** and Newton unchanged at 3.17
+  it/step — the control proving the extra linear accuracy was discarded, not used. Defaults are now
+  `ls_rtol=1e-6`, `nl_tol=1e-5`. **See the ⚠ open item: `nl_tol=1e-5` is NOT yet verified.**
+- **Both alternative preconditioners failed** (same benchmark). Additive Schwarz dies with
+  `SingularException` — `SchwarzLinearSolver(LUSolver())` factorises each rank's local block, but
+  `partition(::PSparseMatrix)` returns own+**ghost** rows with the ghost rows unassembled, i.e.
+  structurally zero. Symmetric Gauss–Seidel is worse: it completed **zero steps in 12 h** (against
+  1.9 h for a *complete* Jacobi run) and was stopped. **Both cheap drop-ins are out**; what remains
+  is field-split/Schur (medium effort), geometric multigrid (high), or restricted Schwarz (needs
+  library support GridapSolvers 0.7.1 does not expose).
+- **Strong scaling measured — partition size must follow the problem.** On the *identical* 20.2k-DOF
+  quasi-1-D mesh: **1 rank (direct LU) 6.45 s/step vs 14.4 / 13.1 / 19.5 / 18.3 at 2 / 4 / 6 / 12
+  ranks**, with the GMRES count **rank-independent at ~758**. So a direct LU beats every MPI split
+  2–3× at that size, and the 1-D launchers were switched back to sequential (which also restores
+  point gauges). For the 99k-DOF 2-D problem the ordering reverses and 12 ranks win. **Spend spare
+  cores on more *cases*, not on decomposing one small case further.**
+- **`test_mms.jl` renamed `test_selfconsistency.jl`** — it is *not* a manufactured-solution
+  validation. Its forcing is `f = R(u*)` built with the solver's own residual, so writing
+  `R = R_true + E` the error cancels identically and it passes for **any** `R`; it also measures no
+  convergence rate. It is kept because it certifies what nothing else does — the hand Jacobians are
+  the exact derivatives of the residual, and the multi-step bookkeeping is consistent — but as
+  **code support, not model validation**. The file header now states this at length.
 - **Local validation loop + runtime diagnostics** (2026-08-06) — the work package planned in
   `building_files/LOCAL_VALIDATION_PLAN.md`, motivated by the fact that the four archived cluster
   runs burned 8 h / 44 h / 58 h / 72 h before failing, *silently*.
@@ -160,8 +227,7 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
     are rejected at mesh construction.
 - **Distributed GMRES configuration fixed** (2026-08-05, `f7fe62d`) — `ls_maxiter` was being passed
   as `GMRESSolver`'s positional `m` (basis size) instead of the `maxiter` keyword (see §7). Now
-  `GMRESSolver(krylov_m=100; restart=true, maxiter=ls_maxiter, …)`, with `ls_maxiter` **2000 → 1000**
-  (measured convergence is ~150 iterations, so ~7× headroom). Measured on the 4-rank distributed
+  `GMRESSolver(krylov_m=100; restart=true, maxiter=ls_maxiter, …)`, with `ls_maxiter` **2000 → 1000**. Measured on the 4-rank distributed
   test: `gmres` no longer pinned (149–152, converging), **Newton 8–10 → 4 per step**, 120/120 steps,
   caches **139 MB → 5.6 MB per rank**. `krylov_m` is a kwarg on both drivers, forwarded through all
   12 distributed run scripts, and settable as `LFEM_KRYLOV_M`. The banner previously advertised a
@@ -292,36 +358,56 @@ BC generation 30/30 + 11/11 + Goda–Suzuki 8/8, distributed agreement ≤5e-9. 
   abstract** on the arbitrary-order model was drafted (`building_files/CFC2027_LFEMultilayer_abstract/`).
 
 **Under development / open:**
-- **⚠ ORACLE EQUIVALENCE IS FAILING AT HEAD — `test_equivalence.jl` gives 1 PASS / 9 FAIL**
-  (discovered 2026-08-06 while re-running the suite for non-regression). This is the repository's
-  designated **acceptance** test — it compares the package residual against the independent
-  per-layer implementation in `../LFE-M_2D_solver/` on identical analytic states.
-  * **It is pre-existing, not caused by the 2026-08-06 instrumentation work.** Verified by
-    `git stash`-ing all `src/` changes and re-running against pristine HEAD `051befa`: the failure
-    is **bit-for-bit identical**, same 9 failures with the same relative errors to every digit.
-    Independently, the test calls only `assemble_vertical_tensors`, `build_fe_spaces`,
-    `build_problem_raw` and `global_residual` — none of which that work touched.
-  * **What still passes**: the vertical tensors match the oracle exactly
-    (`Mmat, Phi, B, Mcal, Gcal, A, K, P, Acal, Kcal`). So Stage 1 is fine and the discrepancy is in
-    the **residual assembly**.
-  * **What fails**: virtual work, all 3 configs × 3 test sets, `rel = 2.0e-2 … 1.5` against a
-    `1e-10` gate. Crucially **config A fails too** (`rel = 1.2e-1`) — that is the *simplest*
-    setting: `linearised=true, advection=false, lin_pressure=false, P_full=false,
-    nl_pressure68=false`, flat bed. So the disagreement is already present in the linear core
-    (mass + acceleration + gravity + the `P³L³` dispersion carrier), not in the nonlinear or
-    slope-pressure packages. Configs B and C differ from each other only marginally
-    (2.0e-2 / 1.3 / 9.2e-2 vs 2.0e-2 / 1.5 / 9.6e-2).
-  * **The documented "10/10 PASS, ≤7e-15" was stale** — the same class of stale claim as the
-    `test_vertical.jl` one found during the package migration. All such claims in `CLAUDE.md` and
-    `README.md` are now flagged.
-  * **Not investigated further, deliberately**: resolving this means changing validated physics
-    code (`problem.jl`) or the oracle, which is a design-level decision. Candidate leads worth
-    starting from: commit `3f442be` (the `regime`/`nl_pressure`/`flat_bed` flag refactor, which
-    changed what `build_problem_raw`'s booleans mean and is the most recent change to the
-    flag→term mapping the test relies on), the parent repo's "corrected G tensors" change to the
-    oracle, and the Gridap 0.19→0.20 move (the oracle was written against an older minor).
-    **A first triage step that costs nothing: bisect `test_equivalence.jl` over the commits since
-    it last passed.**
+- **⚠ `nl_tol = 1e-5` IS NOT VERIFIED — close this before trusting the new defaults in production.**
+  The 2026-08-11 benchmark varied `ls_rtol` while holding `nl_tol = 1e-6`, so it validates
+  **`ls_rtol = 1e-6` only**. The accompanying `nl_tol` 1e-6 → 1e-5 change alters when Newton
+  *stops*, which bears directly on the answer. It is *expected* harmless (observed converged residual
+  ~9e-9 overshoots 1e-5 by four orders) but that is not a measurement. A verification was launched
+  and **cancelled before completion**; it produced no results. **Two cheap runs close it (< 1 h
+  combined), both scripted in `LOCAL_TESTS_RESULTS.md` §5.4:** (1) the benchmark's own 2-D case on
+  the new defaults, compared against `max|η| = 3.065280e-03`; (2) `test_basic.jl`, whose documented
+  reference (max η = 0.00410 m, **408 Newton iterations**, gauge amp = 0.00212 m) is produced with
+  the *default* `nl_tol` and may legitimately shift — if it does, **re-measure and update the
+  reference in `README.md` and `CLAUDE.md`; do not treat it as a regression.** Until then treat
+  `nl_tol = 1e-5` as provisional; `ls_rtol = 1e-6` is measured and safe.
+- **The residual has no independent verification — the top scientific priority.** Every passing test
+  compares the solver against theory *using the solver's own residual*, and such a test cannot
+  detect a residual that is self-consistently wrong. The former acceptance test
+  (`test_equivalence.jl`) is **retired**: its external per-layer reference in `../LFE-M_2D_solver/`
+  was never updated as the weak form was completed (it lacks the leading-pressure term `R_P`), so
+  its 1/10 result measures the reference's age, not a defect here — do **not** chase it as a bug.
+  **The fix is fully specified and ready to implement:** the *analytic* MMS in
+  `building_files/LFEM_discretisation/NumericalImplementation/ValidationTests.tex`
+  ("Analytic (verification) MMS"). Forcing derived from the governing equations independently of
+  `problem.jl`, staged linear/flat → +advection → +curved bed → +nonlinear pressure, verified by a
+  measured **order of accuracy** (3 in `h` for Q2, 2 in `Δt`). Stage 1 is derived there in closed
+  form, with a free self-check: on a plane-wave eigenmode the forcing must vanish to round-off.
+- **Run `test_2d_reduces_to_1d.jl`** — written, registered in the runner, not yet executed. A
+  y-invariant 2-D run must reproduce the quasi-1-D flume to 1e-6. It is the sharpest check available
+  short of the analytic MMS, because it tests the solver against a *symmetry the model must respect*
+  rather than against theory via its own residual, and it exercises the `Ey`/`𝖴y` machinery no 1-D
+  case touches.
+- **Preconditioner replacement** — the single biggest performance item, now with the cheap options
+  eliminated (see the benchmark entry above). GMRES needs ~300 iterations *after* the tolerance fix
+  where a well-preconditioned solve of this size should need tens; the count is rank-independent and
+  grows with **mesh anisotropy** (the 4:1-celled 1-D flume needs ~760 against ~480 for the isotropic
+  2-D mesh) and with **solid-wall BCs** (ring 654–695 vs plane 451–517 on an identical mesh — an
+  isolated, cheap, reproducible test bed: a preconditioner that closes *that* gap likely helps
+  everywhere). Order of effort: field-split/Schur → geometric multigrid → restricted Schwarz.
+  *Derived design rule meanwhile: keep horizontal cells near-isotropic, or pay for it in the linear
+  solve.*
+- **Four output gaps** (`SOLVER_ASSESSMENT_2026-08.md` §6): the discrete-equation check does not run
+  under the default SDIRK integrator (it is `is_theta`-gated, so `res_theta = NaN`); linear counts
+  are per RK stage, not per Newton iteration; no assembly-vs-solve time split; the linear solve's
+  achieved tolerance is not recorded.
+- **`nl_pressure=:full` is unvalidated by the local set** — its effect at `A = 1e-3` is 0.013–0.094 %,
+  below the noise of everything else. Needs much larger amplitude, or the analytic MMS staged to
+  that tier.
+- **Only one vertical resolution and one `kd` tested locally** (LFE-2, `Nσ = 3`, `kd = 5.5`).
+  LFE-3/LFE-4 and the rest of the band are untouched by the local campaign. The sponge in particular
+  is verified at `kd = 5.5` only, while `CLAUDE.md` §8 requires it to cover the *longest* component
+  — a `T` sweep measuring reflection at `kd = 1, 3, 5.5` would test that directly, and it is the
+  failure mode behind the archived irregular-sea crash.
 - **Re-run the small-domain suite with the 2026-08 fixes in place.** Every cluster run on record
   predates at least one of: the surface-damping sponge (`95f5ec6`), the GMRES configuration fix
   (`f7fe62d`), and the `mu_max` 8→40 raise. The archived outputs are therefore *not* a baseline —
@@ -578,10 +664,22 @@ test basis — expand by hand via `∂_a(W⋅𝓣) = (∂_aW)⋅𝓣` (see `nlpr
 **Time integrators** (`build_ode_solver` / `build_ode_solver_distributed`): the default is the
 fully-implicit `RungeKutta(nls, ls, dt, :SDIRK_2_2)` (L-stable 2nd-order, diagonally implicit), which
 is robust in the stiff deep-water regime; `:theta` selects Crank–Nicolson. Driver kwargs
-(both drivers): `solver_type=:sdirk` (default), `tableau=:SDIRK_2_2`, `nl_iter=50`, `nl_tol=1e-6`
-(production; convergence/physical-reproducibility tests pin `1e-8`), distributed `ls_maxiter=1000` /
-`krylov_m=100` / `ls_rtol=1e-9` (the GMRES solve is kept accurate so Newton gets good steps),
-`print_every`, `check_every=50`, `check_tol=1e-8`. The distributed run scripts expose these as
+(both drivers): `solver_type=:sdirk` (default), `tableau=:SDIRK_2_2`, `nl_iter=50`,
+**`nl_tol=1e-5`** (production; convergence/physical-reproducibility tests pin `1e-8`), distributed
+`ls_maxiter=1000` / `krylov_m=100` / **`ls_rtol=1e-6`**, `print_every`, `check_every=50`,
+`check_tol=1e-8`.
+
+**Tolerance ladder (changed 2026-08-11, measured).** The tolerances are only meaningful *relative*
+to each other: `O(Δt²)` time error ≫ `nl_tol` ≫ `ls_rtol`, and each level need only be comfortably
+tighter than the one above. The old configuration had **three** orders between `ls_rtol` (1e-9) and
+`nl_tol` (1e-6) where **one** suffices — Newton was overshooting its own tolerance by three orders
+(observed converged residual ~9e-9). `run/local/bench_solver_config.sh` measured the fix on an
+identical 2-D case: relaxing `ls_rtol` 1e-9 → 1e-6 cuts GMRES **491–515 → 294–314 iterations
+(−40 %)** with `max|η|` **identical to 7 significant figures** and Newton unchanged at 3.17 it/step
+— the control that proves the extra linear accuracy was being discarded, not used. Defaults are now
+`ls_rtol=1e-6`, `nl_tol=1e-5`, keeping the linear solve one order *tighter* so Newton is never
+limited by it. No run script overrides them. Full analysis:
+`building_files/LOCAL_TESTS_RESULTS.md` §5.4. The distributed run scripts expose these as
 `LFEM_SOLVER/TABLEAU/NL_ITER/NL_TOL/LS_MAXITER/LS_RTOL/LFEM_KRYLOV_M` env vars.
 
 **`krylov_m` vs `ls_maxiter` — two different bounds (do not conflate).** `GMRESSolver`'s first

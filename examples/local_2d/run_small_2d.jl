@@ -165,7 +165,7 @@ common = (M=M, c_bdy=cbdy_override(), p_horizontal=feord,
 if use_mpi
     diags, vert, prob = setup_and_run_distributed(;
         cpu_grid=(px, py), domain=(0.0, Lx, 0.0, Ly), partition=(nx, ny),
-        ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(),
+        ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(), precond=precond_sym(),
         common...)
 else
     diags, vert, prob = setup_and_run(;

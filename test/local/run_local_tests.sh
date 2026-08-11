@@ -34,6 +34,7 @@ ALL_TESTS=(
     "test_reststate_1d.jl"
     "test_sponge_1d.jl"
     "test_relaxation_1d.jl"
+    "test_2d_reduces_to_1d.jl"
     "test_boundary_modes_1d.jl"
 )
 

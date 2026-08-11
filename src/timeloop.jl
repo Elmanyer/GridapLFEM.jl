@@ -27,7 +27,7 @@ function build_ode_solver(dt::Float64;
                               rho_inf     :: Float64 = 0.5,
                               tableau     :: Symbol  = :SDIRK_2_2,
                               nl_iter     :: Int     = 50,
-                              nl_tol      :: Float64 = 1e-6,
+                              nl_tol      :: Float64 = 1e-5,
                               show_trace  :: Bool    = false,
                               monitor                = nothing)
     ls  = LUSolver()

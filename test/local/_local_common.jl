@@ -7,16 +7,18 @@
 #  goes through multi-hour cluster jobs. See
 #  building_files/LOCAL_VALIDATION_PLAN.md §4.
 #
-#  Quasi-1D flume: a narrow 2-D domain (Ly=2 m, ny=2) with y-periodic lateral
-#  boundaries. The solver is structurally 2-D; this is the established way to
+#  Quasi-1D flume: a narrow 2-D domain (Ly=3 m, ny=3 — Gridap's minimum in a
+#  periodic direction) with y-periodic laterals. The solver is structurally
+#  2-D; this is the established way to
 #  pose a 1-D horizontal problem in it (test_bc_spectrum.jl does the same) and
 #  needs NO solver change. It is NOT a 1-D model: the 𝖴y DOFs exist and are
 #  solved, and y-periodic modes are admissible. See the plan §5.1.
 #
 #  Sequential on purpose: the distributed driver has no point gauges
-#  (timeloop_dist.jl:21-22) and every measurement here is gauge-based. The
-#  6 cores are used for process-level concurrency ACROSS test files
-#  (run_local_tests.sh), not for MPI within one.
+#  (timeloop_dist.jl:21-22) and every measurement here is gauge-based. Cores are
+#  used for process-level concurrency ACROSS test files (run_local_tests.sh),
+#  not for MPI within one — measured, a direct LU beats a 2-12 rank GMRES split
+#  of this mesh by 2-3x (see building_files/SOLVER_ASSESSMENT_2026-08.md §3).
 # ==============================================================
 
 using GridapLFEM
@@ -119,6 +121,10 @@ function fit_loglinear(x::Vector{Float64}, y::Vector{Float64})
     r2    = sstot > 0 ? 1.0 - ssres/sstot : 1.0
     return slope, inter, r2
 end
+
+"Median of a vector (no Statistics dependency in the local suite)."
+median_of(v) = (s = sort(collect(v)); n = length(s);
+                n == 0 ? NaN : (isodd(n) ? s[(n+1)÷2] : 0.5*(s[n÷2] + s[n÷2+1])))
 
 """
     growth_rate(ts, vals) → per-unit-time exponential growth rate of |vals|

@@ -11,8 +11,12 @@
 #  metric-sensitive for a propagating gauge at marginal resolution (wavemaker/
 #  sponge inject a slowly-converging offset, phase error accumulates), so the
 #  spatial part only checks that the gauge CONVERGES under refinement and prints
-#  the (rough) order — the EXACT spatial-operator order is certified to machine
-#  precision by test_mms.jl on a manufactured solution.
+#  the (rough) order. The exact spatial-operator order is NOT established
+#  elsewhere either: test_selfconsistency.jl recovers u* to machine precision at
+#  EVERY h (its forcing is the solver's own residual, so the error cancels), and
+#  therefore measures no rate. Establishing the true spatial order requires the
+#  ANALYTIC MMS — forcing derived from the governing equations, independently of
+#  the residual code — specified in ValidationTests.tex.
 #
 #  A multi-run FEM test — minutes after JIT. RUN:
 #    julia --project=. GridapLFEM.jl/test/test_convergence.jl
@@ -62,9 +66,10 @@ p_space = order(gh4[1:n], gh2[1:n], gh1[1:n])
 # NOTE: self-convergence of a PROPAGATING-wave gauge is metric-sensitive at marginal
 # resolution (the wavemaker/sponge inject a slowly-converging amplitude offset and
 # phase error accumulates over the wave train), so the *rate* is unreliable here —
-# the EXACT spatial-operator order is certified to machine precision by test_mms.jl.
+# NOTE: the exact spatial order is not certified by test_selfconsistency.jl —
+# that test cancels its own error and measures no rate. It needs the analytic MMS.
 # We therefore only require monotone convergence under refinement.
-check("spatial: gauge converges under refinement (exact order: test_mms.jl)", d2 < d1,
+check("spatial: gauge converges under refinement (exact order needs the analytic MMS)", d2 < d1,
       "(order≈$(round(p_space,digits=2)))")
 
 # ---- temporal: fix a fine mesh, refine dt = T/20, T/40, T/80 -------------------
