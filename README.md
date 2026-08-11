@@ -416,6 +416,17 @@ records are in `building_files/DESIGN_RECORDS.md`.
 
 ## Known issues
 
+- **On the word "validated" in this repository.** A test validates a term only if it can *resolve*
+  that term's contribution — if switching the term off moves the measured quantity by less than the
+  measurement's resolution, a passing test shows the code executes, not that the term is correct.
+  The clearest case is `nl_pressure=:full`, whose `𝓝{1,2,4,5}` block changes `max|η|` by only
+  0.013–0.094 % at `A = 1e-3`: the local observation runs cannot validate it, although
+  `test_nlpressure.jl` G1 *does* validate its `∇h` half to machine precision against analytic
+  derivatives. Prefer precise phrasing ("unvalidated by the local set", "validated structurally but
+  not by value") over a bare "unvalidated". Full discussion, including the cheap experiment that
+  would close the gap (the same case at `A = 1e-2`, where the effect grows as `A²` to ~1.3 %):
+  `building_files/LOCAL_TESTS_RESULTS.md` §7b.
+
 - **`test_equivalence.jl` is retired and must not be read as a correctness gate.** It compared the
   package residual against the older per-layer solver in `../LFE-M_2D_solver/`. That external code
   was not maintained in step with the model as the weak form was completed — most consequentially

@@ -400,9 +400,26 @@ reference. Closing that is the top open item, and the method is fully specified 
   under the default SDIRK integrator (it is `is_theta`-gated, so `res_theta = NaN`); linear counts
   are per RK stage, not per Newton iteration; no assembly-vs-solve time split; the linear solve's
   achieved tolerance is not recorded.
-- **`nl_pressure=:full` is unvalidated by the local set** — its effect at `A = 1e-3` is 0.013–0.094 %,
-  below the noise of everything else. Needs much larger amplitude, or the analytic MMS staged to
-  that tier.
+- **`nl_pressure=:full` is unvalidated *by the local observation set*** — and the qualifier is
+  load-bearing. **The resolution principle: a test validates a term only if the test can resolve
+  that term's contribution.** Switching `:full` off changes `max|η|` by **0.0129 % (1-D) / 0.094 %
+  (2-D)**, so the 13 local cases establish that it *runs, converges and stays bounded* — useful,
+  since it is the path that NaN'd on the cluster — but they carry no information about whether its
+  coefficients are right. Always ask the counterfactual: *if this term were wrong, would this test
+  have noticed?*
+  **What IS validated, and must not be discarded when quoting this:** the `∇h` half of
+  `𝓝{1,2,4,5}` is validated **to machine precision** (~4e-15) by `test_nlpressure.jl` **G1**, an
+  exact-IBP identity against *analytic* second derivatives; **G2** pins every block's nonlinear
+  order by amplitude scaling (∇h-IBP → 4, ∇H-frozen → 8, 𝓟-frozen → 4). What is missing is the
+  *value* of the ∇H-frozen and 𝓟-frozen halves, and any dynamic confirmation at realistic amplitude.
+  Say *"unvalidated by the local set"*, never bare *"unvalidated"*.
+  **The sensitivity is tunable and the missing experiment is cheap:** the block is `O(A³)` against
+  `O(A)` leading terms, so its relative effect scales as `A²` — 0.013 % at `A = 1e-3`, **~1.3 % at
+  `A = 1e-2`**, i.e. comfortably measurable. The 2-D bar case already ran at `A = 0.01` with
+  `:full`; its `:none` counterpart was never run, and that single pair would both resolve the
+  difference and confirm the `A³` scaling dynamically. The deeper fix is the analytic MMS staged to
+  that tier — MMS puts the term in the *forcing*, isolating it, instead of hoping a small
+  contribution to a global quantity is visible. Full statement: `LOCAL_TESTS_RESULTS.md` §7b.
 - **Only one vertical resolution and one `kd` tested locally** (LFE-2, `Nσ = 3`, `kd = 5.5`).
   LFE-3/LFE-4 and the rest of the band are untouched by the local campaign. The sponge in particular
   is verified at `kd = 5.5` only, while `CLAUDE.md` §8 requires it to cover the *longest* component
