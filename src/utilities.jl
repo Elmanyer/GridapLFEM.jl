@@ -285,11 +285,18 @@ function setup_and_run(;
     use_ad       :: Bool    = false,      # build Jacobians by AD instead of the hand Jacobians
     show_trace   :: Bool    = false,      # print the Newton iteration trace
     nl_iter      :: Int     = 50,         # max Newton iterations per stage
-    nl_tol       :: Float64 = 1e-5,       # Newton residual tolerance (‖r‖∞). Production default,
-                                          #   measured 2026-08-11: the linear solve is driven to
-                                          #   ls_rtol one order TIGHTER, so Newton is never limited
-                                          #   by the linear solve. Tests that need a sharper answer
-                                          #   pin 1e-8 explicitly.
+    nl_tol       :: Float64 = 1e-5,       # Newton residual tolerance (‖r‖∞). Production default.
+                                          #   MEASURED 2026-08-12, and it is NOT a null change:
+                                          #   Newton takes an INTEGER number of iterations, so this
+                                          #   tolerance acts as a step function. At 1e-6 Newton needs
+                                          #   3 iterations/step; at 1e-5 (and at 1e-4 — bit-identical)
+                                          #   it needs 2, and max|eta| shifts by 3.8e-5 relative.
+                                          #   Accepted on the error budget, NOT on a null result: the
+                                          #   dropped 3rd iteration polishes a residual (~3e-6) some
+                                          #   600x smaller than the O(dt^2) time-discretisation error
+                                          #   the answer already carries (‖R‖∞ ~ 1.8e-3, measured by
+                                          #   the run's own residual check). Tests that need a sharper
+                                          #   answer pin 1e-8 explicitly.
     print_every  :: Int     = 1,          # print a step report every N steps (1 = every step)
     check_every  :: Int     = 50,         # re-verify the governing equations every N steps (0 = off)
     check_tol    :: Float64 = 1e-8,       # tolerance for that verification (‖R‖∞)

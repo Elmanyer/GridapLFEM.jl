@@ -176,11 +176,24 @@ reference. Closing that is the top open item, and the method is fully specified 
     **three separate times**. Always budget `t_settle ≈ (x_sponge − x_source)/c_g + 3T` before
     reading a steady state. The 1-D driver's default duration is now transit-aware (16 periods for
     interior generation, **26** for boundary/sea).
-- **Solver-configuration benchmark — `ls_rtol` was three orders over-tight** (2026-08-11). Measured
-  on one fixed 2-D case: relaxing `ls_rtol` 1e-9 → 1e-6 cuts GMRES **491–515 → 294–314 iterations
-  (−40 %)** with `max|η|` **identical to 7 significant figures** and Newton unchanged at 3.17
-  it/step — the control proving the extra linear accuracy was discarded, not used. Defaults are now
-  `ls_rtol=1e-6`, `nl_tol=1e-5`. **See the ⚠ open item: `nl_tol=1e-5` is NOT yet verified.**
+- **Solver tolerances retuned on measurement, and the `nl_tol` question CLOSED** (2026-08-11/12).
+  Defaults are now **`ls_rtol=1e-5`, `nl_tol=1e-5`**. Two distinct results, and they are not the
+  same kind of result:
+  * **`ls_rtol` is free.** On one fixed 2-D case, 1e-9 → 1e-6 cut GMRES **491–515 → 294–314 (−40 %)**
+    and 1e-6 → 1e-5 cut it a further **295–313 → 238–253 (−19 %)**, with `max|η|` unmoved in both
+    steps and Newton unchanged — the control proving the extra linear accuracy was discarded, not
+    used.
+  * **`nl_tol` is NOT free, and the original justification for it was wrong.** It had been argued
+    that 1e-6 → 1e-5 was harmless because Newton would stop at the same iteration. Measured: Newton
+    drops **3 → 2 iterations/step** and `max|η|` shifts **1.9e-5 (2-D) / 3.8e-5 (`test_basic`)**
+    relative — 19–38× the ~1e-6 gate that had been set, which the change therefore *fails*.
+    `nl_tol` is a **step function** (integer iteration counts): 1e-5 and 1e-4 are **bit-identical**,
+    and the whole discrepancy is the 3rd Newton iteration. It is adopted on an **error budget** —
+    that iteration polishes a `~3e-6` residual against a **measured** `O(Δt²)` time-discretisation
+    error of `‖R‖∞ ≈ 1.8e-3`, i.e. ~600× larger — **not** on a null result. Full analysis and the
+    replaced acceptance criterion: `LOCAL_TESTS_RESULTS.md` §5.4 "RESOLVED 2026-08-12".
+    Consequence: `test_basic.jl`'s reference Newton count is **240, was 408** (max η and gauge amp
+    unchanged); `test_basic_distributed.jl`'s `REF_EMAX_*` stand (shift is ~50× inside `REF_RTOL`).
 - **Both alternative preconditioners failed** (same benchmark). Additive Schwarz dies with
   `SingularException` — `SchwarzLinearSolver(LUSolver())` factorises each rank's local block, but
   `partition(::PSparseMatrix)` returns own+**ghost** rows with the ghost rows unassembled, i.e.
@@ -216,7 +229,9 @@ reference. Closing that is the top open item, and the method is fully specified 
     **16/16** including a negative control that must fail. Budget **≈45 min at `JOBS=2`**
     (concurrent Julia processes contend heavily — three at once each run at ~⅓ solo speed).
   * **Non-regression**: `test_basic` reproduces its documented references **exactly**
-    (max η = 0.00410 m, 408 Newton iterations, gauge amp = 0.00212 m); `test_vertical`,
+    (max η = 0.00410 m, 408 Newton iterations, gauge amp = 0.00212 m — at the then-default
+    `nl_tol=1e-6`; the count is **240** under the current `nl_tol=1e-5`, see the tolerance entry);
+    `test_vertical`,
     `test_primitives`, `test_conservation` re-pass.
   * **`examples/local_1d/` + `examples/local_2d/` + `run/local/`** — parametric scripts, a local
     launcher helper and 15 case launchers; 7 cluster 1-D launchers in `run/dist_small/`.
@@ -358,18 +373,6 @@ reference. Closing that is the top open item, and the method is fully specified 
   abstract** on the arbitrary-order model was drafted (`building_files/CFC2027_LFEMultilayer_abstract/`).
 
 **Under development / open:**
-- **⚠ `nl_tol = 1e-5` IS NOT VERIFIED — close this before trusting the new defaults in production.**
-  The 2026-08-11 benchmark varied `ls_rtol` while holding `nl_tol = 1e-6`, so it validates
-  **`ls_rtol = 1e-6` only**. The accompanying `nl_tol` 1e-6 → 1e-5 change alters when Newton
-  *stops*, which bears directly on the answer. It is *expected* harmless (observed converged residual
-  ~9e-9 overshoots 1e-5 by four orders) but that is not a measurement. A verification was launched
-  and **cancelled before completion**; it produced no results. **Two cheap runs close it (< 1 h
-  combined), both scripted in `LOCAL_TESTS_RESULTS.md` §5.4:** (1) the benchmark's own 2-D case on
-  the new defaults, compared against `max|η| = 3.065280e-03`; (2) `test_basic.jl`, whose documented
-  reference (max η = 0.00410 m, **408 Newton iterations**, gauge amp = 0.00212 m) is produced with
-  the *default* `nl_tol` and may legitimately shift — if it does, **re-measure and update the
-  reference in `README.md` and `CLAUDE.md`; do not treat it as a regression.** Until then treat
-  `nl_tol = 1e-5` as provisional; `ls_rtol = 1e-6` is measured and safe.
 - **The residual has no independent verification — the top scientific priority.** Every passing test
   compares the solver against theory *using the solver's own residual*, and such a test cannot
   detect a residual that is self-consistently wrong. The former acceptance test
@@ -683,19 +686,29 @@ fully-implicit `RungeKutta(nls, ls, dt, :SDIRK_2_2)` (L-stable 2nd-order, diagon
 is robust in the stiff deep-water regime; `:theta` selects Crank–Nicolson. Driver kwargs
 (both drivers): `solver_type=:sdirk` (default), `tableau=:SDIRK_2_2`, `nl_iter=50`,
 **`nl_tol=1e-5`** (production; convergence/physical-reproducibility tests pin `1e-8`), distributed
-`ls_maxiter=1000` / `krylov_m=100` / **`ls_rtol=1e-6`**, `print_every`, `check_every=50`,
+`ls_maxiter=1000` / `krylov_m=100` / **`ls_rtol=1e-5`**, `print_every`, `check_every=50`,
 `check_tol=1e-8`.
 
-**Tolerance ladder (changed 2026-08-11, measured).** The tolerances are only meaningful *relative*
-to each other: `O(Δt²)` time error ≫ `nl_tol` ≫ `ls_rtol`, and each level need only be comfortably
-tighter than the one above. The old configuration had **three** orders between `ls_rtol` (1e-9) and
-`nl_tol` (1e-6) where **one** suffices — Newton was overshooting its own tolerance by three orders
-(observed converged residual ~9e-9). `run/local/bench_solver_config.sh` measured the fix on an
-identical 2-D case: relaxing `ls_rtol` 1e-9 → 1e-6 cuts GMRES **491–515 → 294–314 iterations
-(−40 %)** with `max|η|` **identical to 7 significant figures** and Newton unchanged at 3.17 it/step
-— the control that proves the extra linear accuracy was being discarded, not used. Defaults are now
-`ls_rtol=1e-6`, `nl_tol=1e-5`, keeping the linear solve one order *tighter* so Newton is never
-limited by it. No run script overrides them. Full analysis:
+**Tolerance ladder (retuned 2026-08-11, `nl_tol` closed on measurement 2026-08-12).** Defaults are
+**`ls_rtol=1e-5`, `nl_tol=1e-5`**; no run script overrides them. The two tolerances behave
+completely differently here, and conflating them is the mistake this entry exists to prevent:
+
+* **`ls_rtol` does not affect the answer** anywhere in 1e-9…1e-5, while each order costs GMRES
+  iterations: 1e-9 → 1e-6 cut **491–515 → 294–314 (−40 %)**, 1e-6 → 1e-5 a further
+  **295–313 → 238–253 (−19 %)**, `max|η|` unmoved and Newton unchanged throughout
+  (`run/local/bench_solver_config.sh`, one fixed 2-D case).
+* **`nl_tol` DOES affect the answer, as a step function.** Newton runs an integer number of
+  iterations, so only threshold crossings matter: at 1e-6 it needs 3 iterations/step, at 1e-5 *and*
+  1e-4 it needs 2 — those two are **bit-identical to 12 digits** — and dropping that third iteration
+  moves `max|η|` by **1.9e-5 / 3.8e-5** relative. Do **not** describe this as "no effect".
+
+Justification for `nl_tol=1e-5` is an **error budget, not a null result**: the dropped iteration
+refines a `~3e-6` residual, while the `O(Δt²)` time-discretisation error already in the answer is
+`‖R‖∞ ≈ 1.8e-3` (measured by the run's own residual checker) — ~600× larger. Note the adopted pair
+leaves **no separation** between `ls_rtol` and `nl_tol`, deliberately: the older "keep the linear
+solve one order tighter" rule remains sound general guidance, but it is not what governs accuracy
+here, and `ls_rtol` was measured not to limit Newton at any point in the range. Tests that need a
+sharper answer pin `nl_tol=1e-8`. Full analysis and the superseded acceptance criterion:
 `building_files/LOCAL_TESTS_RESULTS.md` §5.4. The distributed run scripts expose these as
 `LFEM_SOLVER/TABLEAU/NL_ITER/NL_TOL/LS_MAXITER/LS_RTOL/LFEM_KRYLOV_M` env vars.
 
@@ -809,6 +822,8 @@ same number every step**, with Newton needing 8–24 iterations instead of 3–5
   `Gridap.ODEs`, `solve(solver,op,t0,tF,u0)` iterator yields `(t,uh)`.
 * **Gridap minor equivalence (measured 2026-08-05).** `test_basic.jl` run in two pinned
   environments gives **identical** results — `max η = 0.00410 m`, `408` Newton iterations
+  (measured at the then-default `nl_tol=1e-6`; the count is 240 at today's `nl_tol=1e-5`, which
+  changes both stacks equally and so does not affect this equivalence conclusion)
   (`3.40`/step), `gauge amp = 0.00212 m` — under *both* `Gridap 0.19.11 + GridapSolvers 0.6.2` and
   `Gridap 0.20.8 + GridapSolvers 0.7.1`, and the package precompiles cleanly on both. The Gridap
   minor therefore has **no effect** on this solver's results, and is *not* the explanation for the

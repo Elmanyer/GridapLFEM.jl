@@ -100,12 +100,14 @@ function setup_and_run_distributed(;
     # ---- Solver tolerances / diagnostics -------------------------------------
     nl_iter      :: Int     = 50,          # max Newton iterations per stage
     nl_tol       :: Float64 = 1e-5,        # Newton residual tolerance (‖r‖₂) — production default
-    ls_rtol      :: Float64 = 1e-6,        # GMRES relative tolerance. MEASURED 2026-08-11: relaxing
-                                           #   1e-9 -> 1e-6 cut GMRES 491-515 -> 294-314 iterations
-                                           #   per solve (-40%) with max|eta| IDENTICAL to 7 significant
-                                           #   figures and Newton unchanged at 3.17 it/step. Kept one
-                                           #   order TIGHTER than nl_tol so the nonlinear convergence
-                                           #   is never limited by the linear solve.
+    ls_rtol      :: Float64 = 1e-5,        # GMRES relative tolerance. MEASURED 2026-08-11/12 on one
+                                           #   fixed 2-D case (96x36, nl_pressure=:full, 12 ranks):
+                                           #     1e-9 -> 1e-6  cut GMRES 491-515 -> 294-314 (-40%)
+                                           #     1e-6 -> 1e-5  cut GMRES 295-313 -> 238-253 (-19%)
+                                           #   with max|eta| unmoved in BOTH steps (the second pair
+                                           #   agreed to 3e-7 relative). The linear tolerance is not
+                                           #   what limits the answer here — the Newton ITERATION
+                                           #   COUNT is; see nl_tol in this file and utilities.jl.
     ls_maxiter   :: Int     = 1000,        # GMRES iteration cap per Newton step (a TIME bound)
     precond      :: Symbol  = :jacobi,     # GMRES right preconditioner: :jacobi | :schwarz | :gs
                                            #   Jacobi is the historical default and is WEAK for this

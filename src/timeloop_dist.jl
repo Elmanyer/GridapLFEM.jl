@@ -113,7 +113,7 @@ function build_ode_solver_distributed(dt::Float64;
                                           tableau     :: Symbol  = :SDIRK_2_2,
                                           nl_iter     :: Int     = 50,
                                           nl_tol      :: Float64 = 1e-5,
-                                          ls_rtol     :: Float64 = 1e-6,
+                                          ls_rtol     :: Float64 = 1e-5,
                                           ls_maxiter  :: Int     = 1000,
                                           krylov_m    :: Int     = 100,
                                           precond     :: Symbol  = :jacobi,

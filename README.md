@@ -173,7 +173,9 @@ tooling are run directly against it (`julia --project=. test/test_basic.jl`), wh
 > GridapDistributed 0.4.17 / GridapSolvers 0.7.1 / PartitionedArrays 0.3.5 / MPI 0.20.26**.
 > `[compat]` also admits `Gridap 0.19` / `GridapSolvers 0.6`, because the two stacks were *measured*
 > equivalent (2026-08-05): `test_basic.jl` gives identical `max η = 0.00410 m` and `408` Newton
-> iterations under both, and the package precompiles on both. The parent repository environment
+> iterations under both (measured at the then-default `nl_tol=1e-6`; today's default gives 240 on
+> both stacks alike, so the equivalence conclusion is unaffected), and the package precompiles on
+> both. The parent repository environment
 > (`../Project.toml`) is a **separate** environment for the legacy 1D/2D solvers and remains on
 > Gridap 0.19.11 / GridapSolvers 0.6.2; it does not need to match. A system image is only valid for
 > the versions it was built against — build it in the environment you run in.
@@ -310,11 +312,20 @@ Distributed adds `cpu_grid=(px,py)`, the Krylov controls (`nl_iter`, `nl_tol`, `
 (`:jacobi` | `:schwarz` | `:gs`), plus the same `solver_type`/`tableau`; the linear solve is
 GMRES+Jacobi+Newton. It drops `gauges` (global reductions instead).
 
-> **Solver tolerances (defaults changed 2026-08-11, on measurement).** `ls_rtol = 1e-6`,
-> `nl_tol = 1e-5` — one order of separation, linear strictly tighter than nonlinear. The previous
-> `1e-9`/`1e-6` pair drove the linear solve three orders past anything Newton could use: relaxing it
-> cut GMRES iterations by **40 %** with `max|η|` identical to seven significant figures and Newton
-> unchanged. See `building_files/LOCAL_TESTS_RESULTS.md` §5.4. Tests that need a sharper answer pin
+> **Solver tolerances (retuned 2026-08-11/12, on measurement).** `ls_rtol = 1e-5`, `nl_tol = 1e-5`.
+> The two are **not** the same kind of knob:
+> * `ls_rtol` does not affect the answer anywhere in 1e-9…1e-5, while each order costs GMRES
+>   iterations — 1e-9 → 1e-6 cut them **40 %**, 1e-6 → 1e-5 a further **19 %**, `max|η|` unmoved and
+>   Newton unchanged in both.
+> * `nl_tol` **does** affect the answer, as a step function: Newton runs an integer number of
+>   iterations, so at 1e-6 it takes 3/step and at 1e-5 (and 1e-4 — bit-identical) it takes 2, moving
+>   `max|η|` by 1.9e-5–3.8e-5 relative. It is adopted on an **error budget** — the dropped iteration
+>   refines a `~3e-6` residual against a measured `O(Δt²)` time-discretisation error of
+>   `‖R‖∞ ≈ 1.8e-3` — not because it changes nothing.
+>
+> Consequence for the reference below: `test_basic.jl` reports **240** Newton iterations at the
+> default tolerance (it was 408 at `nl_tol=1e-6`); `max η` and gauge amplitude are unchanged.
+> Full analysis: `building_files/LOCAL_TESTS_RESULTS.md` §5.4. Tests that need a sharper answer pin
 > `nl_tol = 1e-8` explicitly.
 
 ---

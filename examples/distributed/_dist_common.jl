@@ -63,8 +63,10 @@ flat_bed_flag(default::Int=1) = genv_b("LFEM_FLAT_BED", default)
 #    LFEM_NL_ITER     max Newton iterations / stage    50
 #    LFEM_NL_TOL      Newton tolerance (production)    1e-5
 #    LFEM_LS_MAXITER  max GMRES iterations / Newton    1000   (TIME bound)
-#    LFEM_LS_RTOL     GMRES relative tolerance         1e-6  (one order tighter than
-#                       LFEM_NL_TOL, so Newton is never limited by the linear solve)
+#    LFEM_LS_RTOL     GMRES relative tolerance         1e-5  (measured: 1e-9→1e-6→1e-5
+#                       each cut GMRES iterations with max|η| unmoved. NOTE this now
+#                       EQUALS LFEM_NL_TOL rather than sitting one order below it —
+#                       see the ladder discussion in LOCAL_TESTS_RESULTS.md §5.4)
 #    LFEM_KRYLOV_M    GMRES basis size, restart=true    100   (MEMORY bound)
 #      NOTE LFEM_KRYLOV_M and LFEM_LS_MAXITER are different things: the basis
 #      costs m+1 distributed vectors plus a dense (m+1)×m Hessenberg PER RANK at
@@ -92,7 +94,7 @@ tableau_sym()    = Symbol(genv("LFEM_TABLEAU", "SDIRK_2_2"))
 nl_iter_val()    = genv_i("LFEM_NL_ITER", 50)
 nl_tol_val()     = genv_f("LFEM_NL_TOL", 1e-5)
 ls_maxiter_val() = genv_i("LFEM_LS_MAXITER", 1000)
-ls_rtol_val()    = genv_f("LFEM_LS_RTOL", 1e-6)
+ls_rtol_val()    = genv_f("LFEM_LS_RTOL", 1e-5)
 krylov_m_val()   = genv_i("LFEM_KRYLOV_M", 100)
 #    LFEM_PRECOND   GMRES preconditioner: jacobi|schwarz|gs   jacobi
 #      Jacobi is weak for this operator (450-760 iters/solve measured); :schwarz
