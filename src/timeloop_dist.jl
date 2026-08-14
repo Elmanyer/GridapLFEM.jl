@@ -205,7 +205,10 @@ function run_time_loop_dist(ranks, op, solver, u0,
                                 check_every:: Int     = 0,
                                 check_tol  :: Float64 = 1e-8,
                                 rundiag               = nothing,   # RunDiagnostics
-                                diag_every :: Int     = 0)
+                                diag_every :: Int     = 0,
+                                final_uh              = nothing)   # optional Ref: receives the last
+                                                                   #   solution (MMS L² error needs
+                                                                   #   the field, not just diags)
     if i_am_main(ranks)
         mkpath(output_dir)
     end
@@ -230,6 +233,7 @@ function run_time_loop_dist(ranks, op, solver, u0,
         for (t_n, u_n) in odesol
             step  += 1
             stats  = monitor === nothing ? nothing : take_step_stats!(monitor)
+            final_uh === nothing || (final_uh[] = u_n)
             eta_n  = u_n[1]
             emax   = eta_max_distributed(eta_n)
             push!(diags, (t=t_n, eta_max=emax,

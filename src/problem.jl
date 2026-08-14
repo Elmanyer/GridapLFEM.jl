@@ -65,6 +65,12 @@ struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
     relax_bc     :: Bool              # generation/absorption relaxation zone (Dirichlet inflow)
     relax_mu     :: Function          # zone profile μ_g(x) (quadratic, max at the boundary)
     relax_tg     :: Any               # incident_fields NamedTuple (eta, ux, uy) or nothing
+    mms_src      :: Any               # analytic MMS forcing, or `nothing` (default).
+                                      #   NamedTuple (Seta, Sx, Sy) of (x,t) callables; Sx/Sy return
+                                      #   VectorValue{Nσ}. Subtracted from the residual as
+                                      #   F = ∫(q Sη + Wx⋅Sx + Wy⋅Sy), making u* the exact solution
+                                      #   of the forced problem. Independent of u ⇒ NO Jacobian
+                                      #   contribution. See building_files/MMS_ANALYTIC_PLAN.md.
 end
 
 """
@@ -130,7 +136,8 @@ function build_problem(vert;
         wm_src       :: Function = ((x, t) -> 0.0),
         relax_bc     :: Bool     = false,
         relax_mu     :: Function = (x -> 0.0),
-        relax_tg                 = nothing)
+        relax_tg                 = nothing,
+        mms_src                  = nothing)
     phys = resolve_physics(; regime=regime, nl_pressure=nl_pressure,
                              flat_bed=flat_bed)
     return build_problem_raw(vert; g=g, h_bathy=h_bathy,
@@ -139,7 +146,8 @@ function build_problem(vert;
         nl_pressure68=phys.nl_pressure68, nl_pressure_full=phys.nl_pressure_full,
         flat_bed=phys.flat_bed,
         mu_sponge=mu_sponge, wm_src=wm_src,
-        relax_bc=relax_bc, relax_mu=relax_mu, relax_tg=relax_tg)
+        relax_bc=relax_bc, relax_mu=relax_mu, relax_tg=relax_tg,
+        mms_src=mms_src)
 end
 
 """
@@ -168,7 +176,8 @@ function build_problem_raw(vert;
         wm_src       :: Function = ((x, t) -> 0.0),
         relax_bc     :: Bool     = false,
         relax_mu     :: Function = (x -> 0.0),
-        relax_tg                 = nothing)
+        relax_tg                 = nothing,
+        mms_src                  = nothing)
     Φ  = alg_to_vec(vert.Phi)
     Mv = alg_to_tensor2(vert.Mmat)
     Bv = alg_to_tensor2(vert.B)
@@ -186,7 +195,7 @@ function build_problem_raw(vert;
                          A3, K3, P3, linearised, advection, lin_pressure,
                          P_full, nl_pressure68, nl_pressure_full, flat_bed,
                          Ref{Any}(nothing), mu_sponge, wm_src,
-                         relax_bc, relax_mu, relax_tg)
+                         relax_bc, relax_mu, relax_tg, mms_src)
 end
 
 """
@@ -221,7 +230,18 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
     ub  = alg_vec2(alg_dot(prob.Φ, Ux), alg_dot(prob.Φ, Uy))   # depth-averaged velocity
 
     # ---- mass continuity + wavemaker source ----------------------------------
-    r = ∫( q*ηt - H*(∇(q) ⋅ ub) - q*src_cf ) * dΩh
+    #  LINEARISED regime uses the STILL-WATER depth h(x,y) in the flux, ∇·(h ū):
+    #  the amplitude linearisation drops ∇·(η ū) as O(ε²), exactly like the
+    #  H-weighting dropped from acceleration and gravity below. See LinearModel.tex
+    #  `eq: linearised system continuity` and GridapImplementation.tex §8. (Fixed
+    #  2026-08-12: this line previously used H unconditionally, so `regime=:linear`
+    #  silently retained the nonlinear flux — negligible at wave amplitude,
+    #  O(η/d)≈3e-4 at A=1e-3, but fatal for the analytic MMS, whose manufactured
+    #  amplitudes are O(1) and whose result is a convergence RATE. The unaccounted
+    #  term is h-independent, so it would stall the L² error and read as a wrong
+    #  coefficient.) `h_cf` is the bathymetry function, not necessarily constant.
+    h_cf = lin ? d_cf : H
+    r = ∫( q*ηt - h_cf*(∇(q) ⋅ ub) - q*src_cf ) * dΩh
 
     # ---- acceleration ----------------------------------------------------------
     accx = alg_mul(prob.Mv, Uxt); accy = alg_mul(prob.Mv, Uyt)
@@ -324,6 +344,22 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
         end
     end
 
+    # ---- analytic MMS forcing (verification only; `nothing` in every physical run) --
+    #  Subtract F(t;q,vᵢ) = ∫(q Sη + Σᵢ Sᵢ·vᵢ) so that the manufactured field u* is the
+    #  EXACT solution of R − F = 0. The forcing is derived from the governing equations
+    #  in closed form (src/mms.jl) and never calls this file — that independence is the
+    #  whole point: it is what lets the measured convergence RATE detect a residual that
+    #  is self-consistently wrong. `t` here is the value the integrator passes (RK stage
+    #  time, or t_{n+θ}), which is exactly the "forcing exact in time" requirement.
+    #  No Jacobian contribution: F is independent of u and u̇.
+    if prob.mms_src !== nothing
+        S   = prob.mms_src
+        Sη  = CellField(x -> S.Seta(x, t), trian)
+        Sxf = CellField(x -> S.Sx(x, t),   trian)
+        Syf = CellField(x -> S.Sy(x, t),   trian)
+        r = r - ∫( q*Sη + (Wx ⋅ Sxf) + (Wy ⋅ Syf) ) * dΩh
+    end
+
     return r
 end
 
@@ -385,8 +421,10 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dΩh)
     ub  = alg_vec2(alg_dot(prob.Φ, Ux),  alg_dot(prob.Φ, Uy))
     dub = alg_vec2(alg_dot(prob.Φ, dUx), alg_dot(prob.Φ, dUy))
 
-    # continuity
-    r = ∫( (-1.0)*( (∇(q) ⋅ ub)*dη + H*(∇(q) ⋅ dub) ) ) * dΩh
+    # continuity — the ∂/∂η term exists only in the nonlinear flux ∇·(H ū); the
+    # linearised flux ∇·(h ū) carries no η dependence at all (see global_residual).
+    r = lin ? ∫( (-1.0)*( d_cf*(∇(q) ⋅ dub) ) ) * dΩh :
+              ∫( (-1.0)*( (∇(q) ⋅ ub)*dη + H*(∇(q) ⋅ dub) ) ) * dΩh
 
     # gravity
     DW = alg_dx(Wx) + alg_dy(Wy)

@@ -42,6 +42,7 @@ using Gridap.TensorValues
 using LinearAlgebra
 using SparseArrays
 using Printf
+using ForwardDiff          # analytic-MMS generic strong-form evaluator (src/mms.jl) only
 # Distributed (MPI) stack: GridapDistributed 0.4.x, PartitionedArrays 0.3.x,
 #   MPI 0.20.x, GridapSolvers 0.6.x (GMRES + Jacobi + NewtonSolver — the scalable
 #   Krylov solve used for the partitioned linear systems on the cluster).
@@ -77,6 +78,9 @@ include("utilities.jl")      # dispersion analysis, sponge, wavemakers, sequenti
 include("waveinput.jl")      # Dirichlet boundary wave generation + WaveSpec coupling
 include("timeloop_dist.jl")  # DISTRIBUTED mesh builder + GMRES solver + time loop
 include("utilities_dist.jl") # DISTRIBUTED driver setup_and_run_distributed
+include("errors.jl")         # L² error norms + convergence-rate fitting
+include("mms.jl")            # ANALYTIC (verification) MMS forcing — independent of problem.jl
+include("mms_driver.jl")     # MMS solve + spatial/temporal refinement studies
 
 # Vertical stage
 export build_vertical_model
@@ -113,6 +117,20 @@ export print_solver_banner, step_report, check_report, final_report
 # energy invariants, per-rank RSS, relative divergence guard, CSV step log.
 export RunDiagnostics, build_run_diagnostics, field_diagnostics
 export resolve_eta_ref, rss_bytes, masked_max, x_at_max
+
+# --- L² errors / convergence (errors.jl) ------------------------------------
+export l2, l2_error, l2_norm_exact, error_measure
+export convergence_rate, refinement_table
+
+# --- analytic (verification) MMS (mms.jl, mms_driver.jl) --------------------
+export MMSField, field_callables
+export mms_eta, mms_ux, mms_uy
+export mms_exact_eta, mms_exact_ux, mms_exact_uy
+export mms_forcing_stage1, strong_residual_stage1
+export model_celerity, eigenmode_callables, standing_mode, exact_cfs
+export run_mms_case, run_mms_refinement, mms_dt_independence
+export run_model_case, run_model_refinement
+export run_conv_study, run_mms_case_distributed
 export diag_csv_row, close_diagnostics
 
 # Utilities

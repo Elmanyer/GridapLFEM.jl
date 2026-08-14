@@ -133,7 +133,13 @@ function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
                            check_every:: Int     = 0,
                            check_tol  :: Float64 = 1e-8,
                            rundiag               = nothing,   # RunDiagnostics
-                           diag_every :: Int     = 0)
+                           diag_every :: Int     = 0,
+                           final_uh              = nothing)   # optional Ref: receives the last
+                                                              #   solution FEFunction. Non-breaking
+                                                              #   out-parameter — the MMS driver needs
+                                                              #   the final state to form an L² error,
+                                                              #   which `diags` (scalars only) cannot
+                                                              #   provide.
     mkpath(output_dir)
     odesol = solve(solver, op, t0, T_final, u0)
 
@@ -159,6 +165,7 @@ function run_time_loop(op, solver, u0, t0::Float64, T_final::Float64;
         for (t_n, u_n) in odesol
             step  += 1
             stats  = monitor === nothing ? nothing : take_step_stats!(monitor)
+            final_uh === nothing || (final_uh[] = u_n)
             eta_n  = u_n[1]
             emax   = maximum(abs.(get_free_dof_values(eta_n)))
             gauge_data = isempty(gauge_pts) ? Float64[] :

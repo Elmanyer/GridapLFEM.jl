@@ -46,7 +46,7 @@ modes are 1-based `j=1..Nσ`, one per node.
 | `algebraic_residual_math.md` | Operator reference: how each §8 residual term is written with native Gridap tensor ops (no MultiField decomposition, no vertical-index loops) — the `L`/`N` pressure stacks, the leading-pressure `R_P`, IBP of second-derivative terms, and the verified Gridap operator table. |
 | `DESIGN_RECORDS.md` | Consolidated **historical design records** for the completed features — algebraic residual + Jacobians, package layout, distributed solver, nonlinear-pressure completion, boundary wave generation, periodic-y BC, the `flat_bed` switch, and the production sea-state scripts. Provenance only (*why* the code is shaped as it is); the code, this `CLAUDE.md`, and the LaTeX derivation are authoritative. |
 | `src/` (`GridapLFEM.jl` + submodules) | **The self-contained serial + distributed solver package** (`module GridapLFEM`): vertical tensors (incl. `Pcal`), constant-tensor + `Operation` helpers, stacked FE spaces (distributed-safe MultiField dispatch + transient-Dirichlet inflow variants), the loop-free residual + hand Jacobians (the same code runs distributed — `Operation` is forwarded for `DistributedCellField`), the time loops (default fully-implicit `RungeKutta(:SDIRK_2_2)`, `:theta` Crank–Nicolson selectable via `solver_type`; sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…`) plus reconstructed `w_s<σ>`/`p_s<σ>` fields (`reconstruct.jl`), and `waveinput.jl` (Dirichlet boundary wave generation + WaveSpec.jl coupling: component tables, `:model`/`:airy` polarizations, ramp, relaxation zone). Drivers: `setup_and_run` and `setup_and_run_distributed`. |
-| `test/` (21 tests + `test/cluster/`) | **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` **RETIRED** (the external per-layer reference predates the completion of the weak form — it lacks `R_P` — so its 1/10 result measures the reference's age, not a defect here), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` 6/6 (4 ranks; rel ~1e-5 vs the sequential references), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_selfconsistency` 3/3 (**renamed from `test_mms`**: it is a Jacobian/time-stepping self-consistency check, NOT a manufactured-solution validation — its forcing is the solver's own residual, so the error cancels and a wrong residual still passes), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, `test_dispersion_nonlinear` 3/3 (full-NL⇒Airy, kd=1/3/5 err 0.93/0.36/3.05%), `test_shallow_water` 6/6 (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch:** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. **`test/local/`** (new 2026-08-06): the LOCAL validation suite — quasi-1D flumes (`Ly=3, ny=3`, y-periodic) that gate the solver's *internal machinery* in minutes on 6 cores instead of hours on the cluster: `test_reststate_1d` (rest state, flat + sloping bed), `test_sponge_1d` (the sponge's damping law vs its μ-profile, + reflection), `test_relaxation_1d` (inflow zone: generation fidelity + absorption, differential against `relax_bc=false`), `test_boundary_modes_1d` (the open-boundary-mode signature, **with a negative control that must fail**), `test_2d_reduces_to_1d` (**written, not yet run** — a y-invariant 2-D run must reproduce the flume to 1e-6; the sharpest check of the 2-D machinery, because it tests a *symmetry the model must respect* rather than theory via the solver's own residual), shared helpers in `_local_common.jl`, runner `run_local_tests.sh` (process-level concurrency, not MPI — these need point gauges, which only the sequential driver has). |
+| `test/` (23 tests + `test/cluster/`) | **Verification (analytic MMS, 2026-08-12):** `test_mms_forcing` 5/5 — forcing gates, no FE solve (eigenmode `𝓛(u*)`=3.6e-15, closed-form≡AD=1.8e-15, plus a grep gate enforcing that `src/mms.jl` never references the residual code); `test_mms_convergence` — order of accuracy, **⚠ its G6/G7 gates assert the theoretical 3/2 on the EQUAL-ORDER pairing and therefore fail as written**: equal order gives `p`, not `p+1` (see the FE-pairing entry in §8). Re-base them on the measured `p`, or run them on `p_eta = p−1` where 3/2 do hold. **Base suite:** `test_vertical` 15/15, `test_primitives` 9/9, `test_equivalence` **RETIRED** (the external per-layer reference predates the completion of the weak form — it lacks `R_P` — so its 1/10 result measures the reference's age, not a defect here), `test_basic` 6/6, `test_dispersion` (kd=3 err 0.90%), `test_basic_distributed` 6/6 (4 ranks; rel ~1e-5 vs the sequential references), `test_nlpressure` 9/9 (+ `_distributed`), `test_sloshing` (1.44%), `test_conservation` (drift 7.8e-16). **Validation batch:** `test_dispersion_curve` 9/9 (closed-form Cm/Ce(kd), kd_app 10.8/39.2/127.9), `test_selfconsistency` 3/3 (**renamed from `test_mms`**: it is a Jacobian/time-stepping self-consistency check, NOT a manufactured-solution validation — its forcing is the solver's own residual, so the error cancels and a wrong residual still passes), `test_convergence` 2/2, `test_vertical_profile` 7/7 (sinh shape), `test_energy` 3/3, `test_dispersion_nonlinear` 3/3 (full-NL⇒Airy, kd=1/3/5 err 0.93/0.36/3.05%), `test_shallow_water` 6/6 (kd→0 ⇒ √(gd), ΦᵀM⁻¹Φ=1). **BC-generation batch:** `test_waveinput` 30/30, `test_bc_generation` 11/11, `test_bc_spectrum` 8/8 (Goda–Suzuki), `test_bc_generation_distributed` 4/4 (rel 3.05e-8). **`test/cluster/`:** `cluster_conservation` (2 ranks, drift 5.8e-10), `cluster_mms` (all 𝓝 at scale) + SLURM template. **`test/local/`** (new 2026-08-06): the LOCAL validation suite — quasi-1D flumes (`Ly=3, ny=3`, y-periodic) that gate the solver's *internal machinery* in minutes on 6 cores instead of hours on the cluster: `test_reststate_1d` (rest state, flat + sloping bed), `test_sponge_1d` (the sponge's damping law vs its μ-profile, + reflection), `test_relaxation_1d` (inflow zone: generation fidelity + absorption, differential against `relax_bc=false`), `test_boundary_modes_1d` (the open-boundary-mode signature, **with a negative control that must fail**), `test_2d_reduces_to_1d` (**written, not yet run** — a y-invariant 2-D run must reproduce the flume to 1e-6; the sharpest check of the 2-D machinery, because it tests a *symmetry the model must respect* rather than theory via the solver's own residual), shared helpers in `_local_common.jl`, runner `run_local_tests.sh` (process-level concurrency, not MPI — these need point gauges, which only the sequential driver has). |
 | `examples/` (+ `validation/`, `distributed/`) | Sequential: `plane_wave.jl`, `ring_wave.jl`, `periodic_plane_wave.jl`, and BC-generation `bc_plane_wave.jl`, `bc_irregular_sea.jl` (JONSWAP, gauge CSV), `bc_directional_sea.jl`; `examples/distributed/` — 6 env-configurable cluster scripts (plane/ring wave, IC hump, bathymetry, `run_irregular_sea_dist.jl`, `run_directional_sea_dist.jl` — sea-state env vars + `build_airy_state()` in `_dist_common.jl`) + README; `examples/validation/` — physical benchmarks (`stokes_harmonics`, `submerged_bar`, `solitary_wave`, `ring_spreading`, `bichromatic_sideband`) + `dispersion_sweep.jl` + `spectral_fidelity.jl` (JONSWAP component-wise amplitude+dispersion transfer) + README; `examples/distributed_small/` — **5 parametric** small-domain (50×20 m) scripts (`run_periodic_plane_small` [interior line source], `run_ring_small` [point source], `run_bc_plane_small` [`:bc_gen` boundary plane wave], `run_directional_sea_small`, `run_irregular_sea_small` [`:bc_gen` WaveSpec sea]) grouped by wave-generation type; the 20 observation/comparison cases are their **launchers** in `run/dist_small/`, each overriding only the env vars that change (regime / nl_pressure / flat_bed→bar / amplitude / period). See the "Current Implementation Stage" small-domain-suite entry. **`examples/local_1d/run_flume_1d.jl`** — the parametric **quasi-1D flume** (narrow domain, `ny≥3`, y-periodic; the solver is structurally 2-D, so this is how a 1-D horizontal problem is posed — it is *not* a 1-D model, see the script header), sequential-with-gauges locally and MPI `(px,1)` on the cluster, `LFEM_WAVE_GEN ∈ {inner,bc,sea}`. **`examples/local_2d/run_small_2d.jl`** — the parametric small 2-D case (25×10 m, 6 ranks as `3×2`), `LFEM_WAVE_GEN ∈ {line,point,bc,sea}`, each case a scaled-down sibling of a named `run/dist_small/` job. **`examples/inspect_run.jl`** — stdlib-only reader that turns a run's `diagnostics.csv` into a health verdict (works on cluster output too). |
 | `postprocessing/` (`GridapLFEMPost`) | Self-contained postprocessing library with its own environment (ReadVTK, Plots+GR, FFTW, Interpolations — pinned separately from the solver). Reads VTK (`solution.pvd`/`sol_t_*.vtu`) + CSV → `WaveSimulation` (auto-`regularize!`s the duplicated Q2 node cloud to a Cartesian grid). Modules: `io, probes, spectral, diagnostics, reconstruct, plotting, seastate`. Gauges/DFT/celerity/harmonics/radial/conservation; heatmap/animation(GIF)/Hovmöller/dispersion/profile plots; `seastate.jl` — Welch PSD, JONSWAP target overlay, spectral moments/Hs, zero-upcrossing heights, Rayleigh exceedance (+ `spectral_validation.jl` example). `reconstruct.jl` rebuilds `w(σ)`/`p_nh(σ)` from the stored velocity modes at any σ (analytic σ-basis, Gauss quad, no Gridap; matches solver `w_s` to 4–8%). No dependency on the solver. |
 | `WaveSpec.jl/` (repo-vendored package) | Stochastic sea-state synthesis (CMOE-TUDelft; JONSWAP/TMA/… spectra, sampling strategies, angular spreading, `AiryState`). Tracks the **GitHub repository version, not a tagged release** — the release's `change_seed!` reads a non-existent `state.spec` field and breaks every sea-state run; the repo version has the fix. `Pkg.develop`ed in both environments; `using WaveSpec` is re-exported by `GridapLFEM`. The `WaveInput` converter (`src/waveinput.jl`) snapshots seeded amplitudes/phases into plain arrays and re-solves the wavenumbers with the solver's `g` (WaveSpec uses 9.80665). |
@@ -133,15 +133,21 @@ The `test/` suite (21 files + `cluster/` + `test/local/`) passes: asymptotic con
 Postprocessing (`GridapLFEMPost`) and the authoritative LaTeX derivation are in place and
 compile-checked.
 
-**What "validated" does and does not mean here — read this before claiming correctness.** All of the
-above is **self-consistency**: each test compares the solver against an analytical or physical
-expectation *using the solver's own residual*. That is genuinely strong evidence — a wrong residual
-would have to be wrong in a way that preserves the dispersion relation, the shallow-water limit, the
-Airy vertical profile, the rest state, mass conservation, and the `O(A²)` ordering of every physics
-tier simultaneously. But it is not **verification**: no test currently in the repository would
-detect a residual that is self-consistently wrong, because the one test designed to do so
-(`test_equivalence.jl`, against an external second implementation) has been retired with a stale
-reference. Closing that is the top open item, and the method is fully specified (analytic MMS).
+**What "validated" and "verified" mean here — read this before claiming correctness.** Most of the
+suite is **self-consistency**: each test compares the solver against an analytical or physical
+expectation *using the solver's own residual*. That is strong evidence — a wrong residual would have
+to be wrong in a way that preserves the dispersion relation, the shallow-water limit, the Airy
+vertical profile, the rest state, mass conservation, and the `O(A²)` ordering of every physics tier
+simultaneously — but it is not verification: such a test cannot detect a residual that is
+self-consistently wrong, because the error cancels.
+
+**Since 2026-08-12 one part IS verified.** The analytic MMS (`src/mms.jl`, Stage 1) derives its
+forcing from the governing equations without touching `problem.jl`, so the error does not cancel,
+and the solver attains the **theoretical order of accuracy** — which certifies that the discretised
+operator is the intended one. **Scope: the linear core on a flat bed only** (mass, `M`-acceleration,
+`gΦ∇η`, `d²B` dispersion). The nonlinear core, the curved-bed packages and the 𝓝 blocks are Stages
+2–4 and remain **unverified**; for those the paragraph above still applies in full. Say
+*"Stage 1 verified"*, never bare *"the residual is verified"*.
 
 **Recently completed (this branch).**
 - **LOCAL OBSERVATION CAMPAIGN — 13 cases run and analysed** (2026-08-06 → 08-11). Full results and
@@ -373,18 +379,41 @@ reference. Closing that is the top open item, and the method is fully specified 
   abstract** on the arbitrary-order model was drafted (`building_files/CFC2027_LFEMultilayer_abstract/`).
 
 **Under development / open:**
-- **The residual has no independent verification — the top scientific priority.** Every passing test
-  compares the solver against theory *using the solver's own residual*, and such a test cannot
-  detect a residual that is self-consistently wrong. The former acceptance test
-  (`test_equivalence.jl`) is **retired**: its external per-layer reference in `../LFE-M_2D_solver/`
-  was never updated as the weak form was completed (it lacks the leading-pressure term `R_P`), so
-  its 1/10 result measures the reference's age, not a defect here — do **not** chase it as a bug.
-  **The fix is fully specified and ready to implement:** the *analytic* MMS in
-  `building_files/LFEM_discretisation/NumericalImplementation/ValidationTests.tex`
-  ("Analytic (verification) MMS"). Forcing derived from the governing equations independently of
-  `problem.jl`, staged linear/flat → +advection → +curved bed → +nonlinear pressure, verified by a
-  measured **order of accuracy** (3 in `h` for Q2, 2 in `Δt`). Stage 1 is derived there in closed
-  form, with a free self-check: on a plane-wave eigenmode the forcing must vanish to round-off.
+- **Residual verification: STAGE 1 DONE (2026-08-12), Stages 2–4 open.** The analytic MMS is
+  implemented (`src/mms.jl`, `src/errors.jl`, `src/mms_driver.jl`) and **verifies the linear
+  flat-bed operator** — mass, `M`-acceleration, `gΦ∇η`, `d²B` dispersion. Forcing derived from the
+  governing equations in closed form, never touching `problem.jl` (enforced by a grep gate), so
+  unlike `test_selfconsistency.jl` the error does **not** cancel. Gates: eigenmode `𝓛(u*)=3.6e-15`,
+  closed-form ≡ ForwardDiff `1.8e-15`. **Still open: Stage 2 (+advection), 3 (+curved bed),
+  4 (+𝓝 blocks)** — the architecture stages into them; nothing beyond the linear core is verified.
+  Full record: `building_files/MMS_ANALYTIC_PLAN.md`.
+- **⚠ The verification also found that the EQUAL-ORDER FE PAIRING COSTS ONE ORDER OF CONVERGENCE.**
+  Measured: `Q2/Q2` converges at `p`(=2), `Q3/Q3` at `p`(=3) — uniformly `p`, not the theoretical
+  `p+1`. Mixed order `Q_p/Q_{p-1}` fixes the **surface** universally and the **velocity** at `Q3/Q2`.
+  **Confirmed by a 12-study campaign** (3 pairings × 1-D/2-D × static/transient,
+  `building_files/MMS_CONVERGENCE_CAMPAIGN.md`) — state the two fields SEPARATELY:
+  * **`η` reaches its optimal `p_e+1` in 12/12 studies**, exactly: `2.000/3.000/4.000` (1-D),
+    `1.980/2.997/3.994` (2-D), and static ≡ transient to 4 significant figures.
+  * **`u` reaches its optimal `p_u+1` only at `Q3/Q2`** (3.991 1-D, 3.930 2-D — four independent
+    studies). At `Q2/Q1` it stalls near 2.4 (optimal 3) and at `Q4/Q3` near 4.65 (optimal 5), with
+    the pairwise rate still *falling* at the finest level in both. Genuinely suboptimal vs merely
+    pre-asymptotic is **undetermined**.
+  ⚠ The 1-D `Q4/Q3` fitted `p_u=3.345` is a **round-off floor, not a rate** — `e_u` goes
+  `1.79e-11 → 1.14e-11` over the last refinement and the pairwise rate collapses to 0.657. Discard
+  it; `Q4` in 1-D cannot be refined further in double precision.
+  **On this evidence `Q3/Q2` is the pairing to prefer** — the only one measured optimal in both fields.
+  Cause: `η` enters momentum undifferentiated via `∇·v` after IBP, so it plays the pressure role and
+  equal-order continuous spaces are inf-sup deficient (the Stokes analogue); velocity one order above
+  the surface is the Taylor–Hood pairing. **This is what verified the residual**: the operator code is
+  byte-identical across those runs, and a wrong coefficient cannot be repaired by changing the FE
+  spaces, so reaching `p+1` under a stable pairing proves the operator is the intended one.
+  Time integration and `R_P` were each eliminated first by experiment (steady `ω=0` field reproduces
+  the same rates to 3 decimals; `B=0` makes `η` *worse*, so `R_P` is stabilising, not harmful).
+  `build_fe_spaces(...; p_eta=…)` exposes the pairing, **defaulting to the existing equal-order
+  behaviour** — nothing changes until deliberately opted in.
+  **Do not switch production on the rate alone:** at `nx=24`, `Q3/Q3` gives `e_eta=5.97e-7` vs
+  `Q3/Q2`'s `2.40e-5` — 40× *more accurate at that mesh* despite the worse rate, because `η` sits in
+  a richer space. An error-vs-DOF comparison at production resolution is **not yet run**.
 - **Run `test_2d_reduces_to_1d.jl`** — written, registered in the runner, not yet executed. A
   y-invariant 2-D run must reproduce the quasi-1-D flume to 1e-6. It is the sharpest check available
   short of the analytic MMS, because it tests the solver against a *symmetry the model must respect*
@@ -768,6 +797,14 @@ same number every step**, with Newton needing 8–24 iterations instead of 3–5
 
 ## 8. Solver conventions and key rules
 
+* **FE PAIRING: equal order costs one convergence order (measured 2026-08-12).** `Q_p/Q_p` for
+  `(η, 𝖴)` converges at `p`, not `p+1`; `Q3` velocity with `Q2` surface recovers `p+1` for both.
+  `η` enters momentum undifferentiated via `∇·v` after IBP, so it is the pressure of a Stokes-like
+  pairing and equal-order continuous spaces are inf-sup deficient. `build_fe_spaces(...; p_eta=…)`
+  selects the surface order and **defaults to equal order (unchanged behaviour)**. Before switching
+  production, compare error-vs-DOF at realistic mesh sizes: the higher rate does not automatically
+  win at a given mesh (`Q3/Q3` was 40× more accurate than `Q3/Q2` at `nx=24`). Evidence and the full
+  diagnosis trail: `building_files/MMS_ANALYTIC_PLAN.md`.
 * **`fe_order ≥ 2`** — Q1 elements zero the `R_P` dispersion term (they cannot represent the
   second-order pressure coupling), so the horizontal FE order must be at least 2.
 * **Solid-wall Dirichlet BCs must include the corner tags** — omitting them leaves the corner DOFs

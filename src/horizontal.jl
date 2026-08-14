@@ -74,10 +74,19 @@ Other arguments:
 """
 function build_fe_spaces(model, p_horizontal::Int, Nσ::Int;
                              y_wall_bc::Symbol = :wall, x_wall_bc::Bool = false,
-                             inflow = nothing)
+                             inflow = nothing,
+                             p_eta::Int = p_horizontal)
+    #  p_eta < p_horizontal gives a TAYLOR-HOOD-LIKE pairing (velocity one order
+    #  above the surface). η enters the momentum equation undifferentiated, via
+    #  ∇·v after integration by parts, so it plays the role pressure plays in
+    #  Stokes; equal order (the default, p_eta = p_horizontal) is the analogue of
+    #  equal-order velocity/pressure and is not generally inf-sup optimal. The
+    #  analytic MMS measures order p rather than p+1 on the equal-order pairing —
+    #  see building_files/MMS_ANALYTIC_PLAN.md. Default is UNCHANGED, so every
+    #  existing call keeps the equal-order spaces it had.
     y_wall_bc in (:wall, :open, :periodic) ||
         error("build_fe_spaces: y_wall_bc must be :wall, :open or :periodic (got :$y_wall_bc)")
-    reffe_eta = ReferenceFE(lagrangian, Float64, p_horizontal)
+    reffe_eta = ReferenceFE(lagrangian, Float64, p_eta)
     reffe_U   = ReferenceFE(lagrangian, VectorValue{Nσ,Float64}, p_horizontal)
     zvv       = VectorValue(ntuple(_ -> 0.0, Nσ)...)
     # Dirichlet y-wall only for :wall; :open and :periodic impose no y-essential BC

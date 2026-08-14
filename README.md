@@ -445,11 +445,29 @@ records are in `building_files/DESIGN_RECORDS.md`.
   its 1/10 result measures the reference's age, not a defect here. The construction (layout-
   independent virtual work) remains the right instrument should a *current* second implementation
   ever exist.
-- **The residual has no independent verification yet.** Every passing test compares the solver
-  against theory *using the solver's own residual*, which cannot detect a residual that is
-  self-consistently wrong. Closing this is the analytic MMS specified in
-  `building_files/LFEM_discretisation/.../ValidationTests.tex` ("Analytic (verification) MMS"):
-  forcing derived from the governing equations, with a measured order of accuracy.
+- **Residual verification — Stage 1 DONE (2026-08-12); Stages 2–4 open.** The analytic MMS
+  (`src/mms.jl`, `src/errors.jl`, `src/mms_driver.jl`, `test/test_mms_*.jl`) derives its forcing from
+  the governing equations *without touching* `problem.jl`, so — unlike every other test here — the
+  error does not cancel and the measured **order of accuracy** certifies the operator. It verifies
+  the **linear core on a flat bed** (mass, `M`-acceleration, `gΦ∇η`, `d²B` dispersion): eigenmode
+  gate `𝓛(u*) = 3.6e-15`, closed-form ≡ ForwardDiff `1.8e-15`. The nonlinear core, curved bed and 𝓝
+  blocks (Stages 2–4) are **still unverified**. Full record: `building_files/MMS_ANALYTIC_PLAN.md`.
+- **⚠ Equal-order FE spaces cost one order of convergence** (found by the above). `Q_p/Q_p` for
+  `(η, 𝖴)` converges at `p`, not `p+1`. Mixed order `Q_p/Q_{p-1}` fixes the **surface** universally
+  and the **velocity** at `Q3/Q2` — measured over a 12-study campaign
+  (`building_files/MMS_CONVERGENCE_CAMPAIGN.md`); the two fields must be stated separately:
+  **`η` hits its optimal `p_e+1` in 12/12 studies** (`2.000/3.000/4.000` in 1-D, `1.980/2.997/3.994`
+  in 2-D, static ≡ transient to 4 figures), while **`u` hits `p_u+1` only at `Q3/Q2`** (3.991 / 3.930);
+  at `Q2/Q1` it stalls near 2.4 (optimal 3) and at `Q4/Q3` near 4.65 (optimal 5), rates still falling.
+  The 1-D `Q4` figure of 3.345 is a **round-off floor, not a rate** (`e_u` 1.79e-11 → 1.14e-11).
+  **`Q3/Q2` is the pairing to prefer on current evidence.**
+  `η` enters momentum undifferentiated via `∇·v` after integration
+  by parts, so it plays the pressure role and equal order is inf-sup deficient — the Stokes analogue,
+  fixed by the Taylor–Hood pairing. This is also *what verified the residual*: the operator code is
+  identical across those runs, and a wrong coefficient cannot be repaired by changing FE spaces.
+  `build_fe_spaces(...; p_eta=…)` exposes the choice and **defaults to equal order (unchanged)**.
+  Do not switch production on the rate alone — at `nx=24` `Q3/Q3` was 40× more accurate than `Q3/Q2`
+  despite the worse rate; an error-vs-DOF study at production resolution is not yet run.
 
 
 - The vendored **`WaveSpec.jl`** must track the **GitHub repository version, not a tagged release**:
