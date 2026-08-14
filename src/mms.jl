@@ -268,6 +268,140 @@ function model_celerity(vert, d::Float64, g::Float64, k::Float64)
 end
 
 """
+    bathymetry_field(; d0=1.0, a_b=0.2, kbx=1.0, kby=0.0) → h(x,y)
+
+Smooth analytic bathymetry for the variable-bed MMS:
+`h = d0 (1 + a_b sin(kbx x) cos(kby y))`, so `h ∈ [(1−a_b)d0, (1+a_b)d0] > 0` for `a_b < 1`.
+
+Trigonometric (not polynomial) so it is not in the FE space. `kby=0` gives a y-invariant bed for
+the quasi-1D case. Derivatives are taken by AD where needed, so no hand-coded `∇h`/`∇²h` is exposed
+— one fewer place for the two to disagree.
+"""
+bathymetry_field(; d0::Float64 = 1.0, a_b::Float64 = 0.2,
+                   kbx::Float64 = 1.0, kby::Float64 = 0.0) =
+    (x, y) -> d0*(1 + a_b*sin(kbx*x)*cos(kby*y))
+
+"""
+    strong_residual_linear(cbs, vert, hfun, g, x, y, t) → (Lη, Lx, Ly)
+
+`𝓛(u*)` for the **linearised model over ARBITRARY bathymetry** `hfun(x,y)`
+(`LinearModel.tex` `eq: linearised system momentum`), every derivative by ForwardDiff:
+
+    𝓛_η = ∂ₜη + Σⱼ Φⱼ ∇·(h uⱼ)
+    𝓛_i = h Σⱼ Mᵢⱼ u̇ⱼ + g h Φᵢ ∇η + ∇( h² Σⱼ 𝓛ⱼ·Pᵢⱼ ) − h ∇h Σⱼ 𝓛ⱼ·(Aᵢⱼ+Kᵢⱼ)
+    𝓛ⱼ  = [ −u̇ⱼ·∇h , u̇ⱼ·∇h , −∇·(h u̇ⱼ) ]
+
+**Derived by AD on the analytic expressions, NOT by hand.** With variable `h` the
+`∇(h²Σ𝓛·P)` term expands into a large product-rule tree; a hand slip there would produce a wrong
+forcing, a collapsed rate, and the appearance of a solver defect. AD removes that risk while keeping
+the forcing fully independent of `problem.jl` — which is the property the MMS depends on.
+
+Setting `hfun ≡ const` reduces this to the Stage-1 operator times `h` (gate G-flat).
+"""
+function strong_residual_linear(cbs, vert, hfun, g::Float64,
+                                x::Float64, y::Float64, t::Float64)
+    Φ = vert.Phi; M = vert.Mmat; N = length(Φ)
+    P = vert.P; A = vert.A; K = vert.K       # (N,N,3) each
+
+    # --- scalar building blocks, generic in the number type (AD-able) ---------
+    hv(ξ, υ)       = hfun(ξ, υ)
+    dt_u(ξ,υ,τ,j,c)= c == 1 ? ForwardDiff.derivative(s -> cbs.ux(ξ,υ,s,j), τ) :
+                              ForwardDiff.derivative(s -> cbs.uy(ξ,υ,s,j), τ)
+    # ∇·(h u̇ⱼ)
+    div_hudot(ξ,υ,j) =
+        ForwardDiff.derivative(a -> hv(a,υ)*dt_u(a,υ,t,j,1), ξ) +
+        ForwardDiff.derivative(b -> hv(ξ,b)*dt_u(ξ,b,t,j,2), υ)
+    # 𝓛ⱼ components at a point
+    function Lvec(ξ, υ, j)
+        dhx = ForwardDiff.derivative(a -> hv(a,υ), ξ)
+        dhy = ForwardDiff.derivative(b -> hv(ξ,b), υ)
+        ugh = dt_u(ξ,υ,t,j,1)*dhx + dt_u(ξ,υ,t,j,2)*dhy
+        return (-ugh, ugh, -div_hudot(ξ,υ,j))
+    end
+    # scalar  Sᵢ(ξ,υ) = h² Σⱼ 𝓛ⱼ·Pᵢⱼ   (the leading-pressure potential)
+    function Spot(ξ, υ, i)
+        h2 = hv(ξ,υ)^2
+        s  = zero(promote_type(typeof(ξ), typeof(υ)))
+        for j in 1:N
+            L = Lvec(ξ,υ,j)
+            s += P[i,j,1]*L[1] + P[i,j,2]*L[2] + P[i,j,3]*L[3]
+        end
+        return h2*s
+    end
+
+    h   = hv(x,y)
+    dhx = ForwardDiff.derivative(a -> hv(a,y), x)
+    dhy = ForwardDiff.derivative(b -> hv(x,b), y)
+
+    # continuity: ∂ₜη + Σⱼ Φⱼ ∇·(h uⱼ)
+    dt_eta = ForwardDiff.derivative(s -> cbs.eta(x,y,s), t)
+    Lη = dt_eta
+    for j in 1:N
+        divhu = ForwardDiff.derivative(a -> hv(a,y)*cbs.ux(a,y,t,j), x) +
+                ForwardDiff.derivative(b -> hv(x,b)*cbs.uy(x,b,t,j), y)
+        Lη += Φ[j]*divhu
+    end
+
+    dx_eta = ForwardDiff.derivative(a -> cbs.eta(a,y,t), x)
+    dy_eta = ForwardDiff.derivative(b -> cbs.eta(x,b,t), y)
+    Lxv = zeros(Float64, N); Lyv = zeros(Float64, N)
+    for i in 1:N
+        acc_x = sum(M[i,j]*dt_u(x,y,t,j,1) for j in 1:N)
+        acc_y = sum(M[i,j]*dt_u(x,y,t,j,2) for j in 1:N)
+        gradSx = ForwardDiff.derivative(a -> Spot(a,y,i), x)
+        gradSy = ForwardDiff.derivative(b -> Spot(x,b,i), y)
+        sAK = 0.0
+        for j in 1:N
+            L = Lvec(x,y,j)
+            sAK += (A[i,j,1]+K[i,j,1])*L[1] + (A[i,j,2]+K[i,j,2])*L[2] +
+                   (A[i,j,3]+K[i,j,3])*L[3]
+        end
+        Lxv[i] = h*acc_x + g*h*Φ[i]*dx_eta + gradSx - h*dhx*sAK
+        Lyv[i] = h*acc_y + g*h*Φ[i]*dy_eta + gradSy - h*dhy*sAK
+    end
+    return Lη, Lxv, Lyv
+end
+
+"""
+    mms_forcing(field, vert, hfun, g; regime, flat_bed) → (Seta, Sx, Sy)
+
+**THE single entry point — the forcing is selected by the SAME symbols that select the solver
+model**, so a forcing/model mismatch is unrepresentable rather than merely discouraged. Feeding a
+`flat_bed=false` solver with flat-bed forcing would produce a silently wrong convergence rate that
+looks like a solver defect; this signature makes that impossible.
+
+| `regime` | `flat_bed` | forcing |
+|---|---|---|
+| `:linear` | `true`  | Stage-1 closed form (fast) |
+| `:linear` | `false` | variable-bed, by AD on `strong_residual_linear` |
+| `:nonlinear` | any | not implemented — explicit error, never a silent wrong answer |
+"""
+function mms_forcing(field::MMSField, vert, hfun, g::Float64;
+                     regime::Symbol = :linear, flat_bed::Bool = true)
+    regime === :linear || error(
+        "mms_forcing: regime=:$regime has no analytic MMS yet (Stage 2+ = advection / 𝓝 blocks). " *
+        "Refusing rather than silently using the linear forcing.")
+    if flat_bed
+        d0 = hfun(0.0, 0.0)
+        # guard: a flat_bed=true forcing over a non-constant bed is a silent-wrong-answer trap
+        for (px,py) in ((0.31,0.17),(1.13,0.87),(0.66,1.02))
+            isapprox(hfun(px,py), d0; rtol=1e-12) || error(
+                "mms_forcing: flat_bed=true but hfun varies (h(0,0)=$d0, h($px,$py)=$(hfun(px,py))). " *
+                "This mismatch would void the convergence rate — pass flat_bed=false.")
+        end
+        return mms_forcing_stage1(field, vert, d0, g)
+    end
+    cbs = field_callables(field)
+    N   = field.Nσ
+    Seta = (x, t) -> strong_residual_linear(cbs, vert, hfun, g, x[1], x[2], t)[1]
+    Sx   = (x, t) -> (L = strong_residual_linear(cbs, vert, hfun, g, x[1], x[2], t);
+                      VectorValue(ntuple(i -> L[2][i], N)))
+    Sy   = (x, t) -> (L = strong_residual_linear(cbs, vert, hfun, g, x[1], x[2], t);
+                      VectorValue(ntuple(i -> L[3][i], N)))
+    return (Seta = Seta, Sx = Sx, Sy = Sy)
+end
+
+"""
     standing_mode(vert, d, g; n=1, Lx=1.0, eta_hat=1.0) → (cbs, ω, û, k)
 
 An **exact, unforced** solution of the Stage-1 strong form that ALSO satisfies the

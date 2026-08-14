@@ -37,6 +37,8 @@ function run_mms_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                         p_eta::Int = 0,            # 0 ⇒ equal order. Set < p_horizontal for a
                                                    #   Taylor-Hood-like pairing (see build_fe_spaces).
                         field = nothing,
+                        hfun = nothing,            # bathymetry h(x,y); nothing ⇒ constant `d`
+                        flat_bed::Bool = true,     # selects BOTH the solver model and the forcing
                         vert_override = nothing,   # substitute vertical tensors. Used to ISOLATE a
                                                    #   term: e.g. `merge(NamedTuple(pairs(v)),
                                                    #   (B=zeros(size(v.B)),))` drops R_P from the
@@ -64,13 +66,17 @@ function run_mms_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
     dΩh          = Measure(trian, 2*max(p_horizontal, pe) + 2)
 
     # --- the forcing, derived independently of the residual code ----------
-    src  = mms_forcing_stage1(f, vert, d, g)
+    #  ONE bathymetry object feeds BOTH the forcing and the solver, and the SAME
+    #  regime/flat_bed symbols select both, so the two cannot describe different
+    #  models. mms_forcing additionally REJECTS flat_bed=true over a varying bed.
+    hf   = hfun === nothing ? ((xx, yy) -> d) : hfun
+    src  = mms_forcing(f, vert, hf, g; regime = :linear, flat_bed = flat_bed)
 
     prob = build_problem(vert; g = g,
-                         h_bathy     = (x -> d),      # constant depth: Stage-1 requirement
+                         h_bathy     = (x -> hf(x[1], x[2])),
                          regime      = :linear,
                          nl_pressure = :none,
-                         flat_bed    = true,
+                         flat_bed    = flat_bed,
                          mu_sponge   = (x -> 0.0),    # sponge OFF
                          wm_src      = ((x, t) -> 0.0),  # wavemaker OFF
                          mms_src     = src)

@@ -128,6 +128,7 @@ export mms_eta, mms_ux, mms_uy
 export mms_exact_eta, mms_exact_ux, mms_exact_uy
 export mms_forcing_stage1, strong_residual_stage1
 export model_celerity, eigenmode_callables, standing_mode, exact_cfs
+export bathymetry_field, strong_residual_linear, mms_forcing
 export run_mms_case, run_mms_refinement, mms_dt_independence
 export run_model_case, run_model_refinement
 export run_conv_study, run_mms_case_distributed
