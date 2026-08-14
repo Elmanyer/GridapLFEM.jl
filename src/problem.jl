@@ -245,17 +245,44 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
 
     # ---- acceleration ----------------------------------------------------------
     accx = alg_mul(prob.Mv, Uxt); accy = alg_mul(prob.Mv, Uyt)
-    r = lin ? r + ∫( (Wx ⋅ accx) + (Wy ⋅ accy) ) * dΩh :
+    #  LINEAR: h-WEIGHTED, per LinearModel.tex `eq: linearised system momentum`
+    #  (Σⱼ h Mᵢⱼ u̇ⱼ). The h-DIVIDED form used previously is exact ONLY on a flat bed,
+    #  where it is a mere rescaling; over variable bathymetry it is a different model.
+    #  See building_files/MMS_VARBED_PLAN.md §0.A (audit + derivation).
+    r = lin ? r + ∫( d_cf*((Wx ⋅ accx) + (Wy ⋅ accy)) ) * dΩh :
               r + ∫( H*(Wx ⋅ accx) + H*(Wy ⋅ accy) ) * dΩh
 
     # ---- gravity (integrated-by-parts energy form; rest-state baseline removed) -
+    #  LINEAR: IBP of  g h Φᵢ ∇η  gives BOTH  h Φ·(∇·v)  AND  Φ·(v·∇h). The second
+    #  term was previously missing; it is O(∇h) so it vanishes on a flat bed.
     PhiDW = alg_dot(prob.Φ, DW)
-    r = lin ? r + ∫( (-g)*η*PhiDW ) * dΩh :
+    r = lin ? r + ∫( (-g)*η*( d_cf*PhiDW +
+                              alg_dot(prob.Φ, dhx*Wx + dhy*Wy) ) ) * dΩh :
               r + ∫( (-0.5*g)*(H*H - d_cf*d_cf)*PhiDW ) * dΩh
 
     # ---- leading pressure R_P (dispersion — MANDATORY) -------------------------
     if lin
-        r = r + ∫( (-1.0)*(d_cf*d_cf)*((alg_mul(prob.Bv, DUt)) ⋅ DW) ) * dΩh
+        #  Full linearised leading pressure ∇(h²Σⱼ𝓛ⱼ·Pᵢⱼ), IBP'd onto the test
+        #  divergence, with the LINEARISED 𝓛ⱼ = [−u̇ⱼ·∇h, u̇ⱼ·∇h, −∇·(h u̇ⱼ)]
+        #  (LinearModel.tex `eq: linearised linear pressure operator`). Note L2 = −L1
+        #  in the linearised model. All three components collapse to P³L³ on a flat
+        #  bed, recovering the previous expression times h.
+        LgT = dhx*Uxt + dhy*Uyt                       # u̇ⱼ·∇h, stacked
+        Ll1 = (-1.0)*LgT
+        Ll2 = LgT
+        Ll3 = (-1.0)*(d_cf*DUt + LgT)                 # −∇·(h u̇ⱼ)
+        sPl = alg_mul(prob.P[1], Ll1) + alg_mul(prob.P[2], Ll2) + alg_mul(prob.P[3], Ll3)
+        r = r + ∫( (-1.0)*(d_cf*d_cf)*(sPl ⋅ DW) ) * dΩh
+        #  Bed-slope pressure package  −h ∇h Σⱼ𝓛ⱼ·(Aᵢⱼ+Kᵢⱼ). Carries an explicit ∇h,
+        #  so it exists only over a non-flat bed — `lin_pressure` is exactly that
+        #  condition (resolve_physics: advection || !flat_bed). Previously the flag
+        #  was set but had NO consumer here.
+        if prob.lin_pressure
+            sAK = alg_mul(prob.Av[1], Ll1) + alg_mul(prob.Kv[1], Ll1) +
+                  alg_mul(prob.Av[2], Ll2) + alg_mul(prob.Kv[2], Ll2) +
+                  alg_mul(prob.Av[3], Ll3) + alg_mul(prob.Kv[3], Ll3)
+            r = r + ∫( (-1.0)*d_cf*( dhx*(sAK ⋅ Wx) + dhy*(sAK ⋅ Wy) ) ) * dΩh
+        end
     else
         UgHt = dHx*Uxt + dHy*Uyt                               # u̇ⱼ·∇H stacked
         if prob.P_full
@@ -383,13 +410,29 @@ function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dΩh)
 
     r = ∫( q*dηt ) * dΩh
     accx = alg_mul(prob.Mv, dUxt); accy = alg_mul(prob.Mv, dUyt)
-    r = lin ? r + ∫( (Wx ⋅ accx) + (Wy ⋅ accy) ) * dΩh :
+    #  h-weighted in the linear regime, matching global_residual (MMS_VARBED_PLAN §0.A)
+    r = lin ? r + ∫( d_cf*((Wx ⋅ accx) + (Wy ⋅ accy)) ) * dΩh :
               r + ∫( H*(Wx ⋅ accx) + H*(Wy ⋅ accy) ) * dΩh
 
     DW   = alg_dx(Wx) + alg_dy(Wy)
     dDUt = alg_dx(dUxt) + alg_dy(dUyt)
     if lin
-        r = r + ∫( (-1.0)*(d_cf*d_cf)*((alg_mul(prob.Bv, dDUt)) ⋅ DW) ) * dΩh
+        #  Exact derivative of the full linearised leading pressure AND the bed-slope
+        #  package; both are linear in u̇, so both belong here (MMS_VARBED_PLAN §0.A).
+        dhxl = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)
+        dhyl = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
+        dLgT = dhxl*dUxt + dhyl*dUyt
+        dLl1 = (-1.0)*dLgT
+        dLl2 = dLgT
+        dLl3 = (-1.0)*(d_cf*dDUt + dLgT)
+        dsPl = alg_mul(prob.P[1], dLl1) + alg_mul(prob.P[2], dLl2) + alg_mul(prob.P[3], dLl3)
+        r = r + ∫( (-1.0)*(d_cf*d_cf)*(dsPl ⋅ DW) ) * dΩh
+        if prob.lin_pressure
+            dsAK = alg_mul(prob.Av[1], dLl1) + alg_mul(prob.Kv[1], dLl1) +
+                   alg_mul(prob.Av[2], dLl2) + alg_mul(prob.Kv[2], dLl2) +
+                   alg_mul(prob.Av[3], dLl3) + alg_mul(prob.Kv[3], dLl3)
+            r = r + ∫( (-1.0)*d_cf*( dhxl*(dsAK ⋅ Wx) + dhyl*(dsAK ⋅ Wy) ) ) * dΩh
+        end
     else
         dhx = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)   # ∇h ≡ 0 on a flat bed
         dhy = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
@@ -429,8 +472,15 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dΩh)
     # gravity
     DW = alg_dx(Wx) + alg_dy(Wy)
     PhiDW = alg_dot(prob.Φ, DW)
-    r = lin ? r + ∫( (-g)*dη*PhiDW ) * dΩh :
-              r + ∫( (-g)*H*dη*PhiDW ) * dΩh
+    #  LINEAR: exact derivative of the h-weighted IBP gravity form, INCLUDING the
+    #  ∇h term that appears when g h Φ·∇η is integrated by parts (MMS_VARBED_PLAN §0.A).
+    r = if lin
+        dhxg = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)
+        dhyg = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
+        r + ∫( (-g)*dη*( d_cf*PhiDW + alg_dot(prob.Φ, dhxg*Wx + dhyg*Wy) ) ) * dΩh
+    else
+        r + ∫( (-g)*H*dη*PhiDW ) * dΩh
+    end
 
     # nonlinear-Acc η derivative (needs current u̇)
     if !lin

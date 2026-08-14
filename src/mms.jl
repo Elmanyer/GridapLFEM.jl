@@ -172,17 +172,26 @@ function mms_forcing_stage1(f::MMSField, vert, d::Float64, g::Float64)
         return cos(kx*x[1])*cos(ky*x[2]) *
                ( -f.a_eta*ω*sin(ω*t) + d*sum(Φ[j]*D[j] for j in 1:N) )
     end
+    #  ⚠ MOMENTUM FORCING CARRIES A FACTOR d (2026-08-14).
+    #  The solver's linear momentum is the h-WEIGHTED form of LinearModel.tex
+    #  `eq: linearised system momentum` (Σⱼ h Mᵢⱼ u̇ⱼ + g h Φᵢ∇η + ∇(h²𝓛·P)), not the
+    #  h-divided form these expressions were originally derived from. On a flat bed
+    #  h ≡ d is constant, so the two differ by exactly the constant factor d and the
+    #  forcing rescales by d. Continuity is unaffected (it was never h-divided).
+    #  A constant rescaling cannot change a convergence ORDER — the Stage-1 rates are
+    #  unchanged — but omitting it would make u* stop being the exact solution.
+    #  See building_files/MMS_VARBED_PLAN.md §0.A.
     function Sx(x, t)
         Π = Pi(t); s = sin(kx*x[1])*cos(ky*x[2])
         return VectorValue(ntuple(i ->
-            s*( ω*sum(M[i,j]*f.alpha[j]*cos(ω*t + f.phi[j]) for j in 1:N)
-                - kx*Π[i] ), N))
+            d*s*( ω*sum(M[i,j]*f.alpha[j]*cos(ω*t + f.phi[j]) for j in 1:N)
+                  - kx*Π[i] ), N))
     end
     function Sy(x, t)
         Π = Pi(t); c = cos(kx*x[1])*sin(ky*x[2])
         return VectorValue(ntuple(i ->
-            -c*( ω*sum(M[i,j]*f.beta[j]*sin(ω*t - f.psi[j]) for j in 1:N)
-                 + ky*Π[i] ), N))
+            -d*c*( ω*sum(M[i,j]*f.beta[j]*sin(ω*t - f.psi[j]) for j in 1:N)
+                   + ky*Π[i] ), N))
     end
     return (Seta = Seta, Sx = Sx, Sy = Sy)
 end
