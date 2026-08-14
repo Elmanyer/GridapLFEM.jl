@@ -51,6 +51,7 @@ function run_mms_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                         nl_tol::Float64 = 1e-12, nl_iter::Int = 50,
                         t0::Float64 = 0.0,
                         verbose::Bool = true,
+                        use_ad::Bool = false,   # AD Jacobians (3-arg TransientFEOperator)
                         output_dir::String = mktempdir())
     vert = vert_override === nothing ?
            assemble_vertical_tensors(M, p_vert, c_bdy) : vert_override
@@ -81,7 +82,8 @@ function run_mms_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                          wm_src      = ((x, t) -> 0.0),  # wavemaker OFF
                          mms_src     = src)
 
-    op     = build_ode_operator(prob, U, V, trian, dΩh)
+    op     = use_ad ? build_ode_operator_ad(prob, U, V, trian, dΩh) :
+                      build_ode_operator(prob, U, V, trian, dΩh)
     solver = build_ode_solver(dt; solver_type=solver_type, tableau=tableau,
                               theta=theta, nl_iter=nl_iter, nl_tol=nl_tol)
 
@@ -254,6 +256,8 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
                           Lx::Float64 = 1.7, Ly::Float64 = 1.1, d::Float64 = 1.0,
                           M::Int = 2, dt::Float64 = 1e-4, nsteps::Int = 100,
                           nl_tol::Float64 = 1e-14, distributed::Bool = false,
+                          flat_bed::Bool = true, a_b::Float64 = 0.0,
+                          kbx::Float64 = 1.3, kby::Float64 = 0.0,
                           cpu_grid::Tuple{Int,Int} = (2,2),
                           ls_rtol::Float64 = 1e-13, ls_maxiter::Int = 5000,
                           verbose::Bool = true)
@@ -278,7 +282,9 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
                                        ls_maxiter=ls_maxiter, verbose=false) :
             run_mms_case(; nx=nx, ny=ny, dt=dt, T_final=T_fin, Lx=Lx, Ly=Ly,
                            d=d, M=M, p_horizontal=p_u, p_eta=p_e, field=f,
-                           nl_tol=nl_tol, verbose=false)
+                           nl_tol=nl_tol, verbose=false, flat_bed=flat_bed,
+                           hfun = flat_bed ? nothing :
+                                  bathymetry_field(; d0=d, a_b=a_b, kbx=kbx, kby=kby))
         push!(hs, Lx/nx); push!(ee, r.e_eta); push!(eu, r.e_u); push!(nd, r.ndofs)
         verbose && @printf("    nx=%-4d ndofs=%-8d e_eta=%.6e  e_u=%.6e\n",
                            nx, r.ndofs, r.e_eta, r.e_u)
@@ -286,7 +292,7 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
     p_eta_fit, pw_eta = convergence_rate(hs, ee)
     p_u_fit,   pw_u   = convergence_rate(hs, eu)
     tag = "Q$(p_u)/Q$(p_e) $(domain == :d1 ? "1D" : "2D") " *
-          "$(distributed ? "dist" : "seq") $(mode)"
+          "$(distributed ? "dist" : "seq") $(mode) $(flat_bed ? "flat" : "varbed")"
     if verbose
         println("  ── $tag ──")
         println("    pairwise eta: ", round.(pw_eta, digits=3), "   optimal $(p_e+1)")

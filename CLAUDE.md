@@ -723,7 +723,7 @@ in the u̇-carrying terms (a quasi-Newton choice that keeps the Jacobian sparse)
 differentiation is not used because Gridap's multifield AD cannot dualize through `∂t(u)` (there is
 no `TransientMultiFieldCellField` constructor for the dual), so the hand Jacobians are the design;
 `build_ode_operator_ad` exists only as a cross-check path. That limitation was established on
-Gridap 0.19.11 and has **not been re-tested on 0.20.x** — but the hand Jacobians are the intended
+Gridap 0.19.11 and was **RE-TESTED 2026-08-14 on 0.20.8: it STILL HOLDS**. `build_ode_operator_ad` (the 3-arg `TransientFEOperator(r,U,V)`, which would have Gridap derive the Jacobians by AD) fails at construction with `MethodError: no method matching Gridap.ODEs.TransientMultiFieldCellField(...)` — no constructor for the dual type. So the hand Jacobians are **REQUIRED, not an optimisation**, and **no AD oracle exists to cross-check them** — which removes the cheapest way to separate a wrong residual from a wrong Jacobian, exactly the question open on the `flat_bed=false` path. Fallback: a finite-difference Jacobian (perturb DOFs, re-assemble, compare columns); needs no library support. Original note continued:
 design either way, so it is not on the critical path.
 
 **Coding rule (block arrays):** never apply `∇` to an `Operation`-composed expression containing a
