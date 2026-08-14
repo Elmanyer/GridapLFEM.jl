@@ -379,6 +379,25 @@ operator is the intended one. **Scope: the linear core on a flat bed only** (mas
   abstract** on the arbitrary-order model was drafted (`building_files/CFC2027_LFEMultilayer_abstract/`).
 
 **Under development / open:**
+- **🔴 BROKEN — `regime=:linear, flat_bed=false` DOES NOT CONVERGE (2026-08-14).** Newton stalls at
+  50 iterations with residual ~5e-3 on a *linear* problem, where it must converge in ONE iteration
+  if the Jacobian is the exact derivative of the residual. **Do not use the linear variable-bed path
+  until this is fixed.** The flat-bed path (`flat_bed=true`) is unaffected and fully verified.
+  *Localisation already done:* it fails even at `a_b = 0` (a perfectly CONSTANT bed), where `∇h = 0`
+  makes the assembly mathematically identical to `flat_bed=true`. So it is **not** the `∇h` values —
+  it is the structure of the `flat_bed=false` branch. The only assembly difference at zero slope is
+  the `𝓐/𝓚` `sAK` block, newly switched on by `lin_pressure = advection || !flat_bed`. The residual
+  norm *decreases* with slope (7.4e-3 → 6.6e-3 → 5.0e-3 for `a_b`=0/0.05/0.2), the opposite of a
+  slope-driven error — consistent with a structural, not magnitude, problem. Prime suspect: the
+  Gridap `MatrixBlock` restriction of design rule 12 (§8). **Next move: compare the assembled
+  Jacobian against an AD/finite-difference Jacobian at `a_b=0, flat_bed=false`** — that answers it
+  without further guessing. Introduced by commit `2579621`; full trail in `MMS_VARBED_PLAN.md`.
+- **Add "linear regime ⇒ Newton converges in 1 iteration" as a standing gate.** It is a free, sharp
+  Jacobian check that would have caught the above immediately. Every task-5 gate (G-flat 1.07e-14,
+  G-dispatch, G-mismatch, non-triviality 1.185) tested the FORCING, which is AD-derived and
+  independent; **none tested residual↔Jacobian agreement once `∇h ≠ 0`**, and the flat-bed regression
+  could not, because every new term vanishes there. That was the hole in the gate set.
+
 - **Residual verification: STAGE 1 DONE (2026-08-12), Stages 2–4 open.** The analytic MMS is
   implemented (`src/mms.jl`, `src/errors.jl`, `src/mms_driver.jl`) and **verifies the linear
   flat-bed operator** — mass, `M`-acceleration, `gΦ∇η`, `d²B` dispersion. Forcing derived from the
