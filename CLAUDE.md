@@ -379,7 +379,16 @@ operator is the intended one. **Scope: the linear core on a flat bed only** (mas
   abstract** on the arbitrary-order model was drafted (`building_files/CFC2027_LFEMultilayer_abstract/`).
 
 **Under development / open:**
-- **🔴 BROKEN — `regime=:linear, flat_bed=false` DOES NOT CONVERGE (2026-08-14).** Newton stalls at
+- **🟠 `regime=:linear, flat_bed=false` — RESIDUAL CORRECT, HAND JACOBIAN WRONG (updated 2026-08-15).**
+  **Use `use_ad=true` and it works**; the hand-Jacobian path stalls Newton at 50 iterations. Now that
+  the Gridap AD fix is in (§7), AD converges on this exact case while hand fails — and since AD
+  differentiates the *same assembled residual*, that **proves the residual is right** and confines the
+  defect to the hand Jacobian. Finite differences localise it further to the `𝓐/𝓚` `sAK` block:
+  `flat_bed=T lin_press=F` 2.2e-10 ✓ · `flat_bed=F lin_press=F` 2.0e-10 ✓ · `flat_bed=F lin_press=T`
+  **8.2e-2 ✗**. So the `h`-weighting, the gravity `∇h` term and the full 3-component leading pressure
+  are all CORRECT; only `sAK`'s Jacobian is wrong. Science is UNBLOCKED (run var-bed MMS with
+  `use_ad=true`); fixing the hand Jacobian is now a performance/cleanliness task with AD as its oracle.
+  *Superseded description of the original symptom:* Newton stalls at
   50 iterations with residual ~5e-3 on a *linear* problem, where it must converge in ONE iteration
   if the Jacobian is the exact derivative of the residual. **Do not use the linear variable-bed path
   until this is fixed.** The flat-bed path (`flat_bed=true`) is unaffected and fully verified.
@@ -723,7 +732,8 @@ in the u̇-carrying terms (a quasi-Newton choice that keeps the Jacobian sparse)
 differentiation is not used because Gridap's multifield AD cannot dualize through `∂t(u)` (there is
 no `TransientMultiFieldCellField` constructor for the dual), so the hand Jacobians are the design;
 `build_ode_operator_ad` exists only as a cross-check path. That limitation was established on
-Gridap 0.19.11 and was **RE-TESTED 2026-08-14 on 0.20.8: it STILL HOLDS**. `build_ode_operator_ad` (the 3-arg `TransientFEOperator(r,U,V)`, which would have Gridap derive the Jacobians by AD) fails at construction with `MethodError: no method matching Gridap.ODEs.TransientMultiFieldCellField(...)` — no constructor for the dual type. So the hand Jacobians are **REQUIRED, not an optimisation**, and **no AD oracle exists to cross-check them** — which removes the cheapest way to separate a wrong residual from a wrong Jacobian, exactly the question open on the `flat_bed=false` path. Fallback: a finite-difference Jacobian (perturb DOFs, re-assemble, compare columns); needs no library support. Original note continued:
+Gridap 0.19.11 and held through 0.20.8 — **but it is now FIXED (2026-08-15)**. The cause was never `ForwardDiff.Dual` at all: `time_derivative(::TransientMultiFieldCellField)` builds its third constructor argument with `map(cellfield, derivatives...)`, and `map` returns a **Tuple** when fed a Tuple but a **Vector** when fed an array-like MultiField container — while the struct field is declared `transient_single_fields::Vector{<:TransientCellField}`. The hand path passes a `MultiFieldFEFunction` (array-like ⇒ Vector ⇒ works); the AD path passes a plain Tuple ⇒ `MethodError`. **A one-line additive constructor fixes it** (`Tuple`→`Vector`), carried on the fork `Elmanyer/Gridap.jl`, branch `fix-transient-multifield-ad`, based on the `v0.20.8` tag, commit `fa860899c`; `Manifest.toml` pins it. Analysis: `AD_ISSUE.md`.
+  **Consequences — this changes the design, not just a dependency.** (a) `use_ad=true` now works, so **AD is an ORACLE for the hand Jacobians**: it differentiates the same assembled residual, so where AD converges and hand does not, the residual is right and the hand Jacobian is wrong. (b) Measured 2026-08-15: on a flat bed AD and hand agree **bit-for-bit** (`e_eta=7.974294e-05` both) — cross-validating both. (c) On `flat_bed=false` **AD converges where hand fails**, which PROVES the variable-bed residual is correct and the defect is confined to the hand Jacobian's `sAK` block. (d) The hand Jacobians remain the fast production path; AD is the verification path.
 design either way, so it is not on the critical path.
 
 **Coding rule (block arrays):** never apply `∇` to an `Operation`-composed expression containing a

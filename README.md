@@ -169,6 +169,20 @@ This directory is **both the package and the working environment**: the tests, e
 tooling are run directly against it (`julia --project=. test/test_basic.jl`), which is why `Test`,
 `BlockArrays`, `MPIPreferences` and `Preferences` sit in `[deps]` rather than `[extras]`.
 
+> **⚠ Gridap is a FORK (since 2026-08-15).** `Manifest.toml` pins
+> `https://github.com/Elmanyer/Gridap.jl.git`, branch `fix-transient-multifield-ad`, based on the
+> **`v0.20.8` tag** (not master) so the only delta from the validated stack is one commit,
+> `fa860899c`. It adds a single outer constructor to `TransientMultiFieldCellField` normalising a
+> `Tuple` to the `Vector` the struct declares. Without it, `time_derivative` on a multifield builds
+> that argument with `map`, which yields a Tuple on the AD path and a Vector on the hand path, so
+> **automatic differentiation of transient multifield residuals raised a `MethodError`** — long
+> recorded here as an insurmountable Gridap limitation. It is not, and it is not a `ForwardDiff.Dual`
+> problem: no `Dual` appears in the error. **Consequence: `use_ad=true` now works and serves as an
+> ORACLE for the hand-written Jacobians** (AD differentiates the same assembled residual, so
+> AD-converges-where-hand-fails isolates a hand-Jacobian defect). Analysis: `AD_ISSUE.md`.
+> Rebuild the cluster sysimage after changing this — `run/lfem_env.sh` hashes `src/*.jl` only and
+> will NOT notice a changed dependency.
+>
 > **Dependency versions.** This environment **and the cluster** run **Gridap 0.20.x /
 > GridapDistributed 0.4.17 / GridapSolvers 0.7.1 / PartitionedArrays 0.3.5 / MPI 0.20.26**.
 > `[compat]` also admits `Gridap 0.19` / `GridapSolvers 0.6`, because the two stacks were *measured*
