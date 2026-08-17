@@ -281,6 +281,250 @@ bathymetry_field(; d0::Float64 = 1.0, a_b::Float64 = 0.2,
                    kbx::Float64 = 1.0, kby::Float64 = 0.0) =
     (x, y) -> d0*(1 + a_b*sin(kbx*x)*cos(kby*y))
 
+# ===========================================================================
+#  THE PARENT EVALUATOR — all four models as restrictions of one strong form
+#
+#  ValidationTests.tex eq: mms strong general. Models 1–4 (§subsec: mms model1
+#  … model4) are restrictions of it under EXACTLY the substitutions
+#  resolve_physics performs on the solver:
+#
+#      flat_bed=true   →  ∇h ≡ 0  (one control point, as in global_residual)
+#      regime=:linear  →  H→h, ∇H→∇h, drop 𝓕_M, 𝓕_G, drop all 𝓝
+#      nl_pressure     →  :none ⇒ 𝓝≡0 | :native ⇒ {3,6,7,8} | :full ⇒ all 8
+#
+#  Writing them as ONE evaluator rather than six is not tidiness: it is what
+#  makes "the forcing and the solver are restrictions of the same parent" a
+#  property of the code instead of a claim in a comment.
+#
+#  ALL derivatives by ForwardDiff on the ANALYTIC u* and h — never on the
+#  residual. Components {1,2,4,5} of 𝓝 carry second derivatives of the
+#  unknowns and the leading-pressure term differentiates them once more, so
+#  the 𝓟 block is a THIRD derivative of u*. That is exact here and only here:
+#  the solver must integrate by parts or freeze-project those same terms.
+# ===========================================================================
+
+"Component sets of 𝓝 selected by `nl_pressure` (ValidationTests.tex §subsec: mms model3)."
+function _nl_components(nl_pressure::Symbol)
+    nl_pressure === :none   && return ()
+    nl_pressure === :native && return (3, 6, 7, 8)
+    nl_pressure === :full   && return (1, 2, 3, 4, 5, 6, 7, 8)
+    error("_nl_components: nl_pressure must be :none, :native or :full (got :$nl_pressure)")
+end
+
+"""
+    strong_residual_model(cbs, vert, hfun, g, x, y, t;
+                          regime, flat_bed, nl_pressure) → (Lη, Lx, Ly)
+
+`𝓛(u*)` for **any** of the four models, evaluated at one point. `cbs` is the
+`(eta, ux, uy)` callable triple of [`field_callables`](@ref); `hfun(x,y)` the
+analytic bathymetry.
+
+    𝓛_η = ∂ₜη + Σⱼ Φⱼ ∇·(H uⱼ)
+    𝓛_i = H Σⱼ Mᵢⱼ u̇ⱼ + H 𝓕_M,i + 𝓕_G,i + g H Φᵢ ∇η
+          + ∇[ H²( (𝓛:P)ᵢ + (𝓝⫶𝓟)ᵢ ) ]
+          − H[ ∇h( (𝓛:A)ᵢ + (𝓝⫶𝓐)ᵢ ) + ∇H( (𝓛:K)ᵢ + (𝓝⫶𝓚)ᵢ ) ]
+
+with `H = h+η` (`= h` when linear), `∇H = ∇h+∇η` (`= ∇h` when linear),
+`𝓛ⱼ = [−u̇ⱼ·∇h, u̇ⱼ·∇H, −∇·(H u̇ⱼ)]`, `𝓝ₖⱼ` the eight components of
+`eq: def Nkj nh pressure derivative`, and
+
+    𝓕_M,i = Σₖⱼ 𝓜ᵢₖⱼ (uₖ·∇uⱼ),      𝓕_G,i = Σₖⱼ 𝓖ᵢₖⱼ (∇·[Huₖ]) uⱼ .
+
+Tensor index order is `[i,k,j]` throughout, matching `assemble_vertical_tensors`.
+"""
+function strong_residual_model(cbs, vert, hfun, g::Float64,
+                               x::Float64, y::Float64, t::Float64;
+                               regime::Symbol      = :linear,
+                               flat_bed::Bool      = true,
+                               nl_pressure::Symbol = :none)
+    Φ  = vert.Phi;  M  = vert.Mmat;  N = length(Φ)
+    P  = vert.P;    A  = vert.A;     K = vert.K
+    Pc = vert.Pcal; Ac = vert.Acal;  Kc = vert.Kcal
+    Mc = vert.Mcal; Gc = vert.Gcal
+
+    lin   = regime === :linear
+    lin && nl_pressure !== :none && error(
+        "strong_residual_model: nl_pressure=:$nl_pressure requires regime=:nonlinear " *
+        "(a linear model carries no quadratic pressure) — mirrors resolve_physics.")
+    comps = lin ? () : _nl_components(nl_pressure)
+    useN  = !isempty(comps)
+
+    #  ⚠ KNOWN LIMITATION — nl_pressure ≠ :none is NOT yet usable (2026-08-16).
+    #  The 𝓝 components {1,2,4,5} carry second derivatives of u*, and the leading
+    #  pressure differentiates the result once more, so the 𝓟 block is a THIRD
+    #  derivative — three nested ForwardDiff levels. ForwardDiff decides which
+    #  perturbation is outermost by TAG PRECEDENCE, which is a property of the tag
+    #  TYPES (a deterministic but arbitrary ordering), not of the order the calls
+    #  are written in. For this call tree the outer spatial tag orders BELOW the
+    #  inner ones, so `partials` returns a Dual instead of a scalar and the result
+    #  is silently mis-nested (perturbation confusion) rather than merely slow.
+    #  Reproduced with both `derivative`×2 and a single `gradient`.
+    #  The fix is to remove the nesting, not to work around the symptom: supply the
+    #  spatial derivatives of u* and h ANALYTICALLY (they are elementary for
+    #  MMSField and bathymetry_field) so the evaluator contains ONE AD level.
+    #  See building_files/MMS_NONLINEAR_PLAN.md §"Risks".
+    #  Refusing loudly here rather than returning a wrong forcing — a wrong forcing
+    #  would show up as a collapsed convergence rate and look like a solver defect.
+    useN && error(
+        "strong_residual_model: nl_pressure=:$nl_pressure is not yet available. " *
+        "The 𝓝 blocks need three nested ForwardDiff levels and hit a tag-precedence " *
+        "inversion (see the comment at this line). regime=:nonlinear with " *
+        "nl_pressure=:none IS available and verified. Refusing rather than " *
+        "returning a silently mis-nested forcing.")
+
+    # --- scalar building blocks, generic in the number type (AD-able) ---------
+    hv(ξ, υ)          = hfun(ξ, υ)
+    ηv(ξ, υ, τ)       = cbs.eta(ξ, υ, τ)
+    uv(ξ, υ, τ, j, a) = a == 1 ? cbs.ux(ξ, υ, τ, j) : cbs.uy(ξ, υ, τ, j)
+    Hv(ξ, υ, τ)       = lin ? hv(ξ, υ) : hv(ξ, υ) + ηv(ξ, υ, τ)
+    ut(ξ, υ, τ, j, a) = ForwardDiff.derivative(s -> uv(ξ, υ, s, j, a), τ)
+
+    #  ∇h — the SINGLE control point for flat_bed, exactly as in global_residual
+    dh(ξ, υ, a) = flat_bed ? zero(promote_type(typeof(ξ), typeof(υ))) :
+                  (a == 1 ? ForwardDiff.derivative(p -> hv(p, υ), ξ) :
+                            ForwardDiff.derivative(p -> hv(ξ, p), υ))
+    dη(ξ, υ, τ, a) = a == 1 ? ForwardDiff.derivative(p -> ηv(p, υ, τ), ξ) :
+                              ForwardDiff.derivative(p -> ηv(ξ, p, τ), υ)
+    dH(ξ, υ, τ, a) = lin ? dh(ξ, υ, a) : dh(ξ, υ, a) + dη(ξ, υ, τ, a)
+
+    #  s_j = ∇·(H uⱼ)  and  ∇·(H u̇ⱼ)
+    sflux(ξ, υ, τ, j) = ForwardDiff.derivative(p -> Hv(p, υ, τ)*uv(p, υ, τ, j, 1), ξ) +
+                        ForwardDiff.derivative(p -> Hv(ξ, p, τ)*uv(ξ, p, τ, j, 2), υ)
+    sdot(ξ, υ, τ, j)  = ForwardDiff.derivative(p -> Hv(p, υ, τ)*ut(p, υ, τ, j, 1), ξ) +
+                        ForwardDiff.derivative(p -> Hv(ξ, p, τ)*ut(ξ, p, τ, j, 2), υ)
+
+    #  𝓛ⱼ = [−u̇ⱼ·∇h, u̇ⱼ·∇H, −∇·(H u̇ⱼ)]
+    function Lvec(ξ, υ, τ, j)
+        ugh = ut(ξ,υ,τ,j,1)*dh(ξ,υ,1)      + ut(ξ,υ,τ,j,2)*dh(ξ,υ,2)
+        ugH = lin ? ugh :
+              ut(ξ,υ,τ,j,1)*dH(ξ,υ,τ,1)    + ut(ξ,υ,τ,j,2)*dH(ξ,υ,τ,2)
+        return (-ugh, ugH, -sdot(ξ, υ, τ, j))
+    end
+
+    #  𝓝ₖⱼ — the eight quadratic components (eq: def Nkj nh pressure derivative)
+    function Nvec(ξ, υ, τ, k, j)
+        Z   = zero(promote_type(typeof(ξ), typeof(υ), typeof(τ)))
+        H   = Hv(ξ, υ, τ)
+        sj  = sflux(ξ, υ, τ, j)
+        sk  = sflux(ξ, υ, τ, k)
+        ukx = uv(ξ,υ,τ,k,1); uky = uv(ξ,υ,τ,k,2)
+        ujx = uv(ξ,υ,τ,j,1); ujy = uv(ξ,υ,τ,j,2)
+
+        c1 = (1 in comps) ?
+             -(ujx*ForwardDiff.derivative(p -> sflux(p,υ,τ,k), ξ) +
+               ujy*ForwardDiff.derivative(p -> sflux(ξ,p,τ,k), υ)) : Z
+        c2 = (2 in comps) ?
+             ( ForwardDiff.derivative(p -> sflux(p,υ,τ,k)*uv(p,υ,τ,j,1), ξ) +
+               ForwardDiff.derivative(p -> sflux(ξ,p,τ,k)*uv(ξ,p,τ,j,2), υ) ) : Z
+        #  aⱼ = uⱼ·∇h ,  bⱼ = uⱼ·∇H
+        aj(p, q) = uv(p,q,τ,j,1)*dh(p,q,1)   + uv(p,q,τ,j,2)*dh(p,q,2)
+        bj(p, q) = uv(p,q,τ,j,1)*dH(p,q,τ,1) + uv(p,q,τ,j,2)*dH(p,q,τ,2)
+        c3 = (3 in comps && !flat_bed) ?
+             -(ukx*ForwardDiff.derivative(p -> aj(p,υ), ξ) +
+               uky*ForwardDiff.derivative(p -> aj(ξ,p), υ)) : Z
+        c4 = (4 in comps) ?
+             ( ukx*ForwardDiff.derivative(p -> bj(p,υ), ξ) +
+               uky*ForwardDiff.derivative(p -> bj(ξ,p), υ) ) : Z
+        c5 = (5 in comps) ?
+             -(ukx*ForwardDiff.derivative(p -> sflux(p,υ,τ,j), ξ) +
+               uky*ForwardDiff.derivative(p -> sflux(ξ,p,τ,j), υ)) : Z
+        c6 = (6 in comps && !flat_bed) ?
+             -(sj/H)*(ukx*dh(ξ,υ,1) + uky*dh(ξ,υ,2)) : Z
+        c7 = (7 in comps) ?
+              (sj/H)*(ukx*dH(ξ,υ,τ,1) + uky*dH(ξ,υ,τ,2)) : Z
+        c8 = (8 in comps) ? -(sj/H)*sk : Z
+        return (c1, c2, c3, c4, c5, c6, c7, c8)
+    end
+
+    #  the leading-pressure potential  Ψᵢ = H²[ (𝓛:P)ᵢ + (𝓝⫶𝓟)ᵢ ]
+    function Ψ(ξ, υ, τ, i)
+        s = zero(promote_type(typeof(ξ), typeof(υ), typeof(τ)))
+        for j in 1:N
+            L = Lvec(ξ, υ, τ, j)
+            s += P[i,j,1]*L[1] + P[i,j,2]*L[2] + P[i,j,3]*L[3]
+        end
+        if useN
+            for k in 1:N, j in 1:N
+                Nc = Nvec(ξ, υ, τ, k, j)
+                for c in comps
+                    s += Nc[c]*Pc[i,k,j,c]
+                end
+            end
+        end
+        return Hv(ξ, υ, τ)^2 * s
+    end
+
+    # ---- assemble at the point ------------------------------------------------
+    H   = Hv(x, y, t)
+    dhx = dh(x, y, 1);      dhy = dh(x, y, 2)
+    dHx = dH(x, y, t, 1);   dHy = dH(x, y, t, 2)
+
+    #  continuity:  ∂ₜη + Σⱼ Φⱼ ∇·(H uⱼ)
+    Lη = ForwardDiff.derivative(s -> ηv(x, y, s), t)
+    for j in 1:N
+        Lη += Φ[j]*sflux(x, y, t, j)
+    end
+
+    dx_eta = dη(x, y, t, 1);  dy_eta = dη(x, y, t, 2)
+    Lxv = zeros(Float64, N);  Lyv = zeros(Float64, N)
+
+    #  precompute the per-(k,j) quantities the momentum loop reuses
+    svals = [sflux(x, y, t, j) for j in 1:N]
+    Nall  = useN ? [Nvec(x, y, t, k, j) for k in 1:N, j in 1:N] : nothing
+
+    for i in 1:N
+        acc_x = sum(M[i,j]*ut(x,y,t,j,1) for j in 1:N)
+        acc_y = sum(M[i,j]*ut(x,y,t,j,2) for j in 1:N)
+
+        #  ∇Ψ by a SINGLE gradient over [x,y], not two independent `derivative` calls.
+        #  Ψ itself contains inner ForwardDiff derivatives (𝓛 carries ∇·(H u̇), 𝓝 carries
+        #  second derivatives), so this is nested AD. Two separate outer `derivative`
+        #  calls create two independent tags, and ForwardDiff's tag PRECEDENCE — not the
+        #  order the calls are written in — decides which perturbation ends up outermost.
+        #  For the y-closure that ordering inverts, and `partials` then returns a Dual
+        #  instead of a Float64. One `gradient` uses ONE outer tag for both components,
+        #  so the nesting order is fixed and correct for x and y alike.
+        gΨ     = ForwardDiff.gradient(v -> Ψ(v[1], v[2], t, i), [x, y])
+        gradΨx = gΨ[1]
+        gradΨy = gΨ[2]
+
+        #  slope packages:  (𝓛:A)+(𝓝⫶𝓐)  and  (𝓛:K)+(𝓝⫶𝓚)
+        sA = 0.0; sK = 0.0
+        for j in 1:N
+            L = Lvec(x, y, t, j)
+            sA += A[i,j,1]*L[1] + A[i,j,2]*L[2] + A[i,j,3]*L[3]
+            sK += K[i,j,1]*L[1] + K[i,j,2]*L[2] + K[i,j,3]*L[3]
+        end
+        if useN
+            for k in 1:N, j in 1:N
+                Nc = Nall[k,j]
+                for c in comps
+                    sA += Nc[c]*Ac[i,k,j,c]
+                    sK += Nc[c]*Kc[i,k,j,c]
+                end
+            end
+        end
+
+        #  advection (nonlinear only)
+        advx = 0.0; advy = 0.0
+        if !lin
+            for k in 1:N, j in 1:N
+                ukx = uv(x,y,t,k,1); uky = uv(x,y,t,k,2)
+                gjx = ForwardDiff.derivative(p -> uv(p,y,t,j,1), x)*ukx +
+                      ForwardDiff.derivative(p -> uv(x,p,t,j,1), y)*uky
+                gjy = ForwardDiff.derivative(p -> uv(p,y,t,j,2), x)*ukx +
+                      ForwardDiff.derivative(p -> uv(x,p,t,j,2), y)*uky
+                advx += H*Mc[i,k,j]*gjx + Gc[i,k,j]*svals[k]*uv(x,y,t,j,1)
+                advy += H*Mc[i,k,j]*gjy + Gc[i,k,j]*svals[k]*uv(x,y,t,j,2)
+            end
+        end
+
+        Lxv[i] = H*acc_x + advx + g*H*Φ[i]*dx_eta + gradΨx - H*(dhx*sA + dHx*sK)
+        Lyv[i] = H*acc_y + advy + g*H*Φ[i]*dy_eta + gradΨy - H*(dhy*sA + dHy*sK)
+    end
+    return Lη, Lxv, Lyv
+end
+
 """
     strong_residual_linear(cbs, vert, hfun, g, x, y, t) → (Lη, Lx, Ly)
 
@@ -298,7 +542,14 @@ the forcing fully independent of `problem.jl` — which is the property the MMS 
 
 Setting `hfun ≡ const` reduces this to the Stage-1 operator times `h` (gate G-flat).
 """
-function strong_residual_linear(cbs, vert, hfun, g::Float64,
+strong_residual_linear(cbs, vert, hfun, g::Float64,
+                       x::Float64, y::Float64, t::Float64) =
+    strong_residual_model(cbs, vert, hfun, g, x, y, t;
+                          regime = :linear, flat_bed = false, nl_pressure = :none)
+
+#  The original hand-written linear evaluator, superseded by the parent above and
+#  retained (unused) only as the reference the refactor was checked against.
+function _strong_residual_linear_legacy(cbs, vert, hfun, g::Float64,
                                 x::Float64, y::Float64, t::Float64)
     Φ = vert.Phi; M = vert.Mmat; N = length(Φ)
     P = vert.P; A = vert.A; K = vert.K       # (N,N,3) each
@@ -363,24 +614,36 @@ function strong_residual_linear(cbs, vert, hfun, g::Float64,
 end
 
 """
-    mms_forcing(field, vert, hfun, g; regime, flat_bed) → (Seta, Sx, Sy)
+    mms_forcing(field, vert, hfun, g; regime, flat_bed, nl_pressure) → (Seta, Sx, Sy)
 
 **THE single entry point — the forcing is selected by the SAME symbols that select the solver
 model**, so a forcing/model mismatch is unrepresentable rather than merely discouraged. Feeding a
 `flat_bed=false` solver with flat-bed forcing would produce a silently wrong convergence rate that
 looks like a solver defect; this signature makes that impossible.
 
-| `regime` | `flat_bed` | forcing |
-|---|---|---|
-| `:linear` | `true`  | Stage-1 closed form (fast) |
-| `:linear` | `false` | variable-bed, by AD on `strong_residual_linear` |
-| `:nonlinear` | any | not implemented — explicit error, never a silent wrong answer |
+| `regime` | `flat_bed` | `nl_pressure` | forcing | doc |
+|---|---|---|---|---|
+| `:linear` | `true`  | `:none` | Stage-1 closed form (fast) | §subsec: mms model1 |
+| `:linear` | `false` | `:none` | variable-bed, AD | §subsec: mms model2 |
+| `:nonlinear` | `true`  | any | nonlinear flat-bed, AD | §subsec: mms model3 |
+| `:nonlinear` | `false` | any | full model, AD | §subsec: mms model4 |
+
+All AD paths go through the single parent [`strong_residual_model`](@ref).
+
+**Memoisation.** The three returned closures are evaluated by Gridap at the *same* quadrature point
+consecutively, and each would otherwise trigger a full (and, with `𝓝`, third-derivative) evaluation.
+A one-entry cache keyed on `(x,y,t)` collapses three evaluations into one — worth ≈3× on the
+nonlinear tiers, which is the difference between a study that runs in minutes and one that does not.
 """
 function mms_forcing(field::MMSField, vert, hfun, g::Float64;
-                     regime::Symbol = :linear, flat_bed::Bool = true)
-    regime === :linear || error(
-        "mms_forcing: regime=:$regime has no analytic MMS yet (Stage 2+ = advection / 𝓝 blocks). " *
-        "Refusing rather than silently using the linear forcing.")
+                     regime::Symbol = :linear, flat_bed::Bool = true,
+                     nl_pressure::Symbol = :none)
+    regime in (:linear, :nonlinear) ||
+        error("mms_forcing: regime must be :linear or :nonlinear (got :$regime)")
+    regime === :linear && nl_pressure !== :none && error(
+        "mms_forcing: nl_pressure=:$nl_pressure requires regime=:nonlinear " *
+        "(mirrors resolve_physics, so forcing and solver cannot disagree).")
+
     if flat_bed
         d0 = hfun(0.0, 0.0)
         # guard: a flat_bed=true forcing over a non-constant bed is a silent-wrong-answer trap
@@ -389,15 +652,42 @@ function mms_forcing(field::MMSField, vert, hfun, g::Float64;
                 "mms_forcing: flat_bed=true but hfun varies (h(0,0)=$d0, h($px,$py)=$(hfun(px,py))). " *
                 "This mismatch would void the convergence rate — pass flat_bed=false.")
         end
-        return mms_forcing_stage1(field, vert, d0, g)
+        #  Model 1 keeps its hand-written closed form: it is fast, and its agreement
+        #  with the AD parent is itself a gate (test_mms_forcing.jl G2).
+        regime === :linear && return mms_forcing_stage1(field, vert, d0, g)
     end
+
     cbs = field_callables(field)
     N   = field.Nσ
-    Seta = (x, t) -> strong_residual_linear(cbs, vert, hfun, g, x[1], x[2], t)[1]
-    Sx   = (x, t) -> (L = strong_residual_linear(cbs, vert, hfun, g, x[1], x[2], t);
-                      VectorValue(ntuple(i -> L[2][i], N)))
-    Sy   = (x, t) -> (L = strong_residual_linear(cbs, vert, hfun, g, x[1], x[2], t);
-                      VectorValue(ntuple(i -> L[3][i], N)))
+
+    #  H = h + η* must stay positive: components {6,7,8} of 𝓝 divide by it, and every
+    #  term is H-weighted. Checked ONCE here, not at every quadrature point.
+    if regime === :nonlinear
+        hmin = minimum(hfun(px, py) for px in range(0, 2; length=9),
+                                        py in range(0, 2; length=9))
+        hmin - field.a_eta > 0 || error(
+            "mms_forcing: H = h+η* would reach $(hmin - field.a_eta) ≤ 0 " *
+            "(min h ≈ $hmin, a_eta = $(field.a_eta)). The nonlinear models divide by H; " *
+            "reduce a_eta (≤ h_min/3 recommended) or raise the depth.")
+    end
+
+    #  one-entry memo: Gridap evaluates Seta/Sx/Sy at the same point consecutively
+    last_key = Ref((NaN, NaN, NaN))
+    last_val = Ref{Any}(nothing)
+    function eval_at(x, t)
+        key = (x[1], x[2], t)
+        if key !== last_key[]
+            last_val[] = strong_residual_model(cbs, vert, hfun, g, x[1], x[2], t;
+                                               regime = regime, flat_bed = flat_bed,
+                                               nl_pressure = nl_pressure)
+            last_key[] = key
+        end
+        return last_val[]
+    end
+
+    Seta = (x, t) -> eval_at(x, t)[1]
+    Sx   = (x, t) -> (L = eval_at(x, t); VectorValue(ntuple(i -> L[2][i], N)))
+    Sy   = (x, t) -> (L = eval_at(x, t); VectorValue(ntuple(i -> L[3][i], N)))
     return (Seta = Seta, Sx = Sx, Sy = Sy)
 end
 

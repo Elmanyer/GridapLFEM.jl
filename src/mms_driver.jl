@@ -39,6 +39,8 @@ function run_mms_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                         field = nothing,
                         hfun = nothing,            # bathymetry h(x,y); nothing ⇒ constant `d`
                         flat_bed::Bool = true,     # selects BOTH the solver model and the forcing
+                        regime::Symbol = :linear,      # ) these three select BOTH sides too —
+                        nl_pressure::Symbol = :none,   # ) see ValidationTests.tex §subsec: mms model1–4
                         vert_override = nothing,   # substitute vertical tensors. Used to ISOLATE a
                                                    #   term: e.g. `merge(NamedTuple(pairs(v)),
                                                    #   (B=zeros(size(v.B)),))` drops R_P from the
@@ -71,12 +73,13 @@ function run_mms_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
     #  regime/flat_bed symbols select both, so the two cannot describe different
     #  models. mms_forcing additionally REJECTS flat_bed=true over a varying bed.
     hf   = hfun === nothing ? ((xx, yy) -> d) : hfun
-    src  = mms_forcing(f, vert, hf, g; regime = :linear, flat_bed = flat_bed)
+    src  = mms_forcing(f, vert, hf, g; regime = regime, flat_bed = flat_bed,
+                                       nl_pressure = nl_pressure)
 
     prob = build_problem(vert; g = g,
                          h_bathy     = (x -> hf(x[1], x[2])),
-                         regime      = :linear,
-                         nl_pressure = :none,
+                         regime      = regime,       # SAME variables as the forcing above —
+                         nl_pressure = nl_pressure,  # never two literals, or the two can drift
                          flat_bed    = flat_bed,
                          mu_sponge   = (x -> 0.0),    # sponge OFF
                          wm_src      = ((x, t) -> 0.0),  # wavemaker OFF
@@ -255,8 +258,16 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
                           levels::Int = 4, nx0::Int = 8, ny0::Int = 8, ny_1d::Int = 3,
                           Lx::Float64 = 1.7, Ly::Float64 = 1.1, d::Float64 = 1.0,
                           M::Int = 2, dt::Float64 = 1e-4, nsteps::Int = 100,
-                          nl_tol::Float64 = 1e-14, distributed::Bool = false,
+                          nl_tol::Float64 = 1e-14,
+                          #  The NONLINEAR Jacobians are quasi-Newton by design (the
+                          #  pressure blocks' η-dependence is frozen — see problem.jl),
+                          #  so Newton converges LINEARLY there and needs far more than
+                          #  the 50 iterations a linear model uses. Raise this, don't
+                          #  loosen nl_tol, or the algebraic error contaminates the rate.
+                          nl_iter::Int = 50,
+                          distributed::Bool = false,
                           flat_bed::Bool = true, a_b::Float64 = 0.0,
+                          regime::Symbol = :linear, nl_pressure::Symbol = :none,
                           kbx::Float64 = 1.3, kby::Float64 = 0.0,
                           cpu_grid::Tuple{Int,Int} = (2,2),
                           ls_rtol::Float64 = 1e-13, ls_maxiter::Int = 5000,
@@ -282,7 +293,8 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
                                        ls_maxiter=ls_maxiter, verbose=false) :
             run_mms_case(; nx=nx, ny=ny, dt=dt, T_final=T_fin, Lx=Lx, Ly=Ly,
                            d=d, M=M, p_horizontal=p_u, p_eta=p_e, field=f,
-                           nl_tol=nl_tol, verbose=false, flat_bed=flat_bed,
+                           nl_tol=nl_tol, nl_iter=nl_iter, verbose=false, flat_bed=flat_bed,
+                           regime=regime, nl_pressure=nl_pressure,
                            hfun = flat_bed ? nothing :
                                   bathymetry_field(; d0=d, a_b=a_b, kbx=kbx, kby=kby))
         push!(hs, Lx/nx); push!(ee, r.e_eta); push!(eu, r.e_u); push!(nd, r.ndofs)
@@ -292,7 +304,9 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
     p_eta_fit, pw_eta = convergence_rate(hs, ee)
     p_u_fit,   pw_u   = convergence_rate(hs, eu)
     tag = "Q$(p_u)/Q$(p_e) $(domain == :d1 ? "1D" : "2D") " *
-          "$(distributed ? "dist" : "seq") $(mode) $(flat_bed ? "flat" : "varbed")"
+          "$(distributed ? "dist" : "seq") $(mode) $(flat_bed ? "flat" : "varbed") " *
+          "$(regime === :linear ? "lin" : "nl")" *
+          "$(nl_pressure === :none ? "" : "/" * String(nl_pressure))"
     if verbose
         println("  ── $tag ──")
         println("    pairwise eta: ", round.(pw_eta, digits=3), "   optimal $(p_e+1)")
