@@ -178,9 +178,13 @@ tooling are run directly against it (`julia --project=. test/test_basic.jl`), wh
 > that argument with `map`, which yields a Tuple on the AD path and a Vector on the hand path, so
 > **automatic differentiation of transient multifield residuals raised a `MethodError`** — long
 > recorded here as an insurmountable Gridap limitation. It is not, and it is not a `ForwardDiff.Dual`
-> problem: no `Dual` appears in the error. **Consequence: `use_ad=true` now works and serves as an
-> ORACLE for the hand-written Jacobians** (AD differentiates the same assembled residual, so
-> AD-converges-where-hand-fails isolates a hand-Jacobian defect). Analysis:
+> problem: no `Dual` appears in the error. **Consequence: `use_ad=true` works**, and AD is an oracle
+> for the **Jacobians** — it is what `test/test_jacobians_ad.jl` compares against.
+> **⚠ AD is NOT an oracle for the RESIDUAL.** It differentiates the *same assembled residual*, so
+> its agreeing (or converging where the hand path fails) proves residual↔Jacobian **consistency**
+> and says nothing about correctness. That exact inference was recorded here as fact and retracted
+> on 2026-08-15: the residual was at the time double-counting the `𝓐/𝓚` package, and AD agreed with
+> the hand Jacobian throughout. Only the analytic MMS verifies the residual. Analysis:
 > `building_files/AD_ISSUE.md` (untracked — `building_files/` is gitignored). The
 > version-controlled guard that the fork keeps working is **gate A0 of
 > `test/test_jacobians_ad.jl`** — an instant `hasmethod` check for the fork's Tuple-argument
@@ -393,13 +397,13 @@ expectations computed with the solver's own residual, where an error can cancel.
 | `test_selfconsistency.jl` | **support, not model validation**: hand Jacobians are exact derivatives of the residual; multi-step integration self-consistent. Its forcing *is* the solver's own residual, so a wrong residual would still pass — see the file header | 3/3 PASS (~3e-9) |
 | `test_convergence.jl` | Richardson temporal order (→2) | 2/2 PASS (q≈1.72) |
 | `test_vertical_profile.jl` | reconstructed `w(σ)` vs Airy `sinh` shape | 7/7 PASS |
-| `test_basic.jl` | smoke run, linear + fully nonlinear | 6/6 PASS |
+| `test_basic.jl` | smoke run, linear + fully nonlinear | 6/6 PASS — references **bit-identical** through both 2026-08-17 fixes (max η 0.00410, gauge 0.00212, Newton 240) |
 | `test_waveinput.jl` | Dirichlet-generation data: identities, closures, AD, WaveSpec converter | 30/30 PASS |
 | `test_bc_generation.jl` | Dirichlet-generated regular wave e2e (kd=3) | 11/11 PASS |
 | `test_bc_spectrum.jl` | 3-component Dirichlet sea: Goda–Suzuki incident amplitudes | 8/8 PASS |
-| `test_basic_distributed.jl` | 4-rank MPI, linear + fully nonlinear vs sequential | 6/6 PASS, rel ≤ 5e-9 |
-| `test_nlpressure_distributed.jl` | 4-rank MPI, full nonlinear pressure vs sequential | 3/3 PASS |
-| `test_bc_generation_distributed.jl` | 4-rank MPI Dirichlet generation vs sequential | 4/4 PASS, rel 3.1e-8 |
+| `test_basic_distributed.jl` | 4-rank MPI, linear + fully nonlinear vs sequential | 6/6 PASS, rel 2.5e-7 (**both reference constants re-measured 2026-08-17 — the linear one was 9.7 % stale**) |
+| `test_nlpressure_distributed.jl` | 4-rank MPI, full nonlinear pressure vs sequential over a tanh bar | 3/3 PASS, rel 1.6e-5. **The only test in the repo that pins a VALUE on `:nonlinear` + `∇h≠0`** — it caught the gravity defect at rel 5.9e-1 the first time it was run; its reference moved 58 % as a result |
+| `test_bc_generation_distributed.jl` | 4-rank MPI Dirichlet generation vs sequential | 4/4 PASS, rel 6.6e-7 (reference re-measured 2026-08-17; was 11.7 % stale) |
 | `cluster/cluster_conservation.jl` · `cluster/cluster_selfconsistency.jl` | long-run mass conservation / nonlinear solver self-consistency at scale (**not** an MMS validation — renamed for the same reason `test_mms.jl` became `test_selfconsistency.jl`) | dist |
 
 ### The local suite — `test/local/`
@@ -445,10 +449,19 @@ records are in `building_files/DESIGN_RECORDS.md`.
   Gridap's block-array `copyto!` isn't implemented for that combination. Expand such derivatives by
   hand using linearity of the vertical contraction in the test, `∂ₐ(W⋅𝓣) = (∂ₐW)⋅𝓣`, and
   `Σₐ Ψ·∂ₐUₐ = Ψ·DU` (see `nlpressure.jl` for worked examples).
-- **AD Jacobians are not viable** on this residual under Gridap 0.19.11 (not re-tested on 0.20.x) — the multifield autodiff
-  split cannot dualize through `∂t(u)` (a missing `TransientMultiFieldCellField` constructor). Hand
-  Jacobians (`jacobian_u`, `jacobian_u_t`) are the design; they are exact for everything except the
-  `O(A³)` nonlinear-pressure terms, which are treated quasi-Newton.
+- **Jacobian coverage, precisely.** `∂R/∂u̇` (`jacobian_u_t`) is **EXACT in both regimes** — mass,
+  `H`-weighted acceleration, leading pressure `R_P`, and the `𝓐/𝓚` slope package; the `𝓝` blocks
+  carry no `u̇`-dependence at all. Verified `0.000e+00` against AD in **all 8 models**.
+  `∂R/∂u` (`jacobian_u`) is **quasi-Newton in the nonlinear branch by choice**: advection is
+  differentiated in full, but the pressure packages contribute no η-derivative and `𝓝` is absent.
+  Its gap is `2.9e-2` (`:none`) → `8.3e-1` (`:full`) and **vanishes at order 1.11–1.16** in the
+  state amplitude — which is what makes it benign, because Newton drives the *residual* to zero.
+  **An omission is benign only if it is higher-order in amplitude.** The `𝓐/𝓚` block previously
+  missing from `∂R/∂u̇` had prefactor `H·∇h`, which does not scale with the solution — an `O(1)`
+  error that made Newton converge to the wrong fixed point and stalled the nonlinear variable-bed
+  MMS outright. Measure the scaling with `test/test_jacobians_ad.jl`; do not assume it.
+- **AD Jacobians are viable** since the Gridap fork (see the Environment note): `use_ad=true` builds
+  them, and they are the reference `test_jacobians_ad.jl` checks the hand ones against.
 - **Distributed linear solves must not use `lu()`** — no method for a partitioned `PSparseMatrix`. Use
   `GMRESSolver`/`CGSolver` with `JacobiLinearSolver()` from GridapSolvers, and allocate RHS/solution
   vectors **from the matrix** (`allocate_in_range`/`allocate_in_domain`), not from an independently
@@ -482,13 +495,30 @@ records are in `building_files/DESIGN_RECORDS.md`.
   its 1/10 result measures the reference's age, not a defect here. The construction (layout-
   independent virtual work) remains the right instrument should a *current* second implementation
   ever exist.
-- **Residual verification — Stage 1 DONE (2026-08-12); Stages 2–4 open.** The analytic MMS
-  (`src/mms.jl`, `src/errors.jl`, `src/mms_driver.jl`, `test/test_mms_*.jl`) derives its forcing from
-  the governing equations *without touching* `problem.jl`, so — unlike every other test here — the
-  error does not cancel and the measured **order of accuracy** certifies the operator. It verifies
-  the **linear core on a flat bed** (mass, `M`-acceleration, `gΦ∇η`, `d²B` dispersion): eigenmode
-  gate `𝓛(u*) = 3.6e-15`, closed-form ≡ ForwardDiff `1.8e-15`. The nonlinear core, curved bed and 𝓝
-  blocks (Stages 2–4) are **still unverified**. Full record: `building_files/MMS_CAMPAIGN.md`.
+- **Residual verification — ALL FOUR `:none` MODELS DONE (2026-08-17); the `𝓝` tiers open.** The
+  analytic MMS (`src/mms.jl`, `src/errors.jl`, `src/mms_driver.jl`, `test/test_mms_*.jl`) derives its
+  forcing from the governing equations *without touching* `problem.jl`, so — unlike every other test
+  here — the error does not cancel and the measured **order of accuracy** certifies the operator.
+
+  | Model | `regime` / bed / `nl_pressure` | `p_η` (opt 3) | `p_u` (opt 4) |
+  |---|---|---|---|
+  | 1 | `:linear` / flat / `:none` | optimal | optimal |
+  | 2 | `:linear` / **variable** / `:none` | 3.000 | 4.000 |
+  | 3 | `:nonlinear` / flat / `:none` | 2.996 | 3.995 |
+  | 4 | `:nonlinear` / **variable** / `:none` | 2.996 | 3.997 |
+
+  So the verified scope is the **complete `:none` operator over arbitrary bathymetry** —
+  `H`-weighting, advection, the full three-component leading pressure, the `O(ε²)` surface-slope
+  package and the bed-slope terms. Only `nl_pressure=:native`/`:full` remain unverified, because
+  their MMS forcing is not available (three nested ForwardDiff levels; diagnosis **unconfirmed**).
+  **Say "the `:none` models are verified", never "the residual is verified".**
+
+  ⚠ Model 4 needed **two solver fixes** to get there, and *neither was findable by any other test in
+  the suite*: the `𝓐/𝓚` package was missing from `∂R/∂u̇` (an `O(1)` omission — Newton stalled), and
+  the nonlinear gravity branch was missing the `−η∇h` half of its own integration by parts. The
+  latter was absent from the residual **and** from its own Jacobian, so every self-consistency check
+  cancelled the error identically. Full record: `building_files/MMS_CAMPAIGN.md`,
+  `building_files/RESIDUAL_AUDIT.md`.
 - **⚠ Equal-order FE spaces cost one order of convergence** (found by the above). `Q_p/Q_p` for
   `(η, 𝖴)` converges at `p`, not `p+1`. Mixed order `Q_p/Q_{p-1}` fixes the **surface** universally
   and the **velocity** at `Q3/Q2` — measured over a 12-study campaign
