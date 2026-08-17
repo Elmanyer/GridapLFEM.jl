@@ -63,7 +63,18 @@ E0 = energy(u0)
 
 dt = T_th/80; Tf = 6*T_th
 op     = build_ode_operator(prob, U, V, trian, dΩh)
-solver = build_ode_solver(dt; nl_tol=1e-8)
+#  ⚠ solver_type=:theta IS LOAD-BEARING — do not drop it to "use the default".
+#  This test measures NON-DISSIPATIVITY of the spatial operator. The default
+#  integrator is RungeKutta(:SDIRK_2_2), which is L-stable, i.e. dissipative BY
+#  DESIGN — running this test on it measures the INTEGRATOR, not the model, and
+#  the gate below then fails for a reason that has nothing to do with the solver.
+#  Measured 2026-08-16 on this exact case, 6 periods:
+#      SDIRK_2_2 (L-stable) : net ΔE/E₀ = −1.34e-2   ← fails the <1% gate
+#      θ = 0.5  (CN)        : net ΔE/E₀ = +3.65e-14  ← machine precision
+#  Eleven orders of magnitude: the model conserves energy to round-off, and CN is
+#  the only integrator here that can show it. Predicted when the default was
+#  switched on 2026-07-23 ("in physical tension with L-stable SDIRK").
+solver = build_ode_solver(dt; nl_tol=1e-8, solver_type=:theta)
 odesol = solve(solver, op, 0.0, Tf, u0)
 
 xg = VectorValue(0.05, Ly/2)                     # near the x=0 antinode

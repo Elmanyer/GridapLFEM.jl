@@ -47,6 +47,16 @@ function gauge_run(nx, dt)
         p_horizontal=2, h_val=h_val, T_wave=T_wave, A_wave=A, x_wm=x_wm, y_wm=nothing,
         sponge_wL=6.0, sponge_wR=6.0, mu_max=30.0, T_final=T_final, dt=dt,
         save_every=0, gauges=[(x_g, y_g)], regime=:linear,
+        #  ⚠ solver_type=:theta IS LOAD-BEARING. This test measures the TEMPORAL ORDER
+        #  by Richardson extrapolation and expects ≈2 — as its own printout says,
+        #  "Crank–Nicolson → 2". The default RungeKutta(:SDIRK_2_2) is L-stable: its
+        #  damping saturates the gauge signal, so refining dt barely changes the answer
+        #  and the measured order collapses. Measured 2026-08-16: temporal order 0.01
+        #  on the default, against the >1.5 gate. (SDIRK_2_2 is formally 2nd order; what
+        #  this Richardson estimate on a gauge trace picks up is its dissipation, not its
+        #  formal order — which is exactly why the test must pin the non-dissipative
+        #  integrator it was designed around.) Same root cause as test_energy.jl.
+        solver_type=:theta,
         nl_tol=1e-8, print_every=10_000)
     return [d.gauge_vals[1] for d in diags]
 end

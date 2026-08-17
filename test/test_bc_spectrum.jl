@@ -90,7 +90,20 @@ diags, _, _ = setup_and_run(
     p_horizontal=2, h_val=h_val, T_wave=Ts[2], A_wave=maximum(amps),
     wave_bc=wi, bc_side=:left, sponge_wL=0.0, sponge_wR=10.0,
     sponge_wB=0.0, sponge_wT=0.0, mu_max=30.0, T_final=Tf, dt=dt,
-    save_every=0, gauges=[(x_g1, y_g), (x_g2, y_g)], regime=:linear,
+    #  ⚠ solver_type=:theta IS LOAD-BEARING — do not drop it to "use the default".
+    #  This test measures the AMPLITUDE TRANSFER FIDELITY of the boundary generation:
+    #  how faithfully each spectral component arrives at the gauges. The default
+    #  integrator RungeKutta(:SDIRK_2_2) is L-stable, i.e. dissipative BY DESIGN, and
+    #  its damping grows with frequency — so on the default it measures the integrator
+    #  rather than the generator. Measured 2026-08-16 on this exact case:
+    #      integrator          f=0.500   f=0.625   f=0.750
+    #      SDIRK_2_2           12.5 %    21.9 %    32.2 %   ← 3 gates fail
+    #      theta (CN)           2.5 %     4.6 %     9.4 %   ← 8/8, matches the
+    #                                                         documented 2.8/4.5/9.2 %
+    #  Refining the mesh does NOT fix it (12 cells/λ gave 8.5/21.7/41.6 %, i.e. worse
+    #  at high frequency), which is what rules out under-resolution and identifies the
+    #  integrator. Same root cause as test_energy.jl.
+    save_every=0, gauges=[(x_g1, y_g), (x_g2, y_g)], regime=:linear, solver_type=:theta,
     check_every=0, print_every=100)
 
 emax = maximum(d.eta_max for d in diags)

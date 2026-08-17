@@ -78,6 +78,18 @@ common = (M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)),
           partition=(nx,ny), p_horizontal=2, h_val=h_val, T_wave=T_wave,
           A_wave=A_wave, sponge_wR=8.0, sponge_wB=0.0, sponge_wT=0.0,
           mu_max=30.0, dt=dt, save_every=0,
+          #  ⚠ solver_type=:theta IS LOAD-BEARING for cases A–C, which gate the
+          #  AMPLITUDE of the generated wave. The default RungeKutta(:SDIRK_2_2) is
+          #  L-stable, i.e. dissipative by design, so on the default these gates
+          #  measure the integrator's damping rather than the generator's fidelity.
+          #  Measured 2026-08-16 on this exact case (gate A, amplitude at 2λ):
+          #      SDIRK_2_2 : err = 23.1 %   ← fails the 10 % gate
+          #      theta (CN): err =  8.4 %   ← passes
+          #  Note the discriminator: the PHASE-speed gates pass under both (0.6–2.4 %),
+          #  so the wave arrives at the right speed and only its amplitude is damped —
+          #  which is what L-stability does. Same root cause as test_energy.jl and
+          #  test_bc_spectrum.jl.
+          solver_type=:theta,
           gauges=[(x_g1,y_g),(x_g2,y_g)], check_every=0, print_every=50)
 @printf("  Domain %.1f×%.1f m, %d×%d cells, %d periods, gauges at 2λ, 2λ+λ/2\n",
         Lx, Ly, nx, ny, 12)
