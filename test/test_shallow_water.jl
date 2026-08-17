@@ -15,6 +15,12 @@
 #       on a flat bed must propagate at c ≈ √(gd) (and match Airy Ce), confirming
 #       the model is in the shallow-water regime.
 #
+#  ⚠ Check (2) needs ≥12 cells per wavelength. It is a PHASE measurement, and the
+#    discrete phase error is what it is most sensitive to — at 6 cells/λ the
+#    measured celerity is 6.5 % slow purely from the spatial discretisation, which
+#    is enough to fail the physics gates and look like a model defect. See the
+#    measured sweep at the mesh definition below.
+#
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_shallow_water.jl
 # ==============================================================
 
@@ -56,7 +62,18 @@ kd = k*d; lam = 2π/k; Ce = omega/k
         T_wave, kd, lam, c_sw, Ce)
 
 x_wm = 8.0; Lx = x_wm + 5lam + 30.0; Ly = 3.0
-nx = max(24, round(Int, Lx/(lam/6))); ny = 2
+#  RESOLUTION: 12 cells per wavelength. This was 6, which under-resolved the wave
+#  and made the measured celerity 6.5 % slow — the test then failed its own (correct)
+#  tolerances. Measured 2026-08-16, isolating the two discretisations:
+#      6 cells/λ, 24 steps/T  →  c/√(gd) = −6.47 %      (the old setting)
+#      6 cells/λ, 48 steps/T  →  c/√(gd) = −6.53 %      (time refined: NO change)
+#     12 cells/λ, 24 steps/T  →  c/√(gd) = −0.05 %      (space refined: fixed)
+#     12 cells/λ, 48 steps/T  →  c/√(gd) = −0.69 %, c/Ce = +0.36 %
+#  The error is therefore purely SPATIAL; dt = T/24 is already sufficient. The
+#  tolerances below are unchanged and are NOT the knob — if this test fails, suspect
+#  the model, not the thresholds. (Residual ~1 % on the Airy gate is time
+#  discretisation; halve dt if that gate is ever tightened.)
+nx = max(24, round(Int, Lx/(lam/12))); ny = 2
 dt = T_wave/24; Tf = 8*T_wave
 x_g1 = x_wm + 2lam; x_g2 = x_g1 + lam/2; y_g = Ly/2
 @printf("  domain %.0f m, %d cells, %d periods\n", Lx, nx, 8)
@@ -65,7 +82,10 @@ diags, _, _ = setup_and_run(
     M=2, c_bdy=[0.0,0.728,1.0], domain=((0.0,Lx),(0.0,Ly)), partition=(nx,ny),
     p_horizontal=2, h_val=d, T_wave=T_wave, A_wave=5e-4, x_wm=x_wm, y_wm=nothing,
     sponge_wL=15.0, sponge_wR=15.0, mu_max=5.0, T_final=Tf, dt=dt, save_every=0,
-    gauges=[(x_g1,y_g),(x_g2,y_g)], linearised=false, advection=true,   # ★ full nonlinear
+    gauges=[(x_g1,y_g),(x_g2,y_g)], regime=:nonlinear, flat_bed=true,   # ★ full nonlinear
+    #  (was `linearised=false, advection=true` — the pre-2026-08 kwargs, retired when
+    #   the physics interface became regime/nl_pressure/flat_bed. Constant depth, so
+    #   flat_bed=true: ∇h ≡ 0 either way, this just skips assembling terms that vanish.)
     nl_tol=1e-8, print_every=10_000)
 
 ts = [d.t for d in diags]
