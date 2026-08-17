@@ -119,8 +119,9 @@ GridapLFEM.jl/
 │   ├── waveinput.jl             Dirichlet boundary wave generation + WaveSpec.jl coupling
 │   ├── timeloop_dist.jl         distributed mesh + GMRES+Jacobi+Newton solver + time loop
 │   └── utilities_dist.jl        setup_and_run_distributed
-├── test/                         # 21 test files + test/cluster/ — see Validation
-│   └── local/                   4 machinery gates on quasi-1D flumes + runner (minutes, 6 cores)
+├── test/                         # 27 test files + runtests.jl + test/cluster/ — see Validation
+│   ├── runtests.jl              batch runner; verdict from GATE OUTPUT, never the exit code
+│   └── local/                   5 machinery gates on quasi-1D flumes + runner (minutes, 6 cores)
 ├── examples/
 │   ├── plane_wave.jl · ring_wave.jl · periodic_plane_wave.jl     sequential interior-source
 │   ├── bc_plane_wave.jl · bc_irregular_sea.jl · bc_directional_sea.jl   sequential BC generation
@@ -179,7 +180,11 @@ tooling are run directly against it (`julia --project=. test/test_basic.jl`), wh
 > recorded here as an insurmountable Gridap limitation. It is not, and it is not a `ForwardDiff.Dual`
 > problem: no `Dual` appears in the error. **Consequence: `use_ad=true` now works and serves as an
 > ORACLE for the hand-written Jacobians** (AD differentiates the same assembled residual, so
-> AD-converges-where-hand-fails isolates a hand-Jacobian defect). Analysis: `AD_ISSUE.md`.
+> AD-converges-where-hand-fails isolates a hand-Jacobian defect). Analysis:
+> `building_files/AD_ISSUE.md` (untracked — `building_files/` is gitignored). The
+> version-controlled guard that the fork keeps working is **gate A0 of
+> `test/test_jacobians_ad.jl`** — an instant `hasmethod` check for the fork's Tuple-argument
+> `TransientMultiFieldCellField` constructor, which stock Gridap does not provide.
 > Rebuild the cluster sysimage after changing this — `run/lfem_env.sh` hashes `src/*.jl` only and
 > will NOT notice a changed dependency.
 >
@@ -352,7 +357,25 @@ All gates below are standalone Julia scripts in `test/`; run with
 see file headers). The project must be the **package** environment — since the migration the tests
 do `using GridapLFEM`, which the parent repository's environment cannot resolve unless you also
 `Pkg.develop(path="GridapLFEM.jl")` there.
-The full suite is **21 tests + `test/cluster/`**; representative highlights:
+The full suite is **27 test files + `runtests.jl` + `test/cluster/` + `test/local/`**. As of
+2026-08-17, all re-measured after two solver fixes: **sequential 21/21 PASS**
+(`julia --project=. test/runtests.jl`), **distributed 13/13 gates PASS** on 4 ranks,
+**Jacobian-vs-AD 8/8 models PASS**. Representative highlights.
+
+**Read the first block separately from the rest.** Those five files are *verification*: the forcing
+is derived from the governing equations and never touches `problem.jl` (a grep gate enforces it), so
+a self-consistently wrong residual cannot hide in them. Everything below that block is
+*self-consistency or physics agreement* — strong evidence, but it compares the solver against
+expectations computed with the solver's own residual, where an error can cancel.
+
+| Verification (analytic MMS + Jacobian gate) | What it checks | Result |
+|---|---|---|
+| `test_mms_forcing.jl` | forcing-level gates for the linear models, no FE solve; includes the grep gate that keeps `src/mms.jl` independent of the residual | 5/5 PASS |
+| `test_mms_forcing_nonlinear.jl` | forcing-level gates for the nonlinear models: Model 4 at constant `h` ≡ Model 3 exactly, `ε²` amplitude scaling, `H>0` guard | 10/10 PASS |
+| `test_mms_convergence.jl` | **order of accuracy**, Model 1 (linear, flat bed), on the `Q3/Q2` pairing | see §FE pairing |
+| `test_mms_convergence_nonlinear.jl` | order of accuracy, Models 3 and 4 (nonlinear) | **4/4 PASS** (run end-to-end 2026-08-17) — M3 `p_η=2.996`/`p_u=3.995`, M4 `2.996`/`3.997`, both at theoretical order, at the DEFAULT `nl_iter` |
+| `test_jacobians_ad.jl` | hand `∂R/∂u`, `∂R/∂u̇` vs **AD of the same residual**, matrix by matrix, all 8 models; gates the linear branch on equality and the nonlinear one on how the gap **scales with amplitude** (an O(1) gap is a defect, a vanishing one is the deliberate quasi-Newton choice) | `∂R/∂u̇` exact for all 8 |
+| `test_linear_newton_gate.jl` | a LINEAR problem must converge in **one Newton iteration per implicit stage**, on a **sloping** bed — the configuration no flat-bed test can reach | 10/10 PASS |
 
 | Test | What it checks | Result |
 |---|---|---|
@@ -377,7 +400,7 @@ The full suite is **21 tests + `test/cluster/`**; representative highlights:
 | `test_basic_distributed.jl` | 4-rank MPI, linear + fully nonlinear vs sequential | 6/6 PASS, rel ≤ 5e-9 |
 | `test_nlpressure_distributed.jl` | 4-rank MPI, full nonlinear pressure vs sequential | 3/3 PASS |
 | `test_bc_generation_distributed.jl` | 4-rank MPI Dirichlet generation vs sequential | 4/4 PASS, rel 3.1e-8 |
-| `cluster/cluster_conservation.jl` · `cluster/cluster_mms.jl` | long-run mass conservation / nonlinear MMS at scale | dist |
+| `cluster/cluster_conservation.jl` · `cluster/cluster_selfconsistency.jl` | long-run mass conservation / nonlinear solver self-consistency at scale (**not** an MMS validation — renamed for the same reason `test_mms.jl` became `test_selfconsistency.jl`) | dist |
 
 ### The local suite — `test/local/`
 
