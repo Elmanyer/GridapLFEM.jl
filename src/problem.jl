@@ -253,12 +253,30 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
               r + ∫( H*(Wx ⋅ accx) + H*(Wy ⋅ accy) ) * dΩh
 
     # ---- gravity (integrated-by-parts energy form; rest-state baseline removed) -
-    #  LINEAR: IBP of  g h Φᵢ ∇η  gives BOTH  h Φ·(∇·v)  AND  Φ·(v·∇h). The second
-    #  term was previously missing; it is O(∇h) so it vanishes on a flat bed.
+    #  The IBP of the gravity term produces TWO pieces in BOTH regimes, and the
+    #  ∇h one is easy to lose because it has no counterpart in the strong form
+    #  (`tab: term classification` flags exactly this). Nonlinear identity, EXACT:
+    #
+    #      ∇((H²−h²)/2) = H∇H − h∇h = H∇η + η∇h    ⇒    H∇η = ∇((H²−h²)/2) − η∇h
+    #
+    #  so   ∫ g Φᵢ (H∇η)·vᵢ  =  −∫ (g/2)(H²−h²) Φ·(∇·v)  −  ∫ g η Φ·(v·∇h).
+    #  The linear case is the same identity with H→h: h∇η = ∇(hη) − η∇h.
+    #  The SECOND piece is therefore IDENTICAL in the two regimes — only the first
+    #  differs (h η vs (H²−h²)/2) — so it is assembled once, outside the branch.
+    #
+    #  ⚠ It was previously present in the LINEAR branch only. Missing from the
+    #  nonlinear branch it is an O(∇h) defect in the MOMENTUM equation, invisible
+    #  on a flat bed and invisible to η: measured as a velocity error that
+    #  converged to a CONSTANT 4.400e-4 (rate 0.00) while e_η kept its optimal
+    #  order 2.99 — the analytic-MMS signature of a genuinely wrong operator, not
+    #  of under-resolution. Model 2 (linear, sloping) and Model 3 (nonlinear,
+    #  flat) both pass precisely because each is blind to this term.
     PhiDW = alg_dot(prob.Φ, DW)
-    r = lin ? r + ∫( (-g)*η*( d_cf*PhiDW +
-                              alg_dot(prob.Φ, dhx*Wx + dhy*Wy) ) ) * dΩh :
+    r = lin ? r + ∫( (-g)*η*d_cf*PhiDW ) * dΩh :
               r + ∫( (-0.5*g)*(H*H - d_cf*d_cf)*PhiDW ) * dΩh
+    #  Shared ∇h half of the IBP. dhx/dhy are already zeroed under flat_bed, so
+    #  this vanishes identically there and costs a flat-bed run nothing.
+    r = r + ∫( (-g)*η*alg_dot(prob.Φ, dhx*Wx + dhy*Wy) ) * dΩh
 
     # ---- leading pressure R_P (dispersion — MANDATORY) -------------------------
     if lin
@@ -419,15 +437,29 @@ end
 #     (test/test_linear_newton_gate.jl). Any excess iteration is proof of a
 #     residual↔Jacobian inconsistency.
 #
-#   * NONLINEAR branch: QUASI-NEWTON by choice. The advection block is differentiated
+#   * NONLINEAR branch: ∂R/∂u̇ is now EXACT; ∂R/∂u remains QUASI-NEWTON by choice.
+#
+#     ∂R/∂u̇ (jacobian_u_t): every u̇-dependent term of the residual is differentiated
+#     exactly — mass, the H-weighted acceleration, the leading pressure R_P, and (since
+#     2026-08-17) the 𝓐/𝓚 slope-pressure package. The 𝓝 blocks carry no u̇-dependence
+#     at all (they are built from u, not u̇), so nothing is missing. See the note at the
+#     𝓐/𝓚 block below for why its omission was NOT a benign quasi-Newton choice.
+#
+#     ∂R/∂u (jacobian_u): still quasi-Newton, deliberately. Advection is differentiated
 #     in full (so Newton stays quadratic on the dominant nonlinearity), but the
-#     leading-pressure and 𝓐/𝓚 slope-pressure packages contribute their u̇-dependence
-#     only through the terms written below — their η-dependence (via H, ∇H) is FROZEN
-#     and the 𝓐/𝓚 package is omitted from ∂R/∂u̇ entirely. The 𝓝 blocks likewise add
-#     to the residual but not to the Jacobian. This costs Newton iterations, never
-#     accuracy: Newton drives the RESIDUAL to zero, so a converged answer is a root of
-#     the full residual regardless. Do not "complete" these without re-measuring every
-#     nonlinear reference value.
+#     leading- and slope-pressure packages contribute no η-derivative (their dependence
+#     through H and ∇H is frozen) and the 𝓝 blocks add to the residual but not here.
+#
+#     THE DISTINCTION THAT MATTERS, and that was previously blurred: an omission is
+#     benign only if it is HIGHER ORDER IN AMPLITUDE, so that it vanishes as the state
+#     is refined — then it costs Newton iterations and never accuracy, because Newton
+#     drives the RESIDUAL to zero. An omission whose prefactor is O(1) in amplitude
+#     (H·∇h, as the 𝓐/𝓚 block's was) is a different animal: it can prevent convergence
+#     outright. Verify the distinction with test_jacobians_ad.jl, which measures how the
+#     hand↔AD gap scales with amplitude, rather than assuming it.
+#
+#     Do not extend the remaining ∂R/∂u omissions without re-measuring every nonlinear
+#     reference value.
 # ----------------------------------------------------------
 
 "∂R/∂u̇ — effective mass operator (acceleration + R_P dispersion)."
@@ -471,14 +503,44 @@ function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dΩh)
         dhy = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
         dHx = dhx + alg_dx(η); dHy = dhy + alg_dy(η)
         dUgHt = dHx*dUxt + dHy*dUyt
+        #  𝓛 differentiated w.r.t. u̇. Needed by BOTH the leading-pressure block and
+        #  the 𝓐/𝓚 slope package below, so it is computed once here rather than
+        #  inside `if P_full` — `build_problem_raw` can set lin_pressure WITHOUT
+        #  P_full (the oracle-equivalence split), and that combination needs these.
+        dL1 = (-1.0)*(dhx*dUxt + dhy*dUyt)
+        dL2 = dUgHt
+        dL3 = (-1.0)*(H*dDUt + dUgHt)
         if prob.P_full
-            dL1 = (-1.0)*(dhx*dUxt + dhy*dUyt)
-            dL2 = dUgHt
-            dL3 = (-1.0)*(H*dDUt + dUgHt)
             sP  = alg_mul(prob.P[1], dL1) + alg_mul(prob.P[2], dL2) + alg_mul(prob.P[3], dL3)
             r   = r + ∫( (-1.0)*(H*H)*(sP ⋅ DW) ) * dΩh
         else
             r = r + ∫( (-1.0)*(H*H)*((alg_mul(prob.Bv, H*dDUt + dUgHt)) ⋅ DW) ) * dΩh
+        end
+        #  ---- 𝓐/𝓚 slope-pressure package (rows M14–M18) ------------------------
+        #  ADDED 2026-08-17. This block was previously omitted from ∂R/∂u̇ in the
+        #  nonlinear branch, on the stated grounds that the quasi-Newton omissions
+        #  "cost Newton iterations, never accuracy". That reasoning is valid only
+        #  for omissions of HIGHER ORDER IN AMPLITUDE, and this one is not: its
+        #  prefactor is H·∇h, which does not scale with the solution. Measured with
+        #  test_jacobians_ad.jl, the hand↔AD gap in ∂R/∂u̇ was 1.11e-2 and did NOT
+        #  shrink when the state amplitude was halved (order 0.03) over a sloping
+        #  bed, against order 0.95 on a flat bed where ∇h ≡ 0 kills the 𝓐 half.
+        #  An O(1) error in the effective mass matrix is what stalls Newton for the
+        #  nonlinear variable-bed model (MMS_NONLINEAR_PLAN.md blocker B2): the
+        #  iteration converges to a fixed point of the WRONG map, so no iteration
+        #  budget can rescue it.
+        #
+        #  The term is EXACTLY LINEAR IN u̇ — L1,L2,L3 are linear in u̇ and the
+        #  prefactors H, ∇h, ∇H depend only on η — so its exact derivative is the
+        #  residual expression with u̇ → du̇, contraction for contraction. Kept in
+        #  the same 6-contraction form as the residual (lines ~350–359): the
+        #  2-contraction collapse used in the LINEAR branch relies on L2 = −L1 and
+        #  ∇H → ∇h, neither of which holds here.
+        if prob.lin_pressure
+            dLA = alg_mul(prob.Av[1], dL1) + alg_mul(prob.Av[2], dL2) + alg_mul(prob.Av[3], dL3)
+            dLK = alg_mul(prob.Kv[1], dL1) + alg_mul(prob.Kv[2], dL2) + alg_mul(prob.Kv[3], dL3)
+            r = r + ∫( (-1.0)*H*( dhx*(Wx ⋅ dLA) + dHx*(Wx ⋅ dLK)
+                                + dhy*(Wy ⋅ dLA) + dHy*(Wy ⋅ dLK) ) ) * dΩh
         end
     end
     return r
@@ -505,15 +567,16 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dΩh)
     # gravity
     DW = alg_dx(Wx) + alg_dy(Wy)
     PhiDW = alg_dot(prob.Φ, DW)
-    #  LINEAR: exact derivative of the h-weighted IBP gravity form, INCLUDING the
-    #  ∇h term that appears when g h Φ·∇η is integrated by parts (MMS_VARBED_PLAN §0.A).
-    r = if lin
-        dhxg = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)
-        dhyg = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
-        r + ∫( (-g)*dη*( d_cf*PhiDW + alg_dot(prob.Φ, dhxg*Wx + dhyg*Wy) ) ) * dΩh
-    else
-        r + ∫( (-g)*H*dη*PhiDW ) * dΩh
-    end
+    #  Exact derivative of the IBP gravity form. Both regimes carry the shared ∇h
+    #  half (see the derivation at the gravity block in global_residual); only the
+    #  ∇·v half differs, h η vs (H²−h²)/2, whose η-derivatives are h and H.
+    dhxg = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)
+    dhyg = prob.flat_bed ? 0.0*alg_dy(d_cf) : alg_dy(d_cf)
+    r = lin ? r + ∫( (-g)*dη*d_cf*PhiDW ) * dΩh :
+              r + ∫( (-g)*H*dη*PhiDW ) * dΩh
+    #  ∂/∂η of  −∫ g η Φ·(v·∇h)  — the shared ∇h half. Present in BOTH regimes,
+    #  matching the residual; it was previously in the linear branch only.
+    r = r + ∫( (-g)*dη*alg_dot(prob.Φ, dhxg*Wx + dhyg*Wy) ) * dΩh
 
     # nonlinear-Acc η derivative (needs current u̇)
     if !lin

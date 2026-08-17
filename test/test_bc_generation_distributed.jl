@@ -19,7 +19,16 @@ using Printf
 
 # sequential reference: same config via setup_and_run (LU+Newton) — see the
 # generation block at the bottom of this file (measured 2026-07-23)
-const REF_EMAX = 5.5027223e-04
+#  RE-MEASURED 2026-08-17: 5.5027223e-04 → 4.8597256e-04 (the stored value was
+#  11.7 % stale). NOT caused by the 2026-08-17 Jacobian/gravity fixes — this case
+#  is `regime=:linear` at CONSTANT depth, where the gravity term is identically
+#  zero and a Jacobian change cannot move a converged answer. Same origin as the
+#  stale REF_EMAX_LIN in test_basic_distributed.jl: the distributed tests need
+#  mpiexecjl, sit outside every runner, and so were not re-measured when the
+#  linear model gained its h-weighting.
+#  Sequential LU 4.8597256e-04 vs distributed GMRES 4.8597224e-04 — they agree to
+#  6.6e-7, which is the real content of this check.
+const REF_EMAX = 4.8597256e-04
 const REF_RTOL = 2e-3
 
 # kd = 3 at T = 1.6 s (matches test_bc_generation.jl)

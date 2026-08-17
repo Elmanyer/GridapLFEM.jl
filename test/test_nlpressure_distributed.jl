@@ -18,7 +18,26 @@ using Printf
 
 # sequential reference (same config, run once via setup_and_run): see
 # test_nlpressure.jl gate G3 — bar run, 40 steps.
-const REF_EMAX = 0.0068979802 # sequential max η over the bar run (LU-based projections)
+#  RE-MEASURED 2026-08-17: 0.0068979802 → 0.0028640.
+#  A genuine CORRECTION, not staleness. This is the only case in the repo running
+#  `:nonlinear` + `:full` over a tanh bar with `flat_bed=false` — exactly the
+#  configuration whose operator the gravity fix repaired (the `−η∇h` half of the
+#  gravity IBP, previously missing from the nonlinear branch). The old value was
+#  computed with the defective operator, hence the 58 % change.
+#
+#  Sequential LU and distributed CG+Jacobi agree to the printed precision:
+#      sequential  (LU projections)        0.0028640
+#      distributed (CG+Jacobi projections) 0.0028640
+#  so REF_RTOL = 5e-3 is comfortable and the `:full` frozen-projection path is
+#  consistent between the two solvers.
+#
+#  ⚠ MEASURE THE REFERENCE WITH *THIS FILE'S* CONFIGURATION. It is NOT the same
+#  as `test_nlpressure.jl` G3, which uses the same bar but a 52x4 domain with
+#  sponge 6/8 and mu_max=20, against 60x2 / sponge 8/8 / mu_max=30 here. Taking
+#  the sequential value from G3 gives 0.0027934 and manufactures a phantom 2.5 %
+#  "sequential-vs-distributed discrepancy" that is really just two different
+#  problems — an error made and caught on 2026-08-17.
+const REF_EMAX = 0.0028640    # sequential max η over the bar run (LU projections)
 const REF_RTOL = 5e-3         # CG(1e-10)+Jacobi projections vs LU ⇒ loose agreement
 
 bar(x) = 3.5 - 0.5*1.5*(tanh((x[1]-20.0)/4.0) - tanh((x[1]-32.0)/4.0))
