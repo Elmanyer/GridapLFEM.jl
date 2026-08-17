@@ -159,7 +159,21 @@ R_lin = assemble_vector(v -> global_residual(tm, tu_m, v, prob_lin, trian, dΩh)
 nl_frac = norm(R_full .- R_lin) / norm(R_full)
 @printf("  ‖R_full − R_linear‖ / ‖R_full‖ = %.1f%%  (nonlinear content of the residual)\n",
         100*nl_frac)
-check("MMS is genuinely nonlinear (nonlinear residual fraction > 15%)", nl_frac > 0.15,
+#  THRESHOLD RE-BASED 2026-08-16: was `> 0.15`, measured 18.2%. That reference was an
+#  ARTEFACT of the residual double-count fixed on 2026-08-15 (RESIDUAL_TERM_AUDIT_PLAN.md).
+#  `prob_lin` above is built with regime=:linear and flat_bed defaulting to FALSE, on a bed
+#  with ∇h ≠ 0 — precisely the configuration in which the 𝓐/𝓚 slope package was assembled
+#  TWICE. So R_lin carried a spurious duplicate of M14, an O(ε) term, and `R_full − R_lin`
+#  therefore measured that O(ε) contaminant instead of the O(ε²) nonlinear content this gate
+#  is about. With the residual corrected the figure is 5.6%, and THAT is the honest
+#  nonlinear content of this manufactured state (the state itself never changed — only the
+#  measurement of it). The corrected R_lin is independently verified: the linear variable-bed
+#  MMS converges at theoretical order (p_η=3.000, p_u=4.000).
+#  3% keeps the gate's purpose — catching a state that has become accidentally near-linear,
+#  which would score ≪1% — with margin below the measured 5.6%. If a STRONGER nonlinear
+#  exercise is wanted, raise the manufactured amplitude rather than lower this bar again;
+#  that would also require re-measuring gate 1's recovery reference.
+check("MMS is genuinely nonlinear (nonlinear residual fraction > 3%)", nl_frac > 0.03,
       "($(round(100*nl_frac,digits=1))%)")
 
 # native nonlinear-pressure block is computed (nonzero)

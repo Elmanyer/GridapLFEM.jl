@@ -271,17 +271,22 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
         Ll1 = (-1.0)*LgT
         Ll2 = LgT
         Ll3 = (-1.0)*(d_cf*DUt + LgT)                 # −∇·(h u̇ⱼ)
-        sPl = alg_mul(prob.P[1], Ll1) + alg_mul(prob.P[2], Ll2) + alg_mul(prob.P[3], Ll3)
+        #  L² = −L¹ EXACTLY in the linearised model, so P¹L¹+P²L² = (P¹−P²)L¹.
+        #  Collapsing 3 contractions to 2 (and 6 to 2 for A/K below) keeps the
+        #  operator tree shallow — the deep nesting is what broke sAK assembly.
+        Pm  = prob.P[1] - prob.P[2]
+        sPl = alg_mul(Pm, Ll1) + alg_mul(prob.P[3], Ll3)
         r = r + ∫( (-1.0)*(d_cf*d_cf)*(sPl ⋅ DW) ) * dΩh
         #  Bed-slope pressure package  −h ∇h Σⱼ𝓛ⱼ·(Aᵢⱼ+Kᵢⱼ). Carries an explicit ∇h,
         #  so it exists only over a non-flat bed — `lin_pressure` is exactly that
         #  condition (resolve_physics: advection || !flat_bed). Previously the flag
         #  was set but had NO consumer here.
         if prob.lin_pressure
-            sAK = alg_mul(prob.Av[1], Ll1) + alg_mul(prob.Kv[1], Ll1) +
-                  alg_mul(prob.Av[2], Ll2) + alg_mul(prob.Kv[2], Ll2) +
-                  alg_mul(prob.Av[3], Ll3) + alg_mul(prob.Kv[3], Ll3)
-            r = r + ∫( (-1.0)*d_cf*( dhx*(sAK ⋅ Wx) + dhy*(sAK ⋅ Wy) ) ) * dΩh
+            AKm = (prob.Av[1] + prob.Kv[1]) - (prob.Av[2] + prob.Kv[2])
+            AK3 =  prob.Av[3] + prob.Kv[3]
+            sAK = alg_mul(AKm, Ll1) + alg_mul(AK3, Ll3)
+            r = r + ∫( (-1.0)*d_cf*dhx*(sAK ⋅ Wx) ) * dΩh +
+                    ∫( (-1.0)*d_cf*dhy*(sAK ⋅ Wy) ) * dΩh
         end
     else
         UgHt = dHx*Uxt + dHy*Uyt                               # u̇ⱼ·∇H stacked
@@ -333,7 +338,16 @@ function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
     end
 
     # ---- linear non-hydrostatic pressure (A/K slope package) --------------------
-    if prob.lin_pressure
+    #  This is the NONLINEAR representation of the 𝓐/𝓚 slope package — rows M14–M18
+    #  of the term classification (GridapImplementation.tex, `tab: term classification`):
+    #  the un-expanded H[∇h(𝓛·A) + ∇H(𝓛·K)], which CONTAINS the linearised form.
+    #  The LINEAR representation is the `sAK` block inside the `if lin` branch above
+    #  (row M14 alone, h∇h·𝓛ˡⁱⁿ·(A+K)). The two are ALTERNATIVES, never addends, so
+    #  this guard must be the CONJUNCTION with `!lin`: `lin_pressure` alone is TRUE in
+    #  the linear variable-bed case (lin_pressure = advection ∨ ¬flat_bed), which
+    #  assembled the package twice — an O(ε) error invisible to every flat-bed test
+    #  because both forms vanish when ∇h ≡ 0. See building_files/RESIDUAL_TERM_AUDIT_PLAN.md.
+    if !lin && prob.lin_pressure
         UgHt = dHx*Uxt + dHy*Uyt
         L1 = (-1.0)*(dhx*Uxt + dhy*Uyt)
         L2 = UgHt
@@ -393,10 +407,27 @@ end
 # ----------------------------------------------------------
 #  Hand Jacobians. Splitting ∂R/∂u̇ (effective mass) from ∂R/∂u (spatial) lets
 #  the time integrator form its per-stage system J = ∂R/∂u + (1/aΔt)∂R/∂u̇
-#  directly. The advection block is differentiated in full (quadratic Newton);
-#  the slope-pressure packages are linearised with H frozen in the u̇-carrying
-#  terms — a quasi-Newton choice that keeps the Jacobian sparse while retaining
-#  fast, robust convergence.
+#  directly.
+#
+#  COVERAGE — differs by regime, deliberately (see building_files/RESIDUAL_TERM_AUDIT_PLAN.md):
+#
+#   * LINEAR branch (`prob.linearised`): the Jacobians are EXACT. The residual is
+#     affine in (u,u̇) there, so every assembled row has its exact derivative here —
+#     C1/M1/M10/M14 in ∂R/∂u̇, C2,C3/M3/sponge/relax in ∂R/∂u. Consequence, and the
+#     standing gate that protects it: Newton MUST converge in ONE iteration for any
+#     linear configuration, at any amplitude, on any bathymetry
+#     (test/test_linear_newton_gate.jl). Any excess iteration is proof of a
+#     residual↔Jacobian inconsistency.
+#
+#   * NONLINEAR branch: QUASI-NEWTON by choice. The advection block is differentiated
+#     in full (so Newton stays quadratic on the dominant nonlinearity), but the
+#     leading-pressure and 𝓐/𝓚 slope-pressure packages contribute their u̇-dependence
+#     only through the terms written below — their η-dependence (via H, ∇H) is FROZEN
+#     and the 𝓐/𝓚 package is omitted from ∂R/∂u̇ entirely. The 𝓝 blocks likewise add
+#     to the residual but not to the Jacobian. This costs Newton iterations, never
+#     accuracy: Newton drives the RESIDUAL to zero, so a converged answer is a root of
+#     the full residual regardless. Do not "complete" these without re-measuring every
+#     nonlinear reference value.
 # ----------------------------------------------------------
 
 "∂R/∂u̇ — effective mass operator (acceleration + R_P dispersion)."
@@ -425,13 +456,15 @@ function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dΩh)
         dLl1 = (-1.0)*dLgT
         dLl2 = dLgT
         dLl3 = (-1.0)*(d_cf*dDUt + dLgT)
-        dsPl = alg_mul(prob.P[1], dLl1) + alg_mul(prob.P[2], dLl2) + alg_mul(prob.P[3], dLl3)
+        dPm  = prob.P[1] - prob.P[2]
+        dsPl = alg_mul(dPm, dLl1) + alg_mul(prob.P[3], dLl3)
         r = r + ∫( (-1.0)*(d_cf*d_cf)*(dsPl ⋅ DW) ) * dΩh
         if prob.lin_pressure
-            dsAK = alg_mul(prob.Av[1], dLl1) + alg_mul(prob.Kv[1], dLl1) +
-                   alg_mul(prob.Av[2], dLl2) + alg_mul(prob.Kv[2], dLl2) +
-                   alg_mul(prob.Av[3], dLl3) + alg_mul(prob.Kv[3], dLl3)
-            r = r + ∫( (-1.0)*d_cf*( dhxl*(dsAK ⋅ Wx) + dhyl*(dsAK ⋅ Wy) ) ) * dΩh
+            dAKm = (prob.Av[1] + prob.Kv[1]) - (prob.Av[2] + prob.Kv[2])
+            dAK3 =  prob.Av[3] + prob.Kv[3]
+            dsAK = alg_mul(dAKm, dLl1) + alg_mul(dAK3, dLl3)
+            r = r + ∫( (-1.0)*d_cf*dhxl*(dsAK ⋅ Wx) ) * dΩh +
+                    ∫( (-1.0)*d_cf*dhyl*(dsAK ⋅ Wy) ) * dΩh
         end
     else
         dhx = prob.flat_bed ? 0.0*alg_dx(d_cf) : alg_dx(d_cf)   # ∇h ≡ 0 on a flat bed
