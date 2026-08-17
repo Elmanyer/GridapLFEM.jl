@@ -261,7 +261,7 @@ cheap `rome`/L1 budget.
 > `rome` node default (2 GB/core) was tried in 2026-08 and the job was OOM-killed with the same
 > error as the earlier crashes. The compile spike is therefore not the only consumer, and the
 > attribution experiment (per-rank JIT vs GMRES cache vs a per-step leak vs a baseline footprint
-> above 2 GB/core) is open — see `building_files/LOCAL_VALIDATION_PLAN.md` §2.2. Each launcher
+> above 2 GB/core) is open — see `building_files/EXECUTED_PLANS.md` §2.2. Each launcher
 > sizes its request to fit a `rome` node (256 GB / 128 cores).
 
 ```bash
@@ -488,11 +488,11 @@ records are in `building_files/DESIGN_RECORDS.md`.
   error does not cancel and the measured **order of accuracy** certifies the operator. It verifies
   the **linear core on a flat bed** (mass, `M`-acceleration, `gΦ∇η`, `d²B` dispersion): eigenmode
   gate `𝓛(u*) = 3.6e-15`, closed-form ≡ ForwardDiff `1.8e-15`. The nonlinear core, curved bed and 𝓝
-  blocks (Stages 2–4) are **still unverified**. Full record: `building_files/MMS_ANALYTIC_PLAN.md`.
+  blocks (Stages 2–4) are **still unverified**. Full record: `building_files/MMS_CAMPAIGN.md`.
 - **⚠ Equal-order FE spaces cost one order of convergence** (found by the above). `Q_p/Q_p` for
   `(η, 𝖴)` converges at `p`, not `p+1`. Mixed order `Q_p/Q_{p-1}` fixes the **surface** universally
   and the **velocity** at `Q3/Q2` — measured over a 12-study campaign
-  (`building_files/MMS_CONVERGENCE_CAMPAIGN.md`); the two fields must be stated separately:
+  (`building_files/MMS_CAMPAIGN.md`); the two fields must be stated separately:
   **`η` hits its optimal `p_e+1` in 12/12 studies** (`2.000/3.000/4.000` in 1-D, `1.980/2.997/3.994`
   in 2-D, static ≡ transient to 4 figures), while **`u` hits `p_u+1` only at `Q3/Q2`** (3.991 / 3.930);
   at `Q2/Q1` it stalls near 2.4 (optimal 3) and at `Q4/Q3` near 4.65 (optimal 5), rates still falling.

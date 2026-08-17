@@ -1,20 +1,23 @@
-> ## ⇨ START HERE: `building_files/HANDOVER.md` (read its §0 first — it retracts §1–§2)
-> Solver state, method lessons, and the document map. **Its §1–§2 describe a bug that is now FIXED
-> and whose diagnosis was WRONG**; §0 records the retraction. Then read
-> `building_files/RESIDUAL_TERM_AUDIT_PLAN.md` (what the defect actually was and how the residual is
-> now audited) and `building_files/MMS_NONLINEAR_PLAN.md` (where the nonlinear verification stands).
+> ## ⇨ START HERE
+> `building_files/RESIDUAL_AUDIT.md` — the residual/Jacobian audit: the assembly invariant, the
+> three defects it found, and the method lessons. `building_files/MMS_CAMPAIGN.md` — the analytic
+> method of manufactured solutions end to end: plans, executions, corrections and the verified
+> scope. `building_files/EXECUTED_PLANS.md` — completed work packages, plus the two experiment
+> designs that are still open (cluster memory attribution; four run-output gaps).
 >
-> **One-line status (2026-08-16):** the **linear** core is VERIFIED on both flat and variable
-> bathymetry (analytic MMS at theoretical order, `p_η=3.000`/`p_u=4.000`), and the **nonlinear
-> flat-bed core** is verified too (`2.996`/`3.995`). The `regime=:linear, flat_bed=false` bug is
-> fixed: it was a **residual** defect — the `𝓐/𝓚` slope package was assembled **twice** — not a
-> Jacobian defect as previously recorded. Still open: the nonlinear **variable-bed** MMS (Newton
-> stalls on the quasi-Newton Jacobian) and the `𝓝` forcing tiers (nested-AD failure, diagnosis
-> **unconfirmed**). Gridap is a **fork** (`Elmanyer/Gridap.jl` @ `fix-transient-multifield-ad`, one
-> commit on `v0.20.8`) making transient-multifield **AD work** — see `building_files/AD_ISSUE.md`
-> and the standing guard **gate A0 of `test/test_jacobians_ad.jl`**.
+> **One-line status (2026-08-17):** the analytic MMS verifies **all four `:none` models** —
+> linear and nonlinear, flat and variable bathymetry — at theoretical order
+> (`p_η≈3.0`, `p_u≈4.0` on `Q3/Q2`). Getting Model 4 there took **two solver fixes on 2026-08-17**:
+> the `𝓐/𝓚` package was missing from `∂R/∂u̇` (an **O(1)** omission, which is why Newton stalled
+> rather than merely slowed), and the nonlinear gravity branch was missing the `−η∇h` half of its
+> own integration by parts. `∂R/∂u̇` is now **exact in all 8 models**; `∂R/∂u` stays deliberately
+> quasi-Newton, its gap vanishing at order 1.11–1.16. Still open: the **`𝓝` forcing tiers**
+> (nested-AD failure, diagnosis **unconfirmed** — the cheap bisection is untried).
+> Gridap is a **fork** (`Elmanyer/Gridap.jl` @ `fix-transient-multifield-ad`, one commit on
+> `v0.20.8`) making transient-multifield **AD work** — see `building_files/AD_ISSUE.md` and the
+> standing guard **gate A0 of `test/test_jacobians_ad.jl`**.
 >
-> **The specification the residual is audited against** is now the term classification in
+> **The specification the residual is audited against** is the term classification in
 > `LFEM_discretisation/NumericalImplementation/GridapImplementation.tex`
 > §`subsec: term classification` (`tab: term classification`): every term of the full model tagged
 > by amplitude order × bed-slope class × activation condition on each of the three switches.
@@ -61,14 +64,14 @@ modes are 1-based `j=1..Nσ`, one per node.
 
 | File | What it is |
 |------|-----------|
-| `Project.toml` / `Manifest.toml` | **The Julia package manifest** — `name = "GridapLFEM"`, `uuid = 43e94d05-4d7d-4679-96a4-d46e2615da34`, `version = 0.1.0` (migrated 2026-08-04; see `building_files/PACKAGE_MIGRATION_PLAN.md`). The solver is loaded with **`using GridapLFEM`**, never `include()`. Being a real package is what lets PackageCompiler bake the solver *and its Gridap specialisations* into the cluster sysimage — under the previous `include()` loading they lived in a throw-away `Main.GridapLFEM`, were discarded from the image, and were recompiled in every rank (the cause of the 2026-08-04 OOM kills). It also gives every sequential run a cached precompile (~3.5 s to load instead of a cold compile). This directory is **both the package and the working environment**: tests, examples and the compile tooling are run directly against it (`julia --project=. test/test_basic.jl`), so `Test`, `BlockArrays`, `MPIPreferences` and `Preferences` are kept in `[deps]` rather than `[extras]`/`[targets]` — under `[extras]` those direct invocations would not resolve. `BlockArrays` is needed by the differently-structured **oracle** `LFEModel2D` that `test_equivalence.jl` loads. `[compat]` admits **both** minors (`Gridap = "0.19, 0.20"`, `GridapSolvers = "0.6, 0.7"`) because they were measured to give identical results (§Solver conventions); this environment and the cluster both run Gridap 0.20.x / GridapSolvers 0.7.1, while the parent `../` — a separate environment for the legacy solvers — stays on 0.19.11 / 0.6.2. A sysimage is only valid for the versions it was built against, so build it in the environment you run in. If you add a new `using X` to any `src/*.jl`, add it to `[deps]` here too. |
+| `Project.toml` / `Manifest.toml` | **The Julia package manifest** — `name = "GridapLFEM"`, `uuid = 43e94d05-4d7d-4679-96a4-d46e2615da34`, `version = 0.1.0` (migrated 2026-08-04; see `building_files/EXECUTED_PLANS.md`). The solver is loaded with **`using GridapLFEM`**, never `include()`. Being a real package is what lets PackageCompiler bake the solver *and its Gridap specialisations* into the cluster sysimage — under the previous `include()` loading they lived in a throw-away `Main.GridapLFEM`, were discarded from the image, and were recompiled in every rank (the cause of the 2026-08-04 OOM kills). It also gives every sequential run a cached precompile (~3.5 s to load instead of a cold compile). This directory is **both the package and the working environment**: tests, examples and the compile tooling are run directly against it (`julia --project=. test/test_basic.jl`), so `Test`, `BlockArrays`, `MPIPreferences` and `Preferences` are kept in `[deps]` rather than `[extras]`/`[targets]` — under `[extras]` those direct invocations would not resolve. `BlockArrays` is needed by the differently-structured **oracle** `LFEModel2D` that `test_equivalence.jl` loads. `[compat]` admits **both** minors (`Gridap = "0.19, 0.20"`, `GridapSolvers = "0.6, 0.7"`) because they were measured to give identical results (§Solver conventions); this environment and the cluster both run Gridap 0.20.x / GridapSolvers 0.7.1, while the parent `../` — a separate environment for the legacy solvers — stays on 0.19.11 / 0.6.2. A sysimage is only valid for the versions it was built against, so build it in the environment you run in. If you add a new `using X` to any `src/*.jl`, add it to `[deps]` here too. |
 | `LFEM_discretisation.zip` (LaTeX project) | The authoritative LaTeX derivation, a multi-file project (compiles with pdflatex). **Structure** (Overleaf layout, adopted 2026-08-04): `main.tex` (preamble/macros) inputs the chapter files — `SigmaEulerModel.tex` (chapter `σ-Euler Model`, two sections: governing equations, σ-transformation), then the wrapper `\chapter{Vertical Multilayer Discretisation}` declared in `main.tex` whose five **sections** live in `VerticalFESemiDiscretisation/` (`VerticalFEapprox`, `wDerivation`, `pDerivation`, `VerticalProjection`, `VerticalSemiDiscreteSystem` — the last incl. the **flat-bed reduction** of the full nonlinear model as subsections), then the standalone root-level chapters `LinearModel.tex` and **`StokesWaveFourierAnalysis.tex`** (the analytical theory chapter, mirroring Yang & Liu §3 for an **arbitrary-order** vertical basis: the Stokes–Fourier hierarchy; the dispersion functional `R(μ)=Φᵀ(M+μ|B|)⁻¹Φ` and four basis-independent properties — basis/space invariance, the variational bound `Cm ≤ Ce`, the `[Nσ/(Nσ+1)]` Padé-type structure, exact shallow-water + `O((kd)²)` consistency; group velocity and shoaling gradient; the **second-order bound-harmonic transfer function** with its hand-assembled forcing, reproducing Stokes to 1% and the published LFE-2 nonlinear range `kd=6.0`; third-order solvability + wave–current outlook; and the **vertical grid optimisation** — minimax formulation, the design rule `Δσ_top ≈ 2.94/kd_max`, and "grading beats order" at fixed DOF), and finally `NumericalImplementation/` — `GlobalResidual`, **`GridapImplementation.tex` (§8** — stacked layout, residual implementation, 𝓛/𝓝 pressure treatment, the `regime`/`nl_pressure`/**`flat_bed`** model-setups subsection, wave generation/sponge/BC incl. Dirichlet boundary generation with the `:model`/`:airy` polarization) and **`ValidationTests.tex` (§9** — the validation report incl. the BC-generation gates, Goda–Suzuki, spectral fidelity). **Two chapters were substantially extended 2026-08-16:** `GridapImplementation.tex` §`subsec: term classification` adds the **term-by-term anatomy** — the full model expanded with `H=h+η` distributed, 25 tagged terms (C1–C4, M1–M21), the classification table, the three activation predicates and the **assembly invariant**; and `ValidationTests.tex` §`sec: mms` is restructured into **four model subsections** (linear/nonlinear × flat/variable bed) with `nl_pressure` subsubsections, sharing one parent strong form `eq: mms strong general` from which all four are restrictions. Sign convention: `R_P` is a positive integral **subtracted** in the global sum, uniformly with `R_lin`/`R_nonlin`. All prior standalone `*Improved.tex`/`.md` section drafts are integrated into this zip. The document is a **`report`** (chapters + table of contents); the `§8`/`§9` labels above are the corresponding chapters. **Conventions** (enforced 2026-08-04, verified mechanically): structural labels carry a prefix matching their level — `\label{chap: …}` / `\label{sec: …}` / `\label{subsec: …}`, always `prefix: name` with a space; every chapter/section/subsection cross-reference is written `\S\ref{…}` (no `Section~\ref{}`/`Chapter~\ref{}` prose forms; ranges are `\S\ref{a}--\S\ref{b}`). Header numbering is the **report-class default**; the Roman-chapter/custom scheme is retained commented-out in `main.tex`. Both the `.zip` and an unzipped working copy `LFEM_discretisation/` live in `building_files/` — **the folder is the working copy; edit it and re-zip to sync** (the `.zip` is only an export/import channel for Overleaf; if the two disagree, the folder is authoritative). The `.cls`/toolchain needs `newtx`, so the document does not compile on this dev machine; `StokesWaveFourierAnalysis.tex` requires `multirow`. |
 | `LFEM_Gridap.md` | Synthesis of the derivation §1–§8 leading to the single scalar residual, in the LaTeX notation; §9 bridges that notation to the solver code. |
 | `algebraic_residual_math.md` | Operator reference: how each §8 residual term is written with native Gridap tensor ops (no MultiField decomposition, no vertical-index loops) — the `L`/`N` pressure stacks, the leading-pressure `R_P`, IBP of second-derivative terms, and the verified Gridap operator table. |
-| `building_files/HANDOVER.md` | **START HERE, but read §0 first.** Solver state, method lessons, document map. §0 (2026-08-15) **retracts §1–§2**: the bug they describe is fixed and their diagnosis was wrong (it was a residual double-count, not a Jacobian defect). Kept for provenance of how it was hunted — including two localisations later overturned. |
-| `building_files/RESIDUAL_TERM_AUDIT_PLAN.md` | **The residual audit.** Uses `tab: term classification` as a *specification*: maps every `∫` in `global_residual`/`jacobian_u`/`jacobian_u_t` to a tagged term, states the defects found, fixes them, verifies. Contains the **assembly invariant** (each classification row must have exactly one consumer, guarded by the *conjunction* of its three activation conditions) and the execution record with all measured numbers. |
-| `building_files/MMS_NONLINEAR_PLAN.md` | **The nonlinear-MMS plan and its execution record.** Design of the single parent forcing evaluator, the forcing-level gate set (N1–N7), the study order, and §5b: what was delivered, Model 3 verified, and the two blockers then open. **⚠ Its §5b B2 diagnosis (Model 4 needs more Newton iterations) was disproved on 2026-08-17** — the cause was an `O(1)` block missing from `∂R/∂u̇`, now fixed, and Model 4 is verified. The `𝓝`-tier blocker B1 stands, with its own diagnosis flagged unconfirmed. |
-| `building_files/archive/` | Executed/superseded plans (`LOCAL_VALIDATION_PLAN`, `PACKAGE_MIGRATION_PLAN`, `SPONGE_WAVEGEN_PLAN`, `LFEM_runs`, `SOLVER_ASSESSMENT_2026-08`, `MMS_ANALYTIC_PLAN`) + a README saying where each outcome now lives. Provenance only — not current instructions. |
+| `building_files/RESIDUAL_AUDIT.md` | **The residual/Jacobian audit — START HERE.** Uses `tab: term classification` as a *specification*: maps every `∫` in `global_residual`/`jacobian_u`/`jacobian_u_t` to a tagged term. States the **assembly invariant** (each row exactly one consumer, guarded by the CONJUNCTION of its three activation conditions) and records the **three defects** found against it: the `𝓐/𝓚` package assembled twice (2026-08-15), the same package missing from `∂R/∂u̇` (an **O(1)** omission — 2026-08-17), and the nonlinear gravity branch missing the `−η∇h` half of its own IBP (2026-08-17). Also the retraction of "AD converges where hand fails, therefore the residual is correct" — **AD is an oracle for the Jacobian, never the residual** — and the coverage gap that let defect 3 survive (a bounds check on the right configuration is not a value check). Consolidates the former `RESIDUAL_TERM_AUDIT_PLAN.md` + `HANDOVER.md`. |
+| `building_files/MMS_CAMPAIGN.md` | **The analytic MMS, end to end.** Why it is the only verification here (its forcing never touches `problem.jl`, so the error cannot cancel); the verified-scope table (**all four `:none` models**); Stage 1 and the **FE-pairing discovery** (equal order costs one convergence order); the 12-study convergence campaign with its two error-floor traps; Model 2's missing-terms audit; Models 3–4 including the wrong "needs more Newton iterations" diagnosis and what it actually was; **blocker B1** (the `𝓝` tiers have no forcing — diagnosis unconfirmed, cheap bisection untried); and seven method lessons. Consolidates the former `MMS_ANALYTIC_PLAN` + `MMS_CONVERGENCE_CAMPAIGN` + `MMS_VARBED_PLAN` + `MMS_NONLINEAR_PLAN`. |
+| `building_files/EXECUTED_PLANS.md` | **Completed work packages, condensed** (local-validation loop, package migration, sponge/wave-gen, the small-domain run suite, the solver assessment) — replaces the whole former `archive/`. Keeps what those plans still owned: the **cluster memory-attribution experiment** (four hypotheses, one decisive measurement each; H4 leading) and the **four run-output gaps**, both still OPEN; plus the preconditioner and strong-scaling findings and the local timing measurements. |
+| `building_files/` | Executed/superseded plans (`LOCAL_VALIDATION_PLAN`, `PACKAGE_MIGRATION_PLAN`, `SPONGE_WAVEGEN_PLAN`, `LFEM_runs`, `SOLVER_ASSESSMENT_2026-08`, `MMS_ANALYTIC_PLAN`) + a README saying where each outcome now lives. Provenance only — not current instructions. |
 | `building_files/AD_ISSUE.md` (**MOVED** from the repo root; note `building_files/` is **gitignored**, so this analysis is NOT under version control) | The Gridap transient-multifield AD bug: root cause (`Tuple` vs `Vector` in `time_derivative`, NOT `ForwardDiff.Dual`), the one-line fix, and the verification plan. The tracked guard that the fork stays effective is **gate A0 of `test/test_jacobians_ad.jl`** (added 2026-08-17) — an instant `hasmethod` check for the fork's Tuple-argument constructor. Before it, nothing in the repo exercised the fork at all. |
 | `DESIGN_RECORDS.md` | Consolidated **historical design records** for the completed features — algebraic residual + Jacobians, package layout, distributed solver, nonlinear-pressure completion, boundary wave generation, periodic-y BC, the `flat_bed` switch, and the production sea-state scripts. Provenance only (*why* the code is shaped as it is); the code, this `CLAUDE.md`, and the LaTeX derivation are authoritative. |
 | `src/` (`GridapLFEM.jl` + submodules) | **The self-contained serial + distributed solver package** (`module GridapLFEM`): vertical tensors (incl. `Pcal`), constant-tensor + `Operation` helpers, stacked FE spaces (distributed-safe MultiField dispatch + transient-Dirichlet inflow variants), the loop-free residual + hand Jacobians (the same code runs distributed — `Operation` is forwarded for `DistributedCellField`; **`∂R/∂u̇` is EXACT in both regimes since 2026-08-17**, `∂R/∂u` deliberately quasi-Newton in the nonlinear branch — both verified matrix-by-matrix against AD by `test/test_jacobians_ad.jl`), the time loops (default fully-implicit `RungeKutta(:SDIRK_2_2)`, `:theta` Crank–Nicolson selectable via `solver_type`; sequential LU+Newton / distributed GMRES+Jacobi+Newton), per-component VTK (`eta,u1x,u1y,…`) plus reconstructed `w_s<σ>`/`p_s<σ>` fields (`reconstruct.jl`), and `waveinput.jl` (Dirichlet boundary wave generation + WaveSpec.jl coupling: component tables, `:model`/`:airy` polarizations, ramp, relaxation zone). **`mms.jl` — the analytic (verification) MMS**, whose independence from `problem.jl` is the whole point and is enforced by a grep gate: `mms_forcing_stage1` (Model 1 closed form) and **`strong_residual_model`** — ONE parent evaluator for all four models, with `regime`/`flat_bed`/`nl_pressure` applied at one control point each, mirroring `resolve_physics` so a forcing/model mismatch is unrepresentable. `mms_forcing` is the single entry point (memoised one point deep; `H>0` guarded). Drivers: `setup_and_run`, `setup_and_run_distributed`, and `run_mms_case`/`run_conv_study` (`mms_driver.jl`, which take the same three physics symbols plus `nl_iter`). |
@@ -80,8 +83,8 @@ modes are 1-based `j=1..Nσ`, one per node.
 | `run/local/` | **Local launchers (this workstation, ≤6 cores)** — `lfem_local.sh` (the helper: project resolution, a hard rank cap, `lfem_local_run` sequential / `lfem_local_mpi` MPI, exit-143 handling for the benign `MPI_Finalize` OFI error) plus 7 `run_1d_*.sh` (**sequential** — measured faster than any MPI split, see the scaling entry) and 8 `run_2d_*.sh` (12-rank MPI) case launchers, `run_all_1d.sh` (runs the 1-D set side by side), **`bench_solver_config.sh`** (compares preconditioner × `ls_rtol` configurations on one fixed case and reports iterations, wall time *and* `max|η|`, so a cheaper setting is rejected if it changes the answer), and a `README.md` documenting how to read `diagnostics.csv`. Deliberately shares no code with `run/lfem_env.sh`, which is cluster-only (modules + sysimage). The point is a minutes-long feedback loop instead of the multi-hour cluster one. |
 | `run/` (+ `run/dist_small/`) | The SLURM launchers: 9 production cases in `run/` (plane/ring/periodic-plane wave, IC hump, bathymetry, irregular + directional sea, and the DelftBlue `run_blue.sh`) and 20 small-domain observation/comparison cases in `run/dist_small/`. **All of them run against the prebuilt sysimage**, through the shared helper **`run/lfem_env.sh`**: it loads the cluster modules the image was built with, resolves + verifies `GridapLFEM_sysimage.so`, and exposes `lfem_run <nranks> <script.jl>` (the `mpiexecjl --project=… -n … julia --project=… -J<sysimage> …` invocation). A launcher is therefore only its `#SBATCH` header, its `LFEM_*` env overrides, and one `lfem_run` call — nothing sysimage-specific is repeated. Helper knobs: `LFEM_PROJ`, `LFEM_CLUSTER` (`snellius`/`blue`), `LFEM_SYSIMAGE`, `LFEM_NO_SYSIMAGE=1` (escape hatch: drop `-J` and JIT-compile, for when the image is stale or mid-rebuild) and `LFEM_STRICT_SYSIMAGE=1` (below). A missing image **fails the job immediately** rather than falling back to a silent 45-min/rank compile. It also runs `lfem_check_sysimage_freshness` before launching and **warns if the image is stale w.r.t. `src/`** — the image bakes a *compiled copy* of the solver, so editing `src/*.jl` without rebuilding would otherwise run old code silently. Exact check: `compile_*.sh` calls `lfem_write_sysimage_stamp` after a successful build, writing `GridapLFEM_sysimage.so.src.sha256` (hash of all `src/*.jl`); the launcher recomputes and compares, so edits/additions/deletions trip it but a `touch`, re-clone or content-restoring `git checkout` does not. Images predating the stamp fall back to an mtime comparison (coarser, can cry wolf). Warns and continues by default; `LFEM_STRICT_SYSIMAGE=1` makes it a hard abort (use for long production jobs). |
 | `boundary_wave_generation.md` | Dirichlet boundary wave generation math note (nodal trace, `:model` discrete-eigenmode polarization derivation, ramp, well-posedness/reflection, relaxation zone, WaveSpec contract, validation map). The design record is in `DESIGN_RECORDS.md`. |
-| `LFEM_runs.md` | Plan/record for the small-domain observation + comparison run suite (all three batches; `examples/distributed_small/` + `run/dist_small/`). |
-| `SPONGE_WAVEGEN_PLAN.md` | Plan + post-implementation addendum for the surface-damping sponge (`+∫ μ q η`) and the explicit `wave_gen` interface (the two boundary symbols were later collapsed to a single `:bc_gen`). |
+| `EXECUTED_PLANS.md` | Plan/record for the small-domain observation + comparison run suite (all three batches; `examples/distributed_small/` + `run/dist_small/`). |
+| `EXECUTED_PLANS.md` | Plan + post-implementation addendum for the surface-damping sponge (`+∫ μ q η`) and the explicit `wave_gen` interface (the two boundary symbols were later collapsed to a single `:bc_gen`). |
 | `CFC2027_LFEMultilayer_abstract/` (+ `.zip`) | Conference abstract (CFC 2027, *Advanced Computational Methods for Free-surface Water Waves* symposium) presenting the **arbitrary-order** LFE-M model and its Gridap solver: `CFC2027_abstracts.tex` + `.cls` (the class needs the `newtx` fonts to build). |
 | `algebraic_lfem2D.jl` / `test_algebraic_lfem2D.jl` | The single-file prototype of the residual and its validation script; the `src/` package is the maintained form. |
 | `test_2HDmodel.ipynb` | An early exploratory notebook; its vertical pre-compute is sound and it is kept only for reference. |
@@ -158,7 +161,7 @@ Rayleigh exceedance), validated against solver output.
 specification, and Dirichlet generation; §9 the validation report incl. BC gates and the **four-model
 MMS section**; compile-checked, 139 pp, 0 undefined refs), `LFEM_Gridap.md`,
 `algebraic_residual_math.md`, `boundary_wave_generation.md`, the consolidated `DESIGN_RECORDS.md`, and
-the two current plans `RESIDUAL_TERM_AUDIT_PLAN.md` / `MMS_NONLINEAR_PLAN.md`.
+the two current plans `RESIDUAL_AUDIT.md` / `MMS_CAMPAIGN.md`.
 **Reminder: `building_files/` is gitignored**, so none of the above is version-controlled.
 
 ## Current Implementation Stage
@@ -347,7 +350,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   that `𝓛ⱼ` *is* the time derivative of the `w` expression, which motivates its three-component shape.
   Compiles clean: 0 errors, 0 undefined refs, 139 pp.
   **⚠ None of that is under version control** — `building_files/` is in `.gitignore`, so the LaTeX
-  sources, `RESIDUAL_TERM_AUDIT_PLAN.md` and `MMS_NONLINEAR_PLAN.md` are untracked even though the
+  sources, `RESIDUAL_AUDIT.md` and `MMS_CAMPAIGN.md` are untracked even though the
   commit messages reference them. Worth ignoring the artefacts (`*.zip`, built `*.pdf`) instead of the
   directory.
 - **🔑 THE `regime=:linear, flat_bed=false` BUG IS FIXED — and it was a RESIDUAL defect, not a
@@ -361,8 +364,8 @@ clearest demonstration in the repo of why the analytic MMS exists.
   column-by-column from the residual — no AD, no FD) now agree with the hand Jacobians to
   **1.7e-16**, was `2.8e-02`; `test_basic` reproduces its references **exactly** (max η 0.00410,
   gauge 0.00212, Newton **240**); `test_nlpressure` 9/9. Full audit:
-  `building_files/RESIDUAL_TERM_AUDIT_PLAN.md`.
-  **⚠ This retracts a claim that is still written in `HANDOVER.md` §1.3.** "The residual is correct
+  `building_files/RESIDUAL_AUDIT.md`.
+  **⚠ This retracts a claim that is still written in `RESIDUAL_AUDIT.md` §1.3.** "The residual is correct
   because AD converges where hand fails" is an invalid inference — AD converging proves
   residual↔Jacobian *consistency*, never residual *correctness*. **Every `use_ad=true` variable-bed
   result predating the fix was computed against the wrong operator and must be discarded**, incl.
@@ -431,7 +434,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   point consecutively — 3 evaluations collapse to 1) and an `H>0` guard. Drivers gained
   `regime`/`nl_pressure`/`nl_iter` passthroughs. Forcing gates 9/9, incl. **Model 4 at constant `h`
   ≡ Model 3 to exactly 0.0** and the `ε²` amplitude scaling at 3.913. Plan and execution record:
-  `building_files/MMS_NONLINEAR_PLAN.md`.
+  `building_files/MMS_CAMPAIGN.md`.
 - **`test_shallow_water.jl` repaired — and the fix was RESOLUTION, not tolerances** (2026-08-16). It
   had been broken since the physics-interface change (it called `setup_and_run` with the retired
   `linearised=`/`advection=` kwargs and raised `MethodError` before running), so its documented
@@ -512,7 +515,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   the exact derivatives of the residual, and the multi-step bookkeeping is consistent — but as
   **code support, not model validation**. The file header now states this at length.
 - **Local validation loop + runtime diagnostics** (2026-08-06) — the work package planned in
-  `building_files/LOCAL_VALIDATION_PLAN.md`, motivated by the fact that the four archived cluster
+  `building_files/EXECUTED_PLANS.md`, motivated by the fact that the four archived cluster
   runs burned 8 h / 44 h / 58 h / 72 h before failing, *silently*.
   * **Instrumentation** (§Runtime monitoring): per-rank RSS, GMRES saturation flagging, a
     **relative** divergence guard (`div_factor·eta_ref`, replacing the blind absolute `1e4`), the
@@ -566,7 +569,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   a compile spike occurs before step 1. Both defects were real and both are fixed; packaging alone
   would not have prevented the OOM. `test_equivalence.jl` keeps its `include()` of the *oracle*
   `../LFE-M_2D_solver/` — that is a genuinely external second implementation. Plan and design
-  record: `building_files/PACKAGE_MIGRATION_PLAN.md`.
+  record: `building_files/EXECUTED_PLANS.md`.
   Two pre-existing problems surfaced by the migration, both fixed/recorded: `test_vertical.jl` used
   `VectorValue` without importing it (it failed identically under the old loading — the documented
   "15/15 PASS" was stale; now genuinely 15/15), and an apparent dependency drift to
@@ -584,7 +587,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   All 28 launcher headers carrying the old "drop this once the sysimage is proven" comment were
   rewritten accordingly. The memory-attribution experiment (four hypotheses — per-rank JIT, GMRES
   cache, a per-step leak, or a baseline footprint that simply exceeds 2 GB/core — each with the
-  measurement that decides it) is **`building_files/LOCAL_VALIDATION_PLAN.md` §2.2**; it depends on
+  measurement that decides it) is **`building_files/EXECUTED_PLANS.md` §2.2**; it depends on
   the new per-rank RSS reporting (§Runtime monitoring).
 - **Physics-selection interface** (§6): the six residual booleans are driven by three orthogonal
   high-level controls `regime` ∈ {`:linear`,`:nonlinear`}, `nl_pressure` ∈ {`:none`,`:native`,`:full`},
@@ -603,7 +606,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   (`+∫ μ q η` in continuity, same μ profile/μ_max; residual + hand Jacobian, `problem.jl`). This
   cures the open-boundary spurious mode that a velocity-only sponge left under-damped (a linear
   plane wave that previously grew to 10⁴× and NaN'd). Closed-basin tests are bit-identical (μ≡0
-  there). Design record: `DESIGN_RECORDS.md`; plan: `building_files/SPONGE_WAVEGEN_PLAN.md`.
+  there). Design record: `DESIGN_RECORDS.md`; plan: `building_files/EXECUTED_PLANS.md`.
 - **Explicit `wave_gen` selector** — two mechanisms `:inner_res` / `:bc_gen` (interior source vs
   boundary Dirichlet generation); for `:bc_gen` the source (parametrised regular wave / `WaveInput` /
   WaveSpec `AiryState`) is dispatched on the type of `wave_bc`, all feeding the same Dirichlet machinery
@@ -625,7 +628,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   a controlled comparison matrix around the flat periodic plane wave (batch 2), and sea-state comparisons
   (batch 3). Verified: all 5 parse; every launcher resolves to its intended config with `n = px·py =
   ntasks`. Smoke-validated on 2 ranks (big-amplitude full-nonlinear flat plane wave: Newton-converged,
-  finite). Plan: `building_files/LFEM_runs.md`.
+  finite). Plan: `building_files/EXECUTED_PLANS.md`.
 - **Cluster sysimage build chain** (`compile/`) — working and validated end to end: the system-MPI
   pin (`use_system_binary`), the MPI preflight, and `include_transitive_dependencies=false` (which
   removed the last `OpenMPI_jll`-baked-into-the-image crash). Verify a built image with
@@ -700,7 +703,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   under the gravity fix. Pin a reference value there so the check lives in the suite that actually
   runs, instead of only in the distributed twin that does not.
 - **🔴 NONLINEAR MMS — two blockers, both diagnosed, neither fixed** (2026-08-16). Full record:
-  `building_files/MMS_NONLINEAR_PLAN.md` §5b.
+  `building_files/MMS_CAMPAIGN.md` §5b.
   * **B1 — the `𝓝` forcing tiers (`nl_pressure=:native`/`:full`) are not available.** Components
     `{1,2,4,5}` are second derivatives of `u*`, and the leading pressure differentiates the result
     once more ⇒ a **third** derivative ⇒ three nested ForwardDiff levels. The outer spatial
@@ -741,12 +744,12 @@ clearest demonstration in the repo of why the analytic MMS exists.
   unlike `test_selfconsistency.jl` the error does **not** cancel. Gates: eigenmode `𝓛(u*)=3.6e-15`,
   closed-form ≡ ForwardDiff `1.8e-15`. **Still open: Stage 2 (+advection), 3 (+curved bed),
   4 (+𝓝 blocks)** — the architecture stages into them; nothing beyond the linear core is verified.
-  Full record: `building_files/MMS_ANALYTIC_PLAN.md`.
+  Full record: `building_files/MMS_CAMPAIGN.md`.
 - **⚠ The verification also found that the EQUAL-ORDER FE PAIRING COSTS ONE ORDER OF CONVERGENCE.**
   Measured: `Q2/Q2` converges at `p`(=2), `Q3/Q3` at `p`(=3) — uniformly `p`, not the theoretical
   `p+1`. Mixed order `Q_p/Q_{p-1}` fixes the **surface** universally and the **velocity** at `Q3/Q2`.
   **Confirmed by a 12-study campaign** (3 pairings × 1-D/2-D × static/transient,
-  `building_files/MMS_CONVERGENCE_CAMPAIGN.md`) — state the two fields SEPARATELY:
+  `building_files/MMS_CAMPAIGN.md`) — state the two fields SEPARATELY:
   * **`η` reaches its optimal `p_e+1` in 12/12 studies**, exactly: `2.000/3.000/4.000` (1-D),
     `1.980/2.997/3.994` (2-D), and static ≡ transient to 4 significant figures.
   * **`u` reaches its optimal `p_u+1` only at `Q3/Q2`** (3.991 1-D, 3.930 2-D — four independent
@@ -783,7 +786,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   everywhere). Order of effort: field-split/Schur → geometric multigrid → restricted Schwarz.
   *Derived design rule meanwhile: keep horizontal cells near-isotropic, or pay for it in the linear
   solve.*
-- **Four output gaps** (`SOLVER_ASSESSMENT_2026-08.md` §6): the discrete-equation check does not run
+- **Four output gaps** (`EXECUTED_PLANS.md` §6): the discrete-equation check does not run
   under the default SDIRK integrator (it is `is_theta`-gated, so `res_theta = NaN`); linear counts
   are per RK stage, not per Newton iteration; no assembly-vs-solve time split; the linear solve's
   achieved tolerance is not recorded.
@@ -831,7 +834,7 @@ clearest demonstration in the repo of why the analytic MMS exists.
   every launcher. Four hypotheses remain — per-rank JIT (image absent/stale/incomplete), GMRES
   cache allocation, a per-step leak (Gridap caches, `nl_pressure=:full` frozen projections,
   VTK buffers), or a baseline footprint that simply exceeds 2 GB/core — each with a decisive
-  measurement, in `building_files/LOCAL_VALIDATION_PLAN.md` §2.2. Needs `sacct MaxRSS` + the new
+  measurement, in `building_files/EXECUTED_PLANS.md` §2.2. Needs `sacct MaxRSS` + the new
   per-rank RSS log line; the cheapest decisive job is
   `run/dist_small/run_lin_periodic_plane_small.sh`.
 - **`Hs=0.2 m` at `d=3.5 m` with `nl_pressure=:full`** is far outside the conservative `A ≤ 0.001`
@@ -1197,7 +1200,7 @@ same number every step**, with Newton needing 8–24 iterations instead of 3–5
   selects the surface order and **defaults to equal order (unchanged behaviour)**. Before switching
   production, compare error-vs-DOF at realistic mesh sizes: the higher rate does not automatically
   win at a given mesh (`Q3/Q3` was 40× more accurate than `Q3/Q2` at `nx=24`). Evidence and the full
-  diagnosis trail: `building_files/MMS_ANALYTIC_PLAN.md`.
+  diagnosis trail: `building_files/MMS_CAMPAIGN.md`.
 * **ASSEMBLY INVARIANT — every residual term must have exactly ONE consumer, guarded by the
   CONJUNCTION of its three activation conditions** (`tab: term classification`). A guard testing only
   the bed-slope condition (`flat_bed`) or only the amplitude condition (`regime`) is a defect
