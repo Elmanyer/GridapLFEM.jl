@@ -32,6 +32,13 @@ M        = genv_i("LFEM_M", 3)
 px, py   = genv_i("LFEM_PX", 16), genv_i("LFEM_PY", 8)
 nx, ny   = genv_i("LFEM_NX", 1200), genv_i("LFEM_NY", 600)
 feord    = genv_i("LFEM_FE_ORDER", 2)
+#  p_eta = 0 keeps the historical EQUAL-ORDER spaces (unchanged default).
+#  Set LFEM_P_ETA = LFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
+#  the only one measured to reach the theoretical order in BOTH fields. It is
+#  NOT automatically the better production choice: at a GIVEN mesh the
+#  equal-order spaces were 40x more accurate, because eta sits in a richer
+#  space. Compare error-vs-DOF before switching.
+p_eta    = genv_i("LFEM_P_ETA", 0)
 Lx, Ly   = genv_f("LFEM_LX", 400.0), genv_f("LFEM_LY", 100.0)
 d        = genv_f("LFEM_D", 3.5)
 sponge   = genv_f("LFEM_SPONGE", 40.0)
@@ -53,7 +60,7 @@ is_rank0() && @printf("#   Hs=%.4g m Tp=%.3g s | nθ=%d σθ=%.1f° | bc=%s/%s s
                       string(bc_profile_sym()), genv_i("LFEM_SEED", 20260723))
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     h_val=d, T_wave=Tp, A_wave=hs_val()/2,
     wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),

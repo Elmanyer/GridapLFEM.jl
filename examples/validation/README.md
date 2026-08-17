@@ -29,7 +29,7 @@ which only resolves where the package is available.
 All default to a **quick** size; each script's header documents the production size (finer mesh, more
 periods) needed for a publication-quality comparison. Key rules (see the root `CLAUDE.md`):
 
-- `fe_order ≥ 2` (Q1 zeroes the dispersion term).
+- `p_horizontal ≥ 2` (Q1 zeroes the dispersion term).
 - IC-release problems (`solitary_wave.jl`) require `x_wall_bc=true` (closed basin).
 - Nonlinear runs need `A_wave` small (`≲ 0.001` scaled) for long-run stability; `stokes_harmonics.jl`
   deliberately uses a larger amplitude to generate a measurable bound harmonic, over a short run.

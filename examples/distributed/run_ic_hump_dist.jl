@@ -29,6 +29,13 @@ px, py   = genv_i("LFEM_PX", 2), genv_i("LFEM_PY", 2)
 L        = genv_f("LFEM_L", 100.0)
 nx, ny   = genv_i("LFEM_NX", 100), genv_i("LFEM_NY", 100)
 feord    = genv_i("LFEM_FE_ORDER", 2)
+#  p_eta = 0 keeps the historical EQUAL-ORDER spaces (unchanged default).
+#  Set LFEM_P_ETA = LFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
+#  the only one measured to reach the theoretical order in BOTH fields. It is
+#  NOT automatically the better production choice: at a GIVEN mesh the
+#  equal-order spaces were 40x more accurate, because eta sits in a richer
+#  space. Compare error-vs-DOF before switching.
+p_eta    = genv_i("LFEM_P_ETA", 0)
 d        = genv_f("LFEM_D", 3.5)
 A0       = genv_f("LFEM_A0", 0.01)
 sig0     = genv_f("LFEM_SIGMA0", 4.0)
@@ -43,7 +50,7 @@ eta0(x) = A0 * exp(-((x[1]-xc)^2 + (x[2]-yc)^2) / sig0^2)
 banner("IC HUMP RELEASE (closed basin) — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
     domain=(0.0,L,0.0,L), partition=(nx,ny),
     h_val=d, T_wave=1.6, A_wave=0.0,                 # no wavemaker (A=0 → zero source)
     x_wm=-1e6, y_wm=nothing,

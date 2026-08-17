@@ -15,7 +15,7 @@ the built-in **in-run residual check**, so nothing depends on point gauges (whic
 | Script | What it validates | Metric | Gate |
 |--------|-------------------|--------|------|
 | `cluster_conservation.jl` | long-run **mass conservation** + energy/amplitude **stability** in a closed basin, fully nonlinear | `∫η` drift, energy drift, `‖η‖_{L²}` envelope (all global reductions) | mass drift `< 1e-6`; amplitude bounded |
-| `cluster_mms.jl` | the **full nonlinear time-dependent solver** at scale: an unsteady, finite-amplitude manufactured solution recovered over many CN steps with **all** nonlinear pressure terms active, through the real GMRES+Jacobi+Newton stack | `‖u_n − u*(tₙ)‖ / ‖u*‖` (global reduction) | machine precision (`< 1e-8`) every step |
+| `cluster_selfconsistency.jl` | the **full nonlinear time-dependent solver** at scale: an unsteady, finite-amplitude manufactured solution recovered over many CN steps with **all** nonlinear pressure terms active, through the real GMRES+Jacobi+Newton stack | `‖u_n − u*(tₙ)‖ / ‖u*‖` (global reduction) | machine precision (`< 1e-8`) every step |
 
 Both write a **CSV time series** to `output/…` (columns in the header line) for offline plotting and
 tabulation, and print a rank-0 summary with an explicit `PASS`/`FAIL` (non-zero exit on failure, so a
@@ -28,7 +28,7 @@ under Crank–Nicolson. A growing `∫η` drift would expose a broken continuity
 BC, or an inconsistent parallel reduction; a growing amplitude would expose an instability. This is
 the cheapest, strongest at-scale correctness signal — an **exact** invariant checked over a long run.
 
-### `cluster_mms.jl` — the nonlinear solver test at scale
+### `cluster_selfconsistency.jl` — the nonlinear solver test at scale
 An unsteady manufactured solution `u*(x,t)` (degree-2 in space so it is exactly Q2-representable,
 oscillating in time, over a curved bed) is marched over many steps. The per-step forcing is the
 solver's own residual assembled on `u*`, injected by wrapping the residual
@@ -77,7 +77,7 @@ LFEM_PX=8 LFEM_PY=1 LFEM_NX=2000 LFEM_NY=200 LFEM_DT=0.02 LFEM_TFINAL=8.0 \
 # distributed unsteady nonlinear MMS, 8 ranks, 400×200 mesh, 200 steps
 LFEM_PX=4 LFEM_PY=2 LFEM_NX=400 LFEM_NY=200 LFEM_NSTEPS=200 LFEM_NLPFULL=1 \
   ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-      GridapLFEM.jl/test/cluster/cluster_mms.jl
+      GridapLFEM.jl/test/cluster/cluster_selfconsistency.jl
 ```
 
 A SLURM template is in `slurm_validation.sh` (edit the account/partition/module lines for your
@@ -86,7 +86,7 @@ minutes (JIT) — budget for it, and prefer long runs so compile time is amortis
 
 ## Visualising / tabulating the results
 
-- **CSV** (`output/cluster_conservation/conservation.csv`, `output/cluster_mms/mms.csv`): load in
+- **CSV** (`output/cluster_conservation/conservation.csv`, `output/cluster_selfconsistency/mms.csv`): load in
   Python/Julia/gnuplot. For conservation, plot `dmass_rel` and `denergy_rel` vs `t` (should be flat
   near machine ε for mass; bounded for energy) and `etaL2` vs `t` (envelope). For MMS, plot `rel_err`
   vs `t` (a flat line at machine precision is the pass signature; any upward trend is a red flag).

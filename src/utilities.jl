@@ -236,6 +236,19 @@ function setup_and_run(;
     domain                  = ((0.0, 60.0), (0.0, 10.0)),  # ((x0,x1),(y0,y1)) extent [m]
     partition    :: Tuple   = (120, 20),  # (nx,ny) number of horizontal cells
     p_horizontal :: Int     = 2,          # horizontal FE order (must be ≥2: Q1 zeroes the dispersion)
+    p_eta        :: Int     = 0,          # surface FE order. 0 ⇒ EQUAL ORDER (= p_horizontal),
+                                          #   which is the historical default and is UNCHANGED.
+                                          #   Set p_eta = p_horizontal−1 for the Taylor-Hood-like
+                                          #   pairing: η enters momentum undifferentiated (via ∇·v
+                                          #   after IBP), so it plays the pressure role of a Stokes
+                                          #   system and equal-order continuous spaces are inf-sup
+                                          #   deficient — the analytic MMS measures order p there
+                                          #   rather than p+1, in BOTH fields.
+                                          #   ⚠ A BETTER RATE IS NOT A BETTER ANSWER AT A GIVEN MESH:
+                                          #   at nx=24 the equal-order Q3/Q3 was 40x MORE ACCURATE
+                                          #   than Q3/Q2, because η sits in a richer space. Compare
+                                          #   error-vs-DOF at your production resolution before
+                                          #   switching. See MMS_CONVERGENCE_CAMPAIGN.md.
     # ---- Physical parameters -------------------------------------------------
     h_val        :: Float64 = 3.5,        # still-water depth [m] (flat bed unless h_bathy given)
     g            :: Float64 = g,          # gravitational acceleration [m/s²]
@@ -341,7 +354,7 @@ function setup_and_run(;
     # `y_periodic` glues the top/bottom edges when y_wall_bc == :periodic.
     model, trian = build_horizontal_model(domain, partition; y_periodic=y_periodic)
     # quadrature degree = 2·p_horizontal+2 integrates the nonlinear (product) terms exactly enough.
-    dΩh = Measure(trian, 2*p_horizontal + 2)
+    dΩh = Measure(trian, 2*max(p_horizontal, p_eta == 0 ? p_horizontal : p_eta) + 2)
 
     # Forcing frequency and the matching wavenumber from the Airy relation
     # ω² = g k tanh(kd) (used to size the wavemaker and report kd).
@@ -443,12 +456,14 @@ function setup_and_run(;
     end
 
     # Build the stacked FE spaces for the horizontal problem, applying the inflow BCs if provided.
+    pe = p_eta == 0 ? p_horizontal : p_eta   # 0 ⇒ equal order (unchanged default)
     U, V = build_fe_spaces(model, 
-                                p_horizontal,           # horizontal FE order
+                                p_horizontal,           # horizontal (velocity) FE order
                                 vert.N_dof;             # number of vertical DOFs = number of stacked fields
                                 y_wall_bc=y_wall_bc,    # lateral BC type
                                 x_wall_bc=x_wall_bc,    # solid wall BC on x-edges
-                                inflow=inflow)          # inflow BC data (η, 𝖴x, 𝖴y) if provided
+                                inflow=inflow,          # inflow BC data (η, 𝖴x, 𝖴y) if provided
+                                p_eta=pe)               # surface FE order (see the kwarg note)
 
     @printf("  Fields: 3 (η + 2 stacked VectorValue{%d})   free DOFs: %d\n",
             vert.N_dof, num_free_dofs(U(0.0)))

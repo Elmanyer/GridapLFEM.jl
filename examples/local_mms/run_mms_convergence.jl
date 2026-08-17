@@ -18,15 +18,39 @@
 #    LFEM_MMS_NXF/NYF  fixed fine mesh (time)      24 / 16
 #    LFEM_MMS_TFINAL   final time                  0.02 (space) / 0.08 (time)
 #    LFEM_MMS_M        vertical elements           2
-#    LFEM_MMS_ORDER    horizontal FE order         2   (expected space rate = ORDER+1)
+#    LFEM_MMS_ORDER    VELOCITY FE order p_u       3   (optimal u rate = p_u+1)
+#    LFEM_MMS_PETA     SURFACE  FE order p_eta     p_u−1 (optimal eta rate = p_eta+1)
 #    LFEM_MMS_LX/LY    domain                      1.7 / 1.1
 #    LFEM_MMS_D        still-water depth           1.0
 #    LFEM_MMS_SOLVER   sdirk | theta               sdirk
 #    LFEM_MMS_OUT      output directory            output/local/mms
+#    -- model selection (the four MMS models) --
+#    LFEM_MMS_REGIME   linear | nonlinear          linear
+#    LFEM_MMS_NLP      none | native | full        none   (≠none not yet available)
+#    LFEM_MMS_FLATBED  1 flat | 0 variable bed     1
+#    LFEM_MMS_AB       bed amplitude if FLATBED=0  0.2
+#    LFEM_MMS_NLITER   Newton budget               50 linear / 400 nonlinear
+#
+#  ⚠ THE FE PAIRING IS PART OF THE MEASUREMENT. η enters momentum
+#  undifferentiated (via ∇·v after IBP), so it plays the pressure role of a
+#  Stokes system and EQUAL-ORDER spaces are inf-sup deficient: Q_p/Q_p converges
+#  at p in both fields, not p+1. The default here is the Taylor-Hood-like
+#  Q_p/Q_{p−1}, the only pairing measured optimal in both fields
+#  (building_files/MMS_CONVERGENCE_CAMPAIGN.md). Reading a rate without knowing
+#  the pairing is how a healthy solver gets mistaken for a broken one.
+#
+#  ⚠ NONLINEAR MODELS NEED ITERATION BUDGET, NOT LOOSER TOLERANCES. The
+#  nonlinear Jacobians are quasi-Newton by design, so Newton converges linearly;
+#  raise LFEM_MMS_NLITER. Loosening nl_tol would put the algebraic error inside
+#  the discretisation error being measured.
 #
 #  RUN
 #    julia --project=. examples/local_mms/run_mms_convergence.jl
 #    LFEM_MMS_MODE=space LFEM_MMS_LEVELS=5 julia --project=. examples/local_mms/run_mms_convergence.jl
+#    # Model 3 (nonlinear, flat bed):
+#    LFEM_MMS_REGIME=nonlinear julia --project=. examples/local_mms/run_mms_convergence.jl
+#    # Model 2 (linear, variable bed):
+#    LFEM_MMS_FLATBED=0 LFEM_MMS_D=2.5 julia --project=. examples/local_mms/run_mms_convergence.jl
 # ==============================================================
 
 using GridapLFEM
@@ -41,20 +65,44 @@ levels  = genv_i("LFEM_MMS_LEVELS", 4)
 nx0     = genv_i("LFEM_MMS_NX0", 6);   ny0  = genv_i("LFEM_MMS_NY0", 4)
 nxf     = genv_i("LFEM_MMS_NXF", 24);  nyf  = genv_i("LFEM_MMS_NYF", 16)
 Mvert   = genv_i("LFEM_MMS_M", 2)
-order   = genv_i("LFEM_MMS_ORDER", 2)
+order   = genv_i("LFEM_MMS_ORDER", 3)          # velocity order p_u (Q3 by default)
+#  Surface order. Default = order−1 (Taylor-Hood-like), the ONLY pairing measured
+#  optimal in BOTH fields. Set equal to `order` to reproduce the old equal-order
+#  behaviour — but then expect p, not p+1, in both fields.
+p_eta   = genv_i("LFEM_MMS_PETA", order - 1)
 Lx      = genv_f("LFEM_MMS_LX", 1.7);  Ly   = genv_f("LFEM_MMS_LY", 1.1)
 dval    = genv_f("LFEM_MMS_D", 1.0)
 solver  = Symbol(genv("LFEM_MMS_SOLVER", "sdirk"))
 outdir  = genv("LFEM_MMS_OUT", "output/local/mms")
 mkpath(outdir)
 
-CASE = (Lx=Lx, Ly=Ly, d=dval, M=Mvert, p_horizontal=order, solver_type=solver)
+#  Model selection — the SAME three symbols drive the forcing and the solver
+#  (run_mms_case passes both from one variable each), so they cannot drift apart.
+regime      = Symbol(genv("LFEM_MMS_REGIME", "linear"))
+nlp         = Symbol(genv("LFEM_MMS_NLP", "none"))
+flat_bed    = genv_i("LFEM_MMS_FLATBED", 1) != 0
+a_b         = genv_f("LFEM_MMS_AB", 0.2)       # bed amplitude when flat_bed=0
+nl_iter     = genv_i("LFEM_MMS_NLITER", regime === :linear ? 50 : 400)
+#  Variable bed ⇒ hand run_mms_case the same bathymetry object it gives the forcing.
+hfun    = flat_bed ? nothing : bathymetry_field(; d0=dval, a_b=a_b, kbx=1.3, kby=0.0)
+
+CASE = (Lx=Lx, Ly=Ly, d=dval, M=Mvert, p_horizontal=order, p_eta=p_eta,
+        solver_type=solver, regime=regime, nl_pressure=nlp, flat_bed=flat_bed,
+        hfun=hfun, nl_iter=nl_iter)
+
+#  The two fields have DIFFERENT optimal rates under a mixed pairing.
+opt_eta, opt_u = p_eta + 1, order + 1
+model_no = regime === :linear ? (flat_bed ? 1 : 2) : (flat_bed ? 3 : 4)
 
 println("#"^70)
-println("#  ANALYTIC MMS — Stage 1 (linear core, flat bed)")
-println("#    domain $(Lx)×$(Ly) m | d=$(dval) | M=$(Mvert) | Q$(order) | $(solver)")
-println("#    expected: space $(order+1)   time 2")
-println("#    NOTE: this verifies the LINEAR FLAT-BED operator only.")
+println("#  ANALYTIC MMS — Model $model_no  ($(regime) / $(flat_bed ? "flat" : "variable") bed / :$(nlp))")
+println("#    domain $(Lx)×$(Ly) m | d=$(dval) | M=$(Mvert) | Q$(order)/Q$(p_eta) | $(solver)")
+println("#    expected: space  eta→$(opt_eta)  u→$(opt_u)   |   time 2")
+if order == p_eta
+    println("#    ⚠ EQUAL ORDER: eta enters momentum undifferentiated (∇·v after IBP), so")
+    println("#      this pairing is inf-sup deficient and converges at p, NOT p+1. The")
+    println("#      expectations printed above are unreachable — use LFEM_MMS_PETA=$(order-1).")
+end
 println("#"^70)
 
 rows = []
@@ -65,10 +113,10 @@ if mode in (:space, :both)
                              dt0=dt0, T_final=tF, CASE...)
     for i in eachindex(sp.param)
         push!(rows, ("space", sp.param[i], dt0, sp.e_eta[i], sp.e_u[i],
-                     sp.p_eta, sp.p_u, Float64(order+1)))
+                     sp.p_eta, sp.p_u, Float64(opt_eta), Float64(opt_u)))
     end
-    @printf("\n  >>> SPATIAL  p_eta = %.3f   p_u = %.3f   (expected %d)\n",
-            sp.p_eta, sp.p_u, order+1)
+    @printf("\n  >>> SPATIAL  p_eta = %.3f (expected %d)   p_u = %.3f (expected %d)\n",
+            sp.p_eta, opt_eta, sp.p_u, opt_u)
 end
 if mode in (:time, :both)
     dt0 = genv_f("LFEM_MMS_DT0_T", 8e-3)
@@ -77,7 +125,7 @@ if mode in (:time, :both)
                              dt0=dt0, T_final=tF, CASE...)
     for i in eachindex(tp.param)
         push!(rows, ("time", NaN, tp.param[i], tp.e_eta[i], tp.e_u[i],
-                     tp.p_eta, tp.p_u, 2.0))
+                     tp.p_eta, tp.p_u, 2.0, 2.0))
     end
     @printf("\n  >>> TEMPORAL q_eta = %.3f   q_u = %.3f   (expected 2)\n",
             tp.p_eta, tp.p_u)
@@ -85,12 +133,14 @@ end
 
 csv = joinpath(outdir, "mms_convergence.csv")
 open(csv, "w") do io
-    println(io, "study,h,dt,e_eta,e_u,p_eta,p_u,expected")
+    println(io, "study,h,dt,e_eta,e_u,p_eta,p_u,expected_eta,expected_u")
     for r in rows
-        @printf(io, "%s,%.8g,%.8g,%.10e,%.10e,%.4f,%.4f,%.1f\n", r...)
+        @printf(io, "%s,%.8g,%.8g,%.10e,%.10e,%.4f,%.4f,%.1f,%.1f\n", r...)
     end
 end
 println("\n  wrote $csv")
 println("\n  Reading a failure (ValidationTests.tex):")
-println("    slope $(order+1) → correct        slope 2 → a term one derivative too coarse")
+println("    optimal ($(opt_eta) for eta, $(opt_u) for u) → correct")
+println("    one order less → a term evaluated one derivative too coarsely")
 println("    slope 1 → first-order inconsistency   slope 0 → A WRONG COEFFICIENT")
+println("    but check the PAIRING first: equal order costs one order by itself.")

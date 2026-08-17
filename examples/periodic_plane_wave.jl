@@ -69,8 +69,9 @@ diags, vert, prob = setup_and_run(
     dt          = dt,
     y_wall_bc   = :periodic,        # ★ periodic lateral (y) boundaries
     x_wall_bc   = false,            # open x-ends (sponge-absorbed)
-    linearised  = true,             # linear regime benchmark (A = 0.001)
-    advection   = false,
+    regime      = :linear,          # :linear | :nonlinear  (replaces the retired
+                                    #   linearised=/advection= kwarg pair)
+    nl_pressure = :none,            # 𝓝 blocks off — meaningless in :linear
     save_every  = 30,               # one VTK snapshot per period
     output_dir  = joinpath(@__DIR__, "..", "output", "periodic_plane_wave"),
     gauges      = gauges,

@@ -27,6 +27,13 @@ px, py   = genv_i("LFEM_PX", 2), genv_i("LFEM_PY", 2)
 L        = genv_f("LFEM_L", 200.0)
 nx, ny   = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 200)
 feord    = genv_i("LFEM_FE_ORDER", 2)
+#  p_eta = 0 keeps the historical EQUAL-ORDER spaces (unchanged default).
+#  Set LFEM_P_ETA = LFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
+#  the only one measured to reach the theoretical order in BOTH fields. It is
+#  NOT automatically the better production choice: at a GIVEN mesh the
+#  equal-order spaces were 40x more accurate, because eta sits in a richer
+#  space. Compare error-vs-DOF before switching.
+p_eta    = genv_i("LFEM_P_ETA", 0)
 d        = genv_f("LFEM_D", 3.5)
 Twave    = genv_f("LFEM_TWAVE", 1.6)
 Awave    = genv_f("LFEM_AWAVE", 0.001)
@@ -41,7 +48,7 @@ outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "ring_wave_dist_M$(M)"))
 banner("RING WAVE (point source) — distributed", M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
     domain=(0.0,L,0.0,L), partition=(nx,ny),
     h_val=d, T_wave=Twave, A_wave=Awave,
     x_wm=L/2, y_wm=L/2,                                   # point source → ring waves

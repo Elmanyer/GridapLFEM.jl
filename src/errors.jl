@@ -90,13 +90,19 @@ Print a refinement table with pairwise and fitted rates, and return the fitted
 slopes. `hs` is the refinement parameter (mesh size `h`, or `Δt` for a temporal
 study — the fit is the same, only the expected value changes).
 """
+#  `expected_u` defaults to `expected`, so existing single-expectation callers are
+#  unchanged. It exists because THE TWO FIELDS HAVE DIFFERENT OPTIMA under a mixed
+#  (Taylor-Hood-like) FE pairing: η ∈ Q_{p_e} converges at p_e+1 while u ∈ Q_{p_u}
+#  converges at p_u+1. Printing one number for both invites reading a perfectly
+#  optimal velocity rate as a failure.
 function refinement_table(io::IO, label::AbstractString,
                           hs::AbstractVector, e_eta::AbstractVector, e_u::AbstractVector;
-                          expected::Float64 = 3.0)
+                          expected::Float64 = 3.0,
+                          expected_u::Float64 = expected)
     p_eta, pw_eta = convergence_rate(hs, e_eta)
     p_u,   pw_u   = convergence_rate(hs, e_u)
     println(io, "\n", "="^74)
-    println(io, "  $label — expected slope $(expected)")
+    println(io, "  $label — expected slope: eta $(expected), u $(expected_u)")
     println(io, "="^74)
     @printf(io, "  %-12s %-16s %-10s %-16s %-10s\n", "h", "e_eta", "rate", "e_u", "rate")
     for i in eachindex(hs)
@@ -105,10 +111,11 @@ function refinement_table(io::IO, label::AbstractString,
         @printf(io, "  %-12.6g %-16.8e %-10s %-16.8e %-10s\n",
                 hs[i], e_eta[i], re, e_u[i], ru)
     end
-    @printf(io, "\n  fitted slope:  p_eta = %.3f   p_u = %.3f   (expected %.1f)\n",
-            p_eta, p_u, expected)
+    @printf(io, "\n  fitted slope:  p_eta = %.3f (expected %.1f)   p_u = %.3f (expected %.1f)\n",
+            p_eta, expected, p_u, expected_u)
     return p_eta, p_u
 end
 
-refinement_table(label, hs, e_eta, e_u; expected=3.0) =
-    refinement_table(stdout, label, hs, e_eta, e_u; expected=expected)
+refinement_table(label, hs, e_eta, e_u; expected=3.0, expected_u=expected) =
+    refinement_table(stdout, label, hs, e_eta, e_u;
+                     expected=expected, expected_u=expected_u)

@@ -1,6 +1,22 @@
 # ==============================================================
-#  cluster_mms.jl — DISTRIBUTED unsteady, nonlinear Manufactured Solution
-#                   (validates the full nonlinear solver at scale, many steps)
+#  cluster_selfconsistency.jl — DISTRIBUTED unsteady nonlinear SELF-CONSISTENCY
+#                   check (exercises the full nonlinear solver at scale)
+#
+#  ⚠ RENAMED FROM cluster_mms.jl, and the rename is the point. This is NOT a
+#  manufactured-solution VALIDATION, for exactly the reason test_mms.jl became
+#  test_selfconsistency.jl: the forcing is the SOLVER'S OWN RESIDUAL assembled on
+#  u*, so writing R = R_true + E the error E cancels identically and the check
+#  passes for ANY residual, right or wrong. It also measures no convergence rate.
+#
+#  What it DOES certify, which nothing else does at scale: that the hand
+#  Jacobians are the exact derivatives of the residual, that the distributed
+#  nonlinear assembly, the frozen-projection (CG+Jacobi) bookkeeping and the
+#  GMRES/Newton stack are mutually consistent, and that none of it drifts over a
+#  long run on many ranks. That is CODE support, not MODEL validation.
+#
+#  For residual correctness use the analytic MMS (src/mms.jl,
+#  test_mms_convergence*.jl): its forcing is derived from the governing equations
+#  without touching problem.jl, so the error cannot cancel.
 #
 #  The distributed twin of test/test_selfconsistency.jl, run through the REAL distributed
 #  solver stack (GMRES + Jacobi + Newton). A smooth, finite-amplitude, UNSTEADY
@@ -23,7 +39,7 @@
 #  LAUNCH (px·py MUST equal -n):
 #    LFEM_PX=4 LFEM_PY=2 LFEM_NX=400 LFEM_NY=200 LFEM_NSTEPS=200 \
 #    ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-#        GridapLFEM.jl/test/cluster/cluster_mms.jl
+#        GridapLFEM.jl/test/cluster/cluster_selfconsistency.jl
 #
 #  Env vars: LFEM_PX,LFEM_PY; LFEM_NX,LFEM_NY; LFEM_LX,LFEM_LY; LFEM_D; LFEM_M;
 #    LFEM_DT; LFEM_NSTEPS; LFEM_AMP (nonlinearity strength); LFEM_NLPFULL (all
@@ -48,7 +64,7 @@ amp    = genv_f("LFEM_AMP", 1.0)                 # scales the manufactured ampli
 nlpfull= genv_b("LFEM_NLPFULL", 1)
 feord  = genv_i("LFEM_FE_ORDER", 2)
 prevery= genv_i("LFEM_PRINT_EVERY", 10)
-outdir = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "cluster_mms"))
+outdir = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "cluster_selfconsistency"))
 g = 9.81; θ = 0.5; T = 2.0; ω = 2π/T
 
 result = with_mpi() do distribute
@@ -107,7 +123,7 @@ result = with_mpi() do distribute
 
     Tfinal = Nsteps*dt
     if r0
-        @printf("# cluster_mms | %d ranks (%d×%d) | mesh %d×%d = %d cells | Nσ=%d | amp=%.2f nlPfull=%s\n",
+        @printf("# cluster_selfconsistency | %d ranks (%d×%d) | mesh %d×%d = %d cells | Nσ=%d | amp=%.2f nlPfull=%s\n",
                 px*py, px, py, nx, ny, nx*ny, Nσ, amp, nlpfull)
         @printf("# %d steps dt=%.4g (Tfinal=%.2f), all 𝓝 comps on curved bed\n", Nsteps, dt, Tfinal)
         open(joinpath(outdir, "mms.csv"), "w") do io; println(io, "step,t,rel_err,nl_iters"); end
@@ -143,8 +159,8 @@ result = with_mpi() do distribute
         println(pass ? "  PASS  unsteady nonlinear u* recovered to machine precision at scale" :
                        "  FAIL  MMS error grew ($emax) — check distributed nonlinear assembly/Jacobians")
         println("# CSV: $(joinpath(outdir, "mms.csv"))")
-        pass || error("cluster_mms: FAILED")
-        println("# cluster_mms: distributed unsteady nonlinear solver validated.")
+        pass || error("cluster_selfconsistency: FAILED")
+        println("# cluster_selfconsistency: distributed unsteady nonlinear solver validated.")
     end
     return nothing
 end

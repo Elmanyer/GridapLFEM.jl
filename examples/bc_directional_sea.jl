@@ -65,8 +65,9 @@ diags, vert, prob = setup_and_run(
     mu_max      = 5.0,
     T_final     = T_final,
     dt          = dt,
-    linearised  = true,
-    advection   = false,
+    regime      = :linear,          # :linear | :nonlinear  (replaces the retired
+                                    #   linearised=/advection= kwarg pair)
+    nl_pressure = :none,            # 𝓝 blocks off — meaningless in :linear
     save_every  = 30,
     output_dir  = joinpath(@__DIR__, "..", "output", "bc_directional_sea"),
     gauges      = gauges,

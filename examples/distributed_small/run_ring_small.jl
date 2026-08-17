@@ -12,7 +12,7 @@
 #    LFEM_TWAVE        wave period [s]                       (default 2.0)
 #
 #  Fixed defaults: domain 50x20, mesh 200x80 (square 0.25 m cells, isotropic for
-#  the ring), partition 8x8 (64 ranks), fe_order 2, dt 0.02, d 3.5, 4-side
+#  the ring), partition 8x8 (64 ranks), p_horizontal 2, dt 0.02, d 3.5, 4-side
 #  sponges L/R 6 / B/T 4, mu_max 12, periods 12, save_every 10.
 #  (Flat bed only: a ring has no meaningful shore-parallel bar variant.)
 #
@@ -29,6 +29,13 @@ M       = genv_i("LFEM_M", 2)
 px, py  = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 8)      # 8*8 = 64 ranks
 nx, ny  = genv_i("LFEM_NX", 160), genv_i("LFEM_NY", 160)   # square cells 0.25x0.25
 feord   = genv_i("LFEM_FE_ORDER", 2)
+#  p_eta = 0 keeps the historical EQUAL-ORDER spaces (unchanged default).
+#  Set LFEM_P_ETA = LFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
+#  the only one measured to reach the theoretical order in BOTH fields. It is
+#  NOT automatically the better production choice: at a GIVEN mesh the
+#  equal-order spaces were 40x more accurate, because eta sits in a richer
+#  space. Compare error-vs-DOF before switching.
+p_eta   = genv_i("LFEM_P_ETA", 0)
 Lx, Ly  = genv_f("LFEM_LX", 40.0), genv_f("LFEM_LY", 40.0)
 d       = genv_f("LFEM_D", 3.5)
 Twave   = genv_f("LFEM_TWAVE", 2.0)
@@ -50,7 +57,7 @@ banner("SMALL | ring wave (point source, flat bed) | $(regime_sym()) $(nl_pressu
        M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     wave_gen=:inner_res,                                           # interior point source
     h_val=d, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=y_wm,      # point source => ring

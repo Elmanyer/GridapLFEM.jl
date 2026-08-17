@@ -3,10 +3,19 @@
 #
 #  Port of ../../LFE-M_2D_solver/test/test_basic_lfem2D.jl to the algebraic
 #  package. Tiny flat-bed plane-wave flume (16×2 m, 16×2 Q2 cells, M=2,
-#  3 periods), run in BOTH modes:
-#    linearised=true, advection=false → validated linear baseline
-#    linearised=false, advection=true → fully nonlinear target
+#  3 periods), run in BOTH regimes:
+#    regime=:linear    → validated linear baseline
+#    regime=:nonlinear → fully nonlinear target (advection + full R_P)
 #  Checks: no NaN, bounded amplitude, wave generated.
+#
+#  The physics is selected by the three orthogonal controls regime /
+#  nl_pressure / flat_bed (see resolve_physics). The retired boolean pair
+#  linearised=/advection= is NOT accepted by the drivers any more.
+#
+#  flat_bed is left at its default (false) DELIBERATELY: the bed is constant, so
+#  every ∇h term vanishes numerically and the answer is identical either way, but
+#  the reference values below were measured on this path. Setting flat_bed=true
+#  would be faster and equally correct — and would invalidate the Newton count.
 #
 #  RUN:  julia --project=. GridapLFEM.jl/test/test_basic.jl
 # ==============================================================
@@ -28,14 +37,14 @@ end
 A_wave = 0.001
 T_wave = 1.6                 # d = 3.5 ⇒ kd = 5.5, λ ≈ 4 m
 
-function run_mode(linflag, advflag, label)
-    println("\n--- $label (linearised=$linflag, advection=$advflag) ---")
+function run_mode(regime, label)
+    println("\n--- $label (regime=:$regime, nl_pressure=:none) ---")
     diags, vert, prob = setup_and_run(
         M=2, h_val=3.5, T_wave=T_wave, A_wave=A_wave,
         domain=((0.0,16.0),(0.0,2.0)), partition=(16,2), p_horizontal=2,
         x_wm=4.0, y_wm=nothing,
         sponge_wL=4.0, sponge_wR=4.0, sponge_wB=0.0, sponge_wT=0.0, mu_max=50.0,
-        T_final=4.8, dt=0.04, regime=(linflag ? :linear : :nonlinear),
+        T_final=4.8, dt=0.04, regime=regime, nl_pressure=:none,
         gauges=[(8.0, 1.0)], save_every=0,
     )
     emax = maximum(d.eta_max for d in diags)
@@ -48,8 +57,8 @@ function run_mode(linflag, advflag, label)
     check("[$label] wave generated (gauge amp > 0.02·A)", gamp > 0.02*A_wave)
 end
 
-run_mode(true,  false, "linearised baseline")
-run_mode(false, true,  "fully nonlinear")
+run_mode(:linear,    "linearised baseline")
+run_mode(:nonlinear, "fully nonlinear")
 
 println()
 println("=" ^ 60)

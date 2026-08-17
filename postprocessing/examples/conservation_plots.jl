@@ -13,7 +13,7 @@ using .GridapLFEMPost
 out = joinpath(@__DIR__, "..", "..", "output", "pp_plots"); mkpath(out)
 csvs = isempty(ARGS) ?
     filter(isfile, [joinpath(@__DIR__,"..","..","output","cluster_conservation","conservation.csv"),
-                    joinpath(@__DIR__,"..","..","output","cluster_mms","mms.csv")]) : ARGS
+                    joinpath(@__DIR__,"..","..","output","cluster_selfconsistency","mms.csv")]) : ARGS
 
 isempty(csvs) && (println("no CSV found — run a cluster validation first, or pass a path"); exit())
 

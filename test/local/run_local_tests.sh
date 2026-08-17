@@ -74,13 +74,29 @@ for t in "${TESTS[@]}"; do
     PIDS["$t"]=$!
 done
 
+#  VERDICT FROM GATE OUTPUT, NOT FROM THE EXIT CODE.
+#  A clean exit is not evidence that a test ran: a file whose body sits behind a
+#  guard, or that returns early, exits 0 having asserted nothing — which is
+#  exactly how four broken tests were recorded as passing for three weeks. So a
+#  log with NO PASS/FAIL lines is reported BLANK and counted as a failure, and a
+#  log with any FAIL line fails even if the process exited 0.
 fail=0
 for t in "${TESTS[@]}"; do
-    if wait "${PIDS[$t]}"; then
-        printf "  [ OK ] %-30s\n" "$t"
-    else
-        printf "  [FAIL] %-30s  (see %s)\n" "$t" "$LOG_DIR/${t%.jl}.log"
+    log="$LOG_DIR/${t%.jl}.log"
+    rc=0; wait "${PIDS[$t]}" || rc=$?
+    np=$(grep -cE '^[[:space:]]*PASS\b' "$log" 2>/dev/null || echo 0)
+    nf=$(grep -cE '^[[:space:]]*FAIL\b' "$log" 2>/dev/null || echo 0)
+    if [ "$np" -eq 0 ] && [ "$nf" -eq 0 ]; then
+        printf "  [BLANK] %-28s  NO GATE OUTPUT — it asserted nothing (see %s)\n" "$t" "$log"
         fail=$((fail+1))
+    elif [ "$nf" -gt 0 ]; then
+        printf "  [FAIL] %-30s  %d pass / %d fail  (see %s)\n" "$t" "$np" "$nf" "$log"
+        fail=$((fail+1))
+    elif [ "$rc" -ne 0 ]; then
+        printf "  [ERR ] %-30s  gates passed but exited %d  (see %s)\n" "$t" "$rc" "$log"
+        fail=$((fail+1))
+    else
+        printf "  [ OK ] %-30s  %d gates\n" "$t" "$np"
     fi
 done
 

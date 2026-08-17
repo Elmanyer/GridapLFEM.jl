@@ -19,7 +19,7 @@
 #    LFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
 #
 #  Fixed defaults baked in here: domain 50x20, mesh 200x40, partition 8x4 (32
-#  ranks), fe_order 2, dt 0.02, d 3.5, LEFT relaxation zone (width ~1λ) + right
+#  ranks), p_horizontal 2, dt 0.02, d 3.5, LEFT relaxation zone (width ~1λ) + right
 #  sponge 12, mu_max 40, periods 12, save_every 10. All still env-overridable.
 #
 #  LAUNCH (px*py MUST equal -n): see run/dist_small/*bc_plane*.sh
@@ -38,6 +38,13 @@ M       = genv_i("LFEM_M", 2)
 px, py  = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 4)      # 8*4 = 32 ranks
 nx, ny  = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 40)   # dx=0.25, dy=0.5
 feord   = genv_i("LFEM_FE_ORDER", 2)
+#  p_eta = 0 keeps the historical EQUAL-ORDER spaces (unchanged default).
+#  Set LFEM_P_ETA = LFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
+#  the only one measured to reach the theoretical order in BOTH fields. It is
+#  NOT automatically the better production choice: at a GIVEN mesh the
+#  equal-order spaces were 40x more accurate, because eta sits in a richer
+#  space. Compare error-vs-DOF before switching.
+p_eta   = genv_i("LFEM_P_ETA", 0)
 Lx, Ly  = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)
 d       = genv_f("LFEM_D", 3.5)
 spR     = genv_f("LFEM_SPONGE_R", 12.0)
@@ -66,7 +73,7 @@ banner("SMALL | BC plane wave (Dirichlet left) | $(regime_sym()) $(nl_pressure_s
        M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord,
+    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     wave_gen=:bc_gen, bc_side=:left, wave_dir=wdir, bc_profile=bc_profile_sym(),
     h_val=d, T_wave=Twave, A_wave=Awave,

@@ -40,8 +40,8 @@ case "$VALIDATION" in
     export LFEM_NX=${LFEM_NX:-400}   LFEM_NY=${LFEM_NY:-200}
     export LFEM_NSTEPS=${LFEM_NSTEPS:-200} LFEM_DT=${LFEM_DT:-0.05}
     export LFEM_NLPFULL=${LFEM_NLPFULL:-1}  LFEM_AMP=${LFEM_AMP:-1.0}
-    export LFEM_OUTDIR=${LFEM_OUTDIR:-$ROOT/output/cluster_mms}
-    SCRIPT=$ROOT/test/cluster/cluster_mms.jl ;;
+    export LFEM_OUTDIR=${LFEM_OUTDIR:-$ROOT/output/cluster_selfconsistency}
+    SCRIPT=$ROOT/test/cluster/cluster_selfconsistency.jl ;;
   *) echo "unknown VALIDATION=$VALIDATION (use conservation|mms)"; exit 1 ;;
 esac
 

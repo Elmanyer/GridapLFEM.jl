@@ -65,8 +65,9 @@ diags, vert, prob = setup_and_run(
     mu_max      = mu_max,
     T_final     = T_final,
     dt          = dt,
-    linearised  = true,             # linear regime benchmark (A = 0.001)
-    advection   = false,
+    regime      = :linear,          # :linear | :nonlinear  (replaces the retired
+                                    #   linearised=/advection= kwarg pair)
+    nl_pressure = :none,            # 𝓝 blocks off — meaningless in :linear
     save_every  = 30,               # one VTK snapshot per period
     output_dir  = joinpath(@__DIR__, "..", "output", "plane_wave"),
     gauges      = gauges,

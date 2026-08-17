@@ -120,8 +120,11 @@ println("\nN6  independence from problem.jl")
 let src = read(joinpath(@__DIR__, "..", "src", "mms.jl"), String)
     banned = ["global_residual", "jacobian_u", "build_problem"]
     hits = [b for b in banned if occursin(b, replace(src, r"#[^\n]*" => ""))]
+    #  Build the detail string with string concatenation, NOT interpolation: an
+    #  escaped double quote inside a $(...) interpolation is a parse error in
+    #  Julia, and it made this whole file unparseable (so the gates never ran).
     check("N6  src/mms.jl references no residual code", isempty(hits),
-          isempty(hits) ? "" : "(found: $(join(hits, \", \")))")
+          isempty(hits) ? "" : "(found: " * join(hits, ", ") * ")")
 end
 
 # ---- KNOWN LIMITATION: the 𝓝 tiers must refuse, not guess ------------------

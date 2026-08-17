@@ -10,7 +10,14 @@
 #    LFEM_M           vertical layers (elements)         default per script
 #    LFEM_PX,LFEM_PY  MPI process grid (px×py)           MUST satisfy px·py == mpiexec -n
 #    LFEM_NX,LFEM_NY  horizontal elements                (nx divisible by px, ny by py)
-#    LFEM_FE_ORDER    Q-order (≥2 required)              2
+#    LFEM_FE_ORDER    VELOCITY Q-order (≥2 required)     2
+#    LFEM_P_ETA       SURFACE Q-order; 0 = equal order   0
+#                     Set to LFEM_FE_ORDER−1 for the Taylor-Hood-like pairing.
+#                     η enters momentum undifferentiated (via ∇·v after IBP), so
+#                     equal-order spaces are inf-sup deficient and the analytic
+#                     MMS measures order p there, not p+1. But a better RATE is
+#                     not a better ANSWER at a given mesh — equal order was 40x
+#                     more accurate at nx=24. Compare error-vs-DOF first.
 #    LFEM_DT          time step [s]                      0.02
 #    LFEM_TFINAL      final time [s] (overrides periods) —
 #    LFEM_SAVE_EVERY  VTK snapshot every N steps         (script default)

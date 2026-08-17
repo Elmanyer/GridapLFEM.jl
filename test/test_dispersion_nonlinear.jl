@@ -103,6 +103,13 @@ function main()
                  println("  Full nonlinear solver reproduces linear dispersion (small-A limit).")
 end
 
-if abspath(PROGRAM_FILE) == @__FILE__
-    main()
-end
+#  Run unconditionally, like every other file in test/.
+#
+#  This used to be guarded by `if abspath(PROGRAM_FILE) == @__FILE__`, which made
+#  the file a silent no-op under `include()`: it printed three header lines,
+#  executed not one gate, and returned cleanly — so a batch runner checking exit
+#  codes recorded it as passing, twice, having run nothing. It was the only file
+#  in the suite with that guard, and the inconsistency is exactly what hid the
+#  problem. A test that can be included without running is a test that will
+#  eventually be believed without running.
+main()

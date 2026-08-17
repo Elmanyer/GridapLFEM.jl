@@ -158,12 +158,21 @@ function run_mms_refinement(mode::Symbol; levels::Int = 3,
         push!(hs, mode == :space ? r.h : r.dt)
         push!(ee, r.e_eta); push!(eu, r.e_u); push!(rows, r)
     end
-    expected = mode == :space ? 3.0 : 2.0
-    label = mode == :space ? "SPATIAL refinement (Q2 ⇒ p+1 = 3)" :
-                             "TEMPORAL refinement (2nd-order scheme)"
-    p_eta, p_u = refinement_table(label, hs, ee, eu; expected=expected)
+    #  Expectations follow the FE PAIRING actually used, and the two fields differ
+    #  whenever p_eta < p_horizontal. Hardcoding "3" here (as this did) reports an
+    #  unreachable target on an equal-order run and the wrong target on a mixed one.
+    p_h  = get(kwargs, :p_horizontal, 2)
+    p_e0 = get(kwargs, :p_eta, 0)
+    p_e  = p_e0 == 0 ? p_h : p_e0
+    exp_eta, exp_u = mode == :space ? (p_e + 1.0, p_h + 1.0) : (2.0, 2.0)
+    label = mode == :space ?
+        "SPATIAL refinement (Q$(p_h)/Q$(p_e) ⇒ eta $(p_e+1), u $(p_h+1))" *
+        (p_e == p_h ? "  [EQUAL ORDER: inf-sup deficient, expect p not p+1]" : "") :
+        "TEMPORAL refinement (2nd-order scheme)"
+    p_eta, p_u = refinement_table(label, hs, ee, eu;
+                                  expected=exp_eta, expected_u=exp_u)
     return (param=hs, e_eta=ee, e_u=eu, p_eta=p_eta, p_u=p_u,
-            expected=expected, rows=rows)
+            expected=exp_eta, expected_u=exp_u, rows=rows)
 end
 
 """
@@ -343,6 +352,10 @@ function run_model_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                           M::Int = 2, p_vert::Int = 1,
                           c_bdy::Vector{Float64} = [0.0, 0.728, 1.0],
                           p_horizontal::Int = 2, n_mode::Int = 1,
+                          p_eta::Int = 0,            # 0 ⇒ equal order. Set < p_horizontal for the
+                                                     #   Taylor-Hood-like pairing — same meaning and
+                                                     #   same default as run_mms_case, so the forced
+                                                     #   and unforced studies stay comparable.
                           eta_hat::Float64 = 1.0,
                           solver_type::Symbol = :sdirk, tableau::Symbol = :SDIRK_2_2,
                           theta::Float64 = 0.5,
@@ -354,9 +367,10 @@ function run_model_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
 
     domain       = ((0.0, Lx), (0.0, Ly))
     model, trian = build_horizontal_model(domain, (nx, ny))
+    pe           = p_eta == 0 ? p_horizontal : p_eta
     U, V         = build_fe_spaces(model, p_horizontal, vert.N_dof;
-                                   y_wall_bc = :wall, x_wall_bc = true)
-    dΩh          = Measure(trian, 2*p_horizontal + 2)
+                                   y_wall_bc = :wall, x_wall_bc = true, p_eta = pe)
+    dΩh          = Measure(trian, 2*max(p_horizontal, pe) + 2)
 
     prob = build_problem(vert; g = g, h_bathy = (x -> d),
                          regime = :linear, nl_pressure = :none, flat_bed = true,
@@ -415,11 +429,20 @@ function run_model_refinement(mode::Symbol; levels::Int = 3,
         push!(hs, mode == :space ? r.h : r.dt)
         push!(ee, r.e_eta); push!(eu, r.e_u)
     end
-    expected = mode == :space ? 3.0 : 2.0
-    label = mode == :space ? "MODEL standing mode — SPATIAL (Q2 ⇒ 3)" :
-                             "MODEL standing mode — TEMPORAL (2nd order)"
-    p_eta, p_u = refinement_table(label, hs, ee, eu; expected=expected)
-    return (param=hs, e_eta=ee, e_u=eu, p_eta=p_eta, p_u=p_u, expected=expected)
+    #  As in run_mms_refinement: the expectations are a property of the FE pairing,
+    #  not a constant. See the note there.
+    p_h  = get(kwargs, :p_horizontal, 2)
+    p_e0 = get(kwargs, :p_eta, 0)
+    p_e  = p_e0 == 0 ? p_h : p_e0
+    exp_eta, exp_u = mode == :space ? (p_e + 1.0, p_h + 1.0) : (2.0, 2.0)
+    label = mode == :space ?
+        "MODEL standing mode — SPATIAL (Q$(p_h)/Q$(p_e) ⇒ eta $(p_e+1), u $(p_h+1))" *
+        (p_e == p_h ? "  [EQUAL ORDER: inf-sup deficient, expect p not p+1]" : "") :
+        "MODEL standing mode — TEMPORAL (2nd order)"
+    p_eta, p_u = refinement_table(label, hs, ee, eu;
+                                  expected=exp_eta, expected_u=exp_u)
+    return (param=hs, e_eta=ee, e_u=eu, p_eta=p_eta, p_u=p_u,
+            expected=exp_eta, expected_u=exp_u)
 end
 
 """

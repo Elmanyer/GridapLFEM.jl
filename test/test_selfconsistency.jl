@@ -52,7 +52,7 @@
 #  of the residual (verified below). The remaining 𝓝∈{1,2,4,5} frozen-projection
 #  components are O(A³) corrections validated to machine precision by
 #  test_nlpressure.jl (exact-IBP identity) and exercised at scale by
-#  test/cluster/cluster_mms.jl; set env MMS_FULL=1 to include them here too
+#  test/cluster/cluster_selfconsistency.jl; set env MMS_FULL=1 to include them here too
 #  (much heavier first-compile).
 #
 #  Gates: (1) machine-precision recovery over the whole unsteady run; (2) the
