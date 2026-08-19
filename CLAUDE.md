@@ -65,8 +65,8 @@ Tables comparing our numbers against theirs must not label both sides the same w
 | `Project.toml` / `Manifest.toml` | the Julia package manifest — `name = "GridapBALFEM"`, `uuid = 43e94d05-4d7d-4679-96a4-d46e2615da34`. Loaded with **`using GridapBALFEM`, never `include()`** (§5). This directory is **both the package and the working environment**, so `Test`, `BlockArrays`, `MPIPreferences`, `Preferences` are in `[deps]`, not `[extras]`. `[compat]` admits two Gridap minors **on measured evidence** — see `CONFIGURATION.md` §1 |
 | `src/` | the solver package — 16 files, mapped in `ARCHITECTURE.md` §2 |
 | `test/` | 27 test files + `runtests.jl` + `test/cluster/` + `test/local/` — inventory and scores in `TEST_SUITE.md` |
-| `examples/` | sequential, `distributed/`, `distributed_small/`, `validation/`, `local_1d/`, `local_2d/`, `local_mms/`, `inspect_run.jl` — `RUNNING.md` §2 |
-| `run/` | 9 production SLURM launchers + `run/dist_small/` (20 small-domain cases) + `run/local/` (17 local launchers + benchmark), all through `run/balfem_env.sh` — `RUNNING.md` §3–4 |
+| `examples/` | 7 sequential + `distributed/` (7 cluster scripts + `_dist_common.jl`), `distributed_small/` (5 parametric), `validation/` (7), `local_1d/`, `local_2d/`, `local_mms/`, `inspect_run.jl` — `RUNNING.md` §2 |
+| `run/` | 9 production SLURM launchers + `run/dist_small/` (20 small-domain 2-D cases + 7 superseded 1-D, see §5) + `run/local/` (28 case launchers + helper + benchmark + sweep), all through `run/balfem_env.sh` — `RUNNING.md` §3–4 |
 | `compile/` | the cluster sysimage build chain — `RUNNING.md` §5 |
 | `postprocessing/` | `GridapBALFEMPost` — self-contained, own environment, **no dependency on the solver** |
 | `WaveSpec.jl/` | vendored stochastic sea-state synthesis (CMOE-TUDelft). Tracks the **GitHub repository version, not a tagged release** — the release's `change_seed!` is broken |
@@ -168,7 +168,7 @@ carries a mesh-independent velocity-error floor (`VERIFICATION.md` §4).
 
 ---
 
-## 5. Current state
+## 5. Current Implementation Stage
 
 **Working.** Feature-complete in both serial and distributed forms: the stacked loop-free residual +
 hand Jacobians, the full nonlinear physics, the SDIRK/θ integrators, all boundary treatments, and
@@ -195,15 +195,43 @@ Model 2 additionally confirmed transient (2.999/3.998) and 2-D (3.000/3.963).
 **13/13 gates** on 4 ranks, `test_jacobians_ad` **17/17** over 8 models, `test_mms_convergence_nonlinear`
 **8/8**, `test/local/` **50/50**. Per-file scores: `TEST_SUITE.md` §2.
 
-**Open work** — nothing is half-built in the solver; the open items are verification gaps,
-performance, and follow-through. Full list with decisive next steps: `OPEN_ITEMS.md`.
+**Production runs — the small-domain suite is READY TO LAUNCH** (audited 2026-08-19). The 5
+parametric scripts and 20 two-dimensional launchers were checked mechanically against the driver's
+keyword set and against each case's own geometry. Fixed in that pass: transit-aware durations (two
+case families would otherwise have ended while the domain was still filling), the inflow relaxation
+zone (documented as on, coded as off, on all three `:bc_gen` scripts, which also run
+`sponge_wL=0`), sponge widths sized against wavelength rather than domain fraction (ring
+0.64 → 1.12 λ; directional lateral 0.45 → 0.90 λ_eff; long-period case `Lx` 50 → 70 m), and a guard
+refusing oblique generation on a y-periodic domain. Boundary conditions verified correct on all
+five cases.
 
+**1-D cases run LOCALLY AND SEQUENTIALLY — this is a decision, not a fallback** (2026-08-19). The
+solver is structurally 2-D, so a "1-D" problem is a narrow y-periodic strip whose cross-section is
+pinned at Gridap's periodic minimum (`ny=3`). Direct LU cost scales with the *front width*, which
+that cross-section fixes, so **the DOF count cancels from the serial-vs-distributed ratio** and no
+domain length or `dx` puts a genuine 1-D case on the distributed side. Refining `ny` would move it
+there, but the solution is exactly y-invariant, so that buys parallel efficiency with work that
+produces no physics. Consequence: `run/local/run_1d_*.sh` (sequential, with point gauges) are the
+supported path; the seven `run/dist_small/run_1d_*.sh` are superseded and should not be launched.
+
+**Open work** — nothing is half-built in the solver; the open items are verification gaps,
+performance, and follow-through. Full list with decisive next steps: `OPEN_ITEMS.md`; studies
+designed but not begun: `PENDING_TASKS.md`.
+
+* 🔴 **two design-level defects in `src/mms_driver.jl`** (found 2026-08-19, *not yet fixed*):
+  `run_conv_study` hard-codes the vertical basis (`assemble_vertical_tensors(M, 1, [0,0.728,1])`),
+  so `M`/`p` cannot be varied and `M≠2` throws; and `run_mms_case_distributed` hard-codes **Model 1**
+  (`regime=:linear, nl_pressure=:none, flat_bed=true` + `mms_forcing_stage1`) while
+  `run_conv_study` still builds its tag from the *requested* switches — so a distributed campaign
+  over 8 models returns 8 identical Model-1 studies under 8 different labels, **and all of them
+  pass**. Do not use the distributed MMS path for model studies until this is fixed.
 * 🔴 cluster memory attribution (4 GB/core is required; *why* is open — H4 leads)
 * 🔴 `test_mms_convergence` G7 — a gate-window specification decision, not a fix
 * 🟠 no MPI tier in `runtests.jl` (cost three stale reference constants)
 * 🟠 preconditioner replacement — the single biggest performance item
 * 🟠 four run-output gaps
-* naming follow-through outside this checkout: GitHub repo, cluster checkout, sysimage rebuild
+* naming follow-through outside this checkout: GitHub repo (still `GridapLFEM.jl`; the remote URL
+  is stale but redirects), cluster checkout, sysimage rebuild
 
 ---
 
