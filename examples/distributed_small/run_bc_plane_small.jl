@@ -19,8 +19,16 @@
 #    BALFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
 #
 #  Fixed defaults baked in here: domain 50x20, mesh 200x40, partition 8x4 (32
-#  ranks), p_horizontal 2, dt 0.02, d 3.5, LEFT relaxation zone (width ~1λ) + right
-#  sponge 12, mu_max 40, periods 12, save_every 10. All still env-overridable.
+#  ranks), p_horizontal 2, dt 0.02, d 3.5, LEFT relaxation zone ON (width 6 m ~ 1λ)
+#  + right sponge 12, mu_max 40, periods 16, save_every 10. All env-overridable.
+#
+#  THE RELAXATION ZONE IS ON BY DEFAULT HERE (BALFEM_RELAX=0 disables it). A clamped
+#  Dirichlet boundary is perfectly reflective for the DEVIATION field, and this case
+#  has sponge_wL=0, so without the zone nothing absorbs what the domain radiates back
+#  at the inflow. Measured absorption: 145x its control.
+#
+#  DURATION IS TRANSIT-BASED. Generation at x=0, sponge from x=38, c_g=1.58 m/s at
+#  T=2.0 => transit 24.1 s = 12.0 T; t_settle = transit + 3T = 15.0 T. 16 gives margin.
 #
 #  LAUNCH (px*py MUST equal -n): see run/dist_small/*bc_plane*.sh
 # ==============================================================
@@ -61,7 +69,23 @@ save_ev = genv_i("BALFEM_SAVE_EVERY", 10)
 Twave   = genv_f("BALFEM_TWAVE", 2.0)
 Awave   = genv_f("BALFEM_AWAVE", 0.1)
 wdir    = genv_f("BALFEM_WAVE_DIR", 0.0)
-periods = genv_f("BALFEM_PERIODS", 12.0)
+#  GUARD — oblique generation is INCOMPATIBLE with the y-periodic domain used here.
+#  A wave at angle theta carries k_y = k*sin(theta); the y-edges are glued, so the
+#  boundary data is continuous across the seam ONLY if k_y*Ly is a multiple of 2*pi.
+#  For a general angle it is not, and the mismatch is a permanent line source at the
+#  seam: it does not decay, it is not absorbed by the x-sponge, and it shows up as a
+#  slow mid-run growth that looks like a physical instability but is a BC defect.
+#  The correct configuration for oblique waves is the one run_directional_sea_small.jl
+#  uses: y_wall_bc=:open with LATERAL sponges. Refuse rather than warn — a warning in
+#  a 32-rank cluster log is not read until the run has already been paid for.
+if abs(wdir) > 1e-12
+    error("""
+    BALFEM_WAVE_DIR=$wdir on a y-PERIODIC domain is not a well-posed configuration.
+    Oblique boundary generation requires y_wall_bc=:open plus lateral sponges — see
+    examples/distributed_small/run_directional_sea_small.jl, which is set up that way.
+    Set BALFEM_WAVE_DIR=0 for this script, or use the directional-sea script.""")
+end
+periods = genv_f("BALFEM_PERIODS", 16.0)   # transit 12.0 T + 3 T settle = 15.0; margin to 16
 Tfinal  = haskey(ENV, "BALFEM_TFINAL") ? genv_f("BALFEM_TFINAL", 0.0) : periods * Twave
 
 # bathymetry: flat_bed=false => variable bathymetry => build the y-invariant bar
@@ -83,7 +107,10 @@ diags, vert, prob = setup_and_run_distributed(
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     wave_gen=:bc_gen, bc_side=:left, wave_dir=wdir, bc_profile=bc_profile_sym(),
     h_val=d, T_wave=Twave, A_wave=Awave,
-    T_ramp=tramp_val(), relax_bc=relax_flag(), relax_width=relax_w_val(),
+    #  relax_bc defaults ON here: sponge_wL=0, so without the relaxation zone NOTHING
+    #  absorbs what the domain radiates back at the clamped Dirichlet inflow.
+    T_ramp=tramp_val(), relax_bc=genv_b("BALFEM_RELAX", 1),
+    relax_width=genv_f("BALFEM_RELAX_W", 6.0),
     sponge_wL=0.0, sponge_wR=spR, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
     T_final=Tfinal, dt=dt, h_bathy=h_bathy,
     regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(1),

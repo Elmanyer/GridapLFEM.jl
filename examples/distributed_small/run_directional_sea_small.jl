@@ -15,8 +15,12 @@
 #    BALFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
 #
 #  Fixed defaults: mesh 200x80 (square cells), partition 8x8 (64 ranks), p_horizontal
-#  2, dt 0.02, d 3.5, right sponge 12, lateral sponges 4, mu_max 8, inflow
-#  relaxation zone 6, periods 15, save_every 10.
+#  2, dt 0.02, d 3.5, right sponge 12, lateral sponges 8, mu_max 40, inflow
+#  relaxation zone ON (width 6 m), periods 26 (transit-based), save_every 10.
+#
+#  DURATION: same transit argument as the irregular sea (generation x=0, sponge
+#  from x=38, 22 Tp needed at Tp=1.6). Obliquely-incident components travel a
+#  LONGER path to the outflow, so 26 Tp is the floor here, not a generous margin.
 #
 #  NOTE: uses build_airy_state => depends on the WaveSpec change_seed! fix.
 #  LAUNCH (px*py MUST equal -n): see run/dist_small/*directional*.sh
@@ -57,10 +61,16 @@ p_eta   = genv_i("BALFEM_P_ETA", 0)
 Lx, Ly  = genv_f("BALFEM_LX", 50.0), genv_f("BALFEM_LY", 20.0)
 d       = genv_f("BALFEM_D", 3.5)
 spR     = genv_f("BALFEM_SPONGE_R", 12.0)
-spY     = genv_f("BALFEM_SPONGE_Y", 4.0)
+#  LATERAL sponges take the obliquely-propagating components, so they must be
+#  sized against the sea, not against Tp. The energy-carrying band reaches
+#  T ~ 1.5*Tp (longer components carry <0.12 % of the variance), i.e.
+#  lambda_eff = 8.9 m. 4.0 m was 0.45 lambda_eff; 8 m is 0.90 — still slightly
+#  under one wavelength, which is the most a 20 m wide domain can give. Widen
+#  BALFEM_LY together with this if lateral reflection shows up in the diagnostics.
+spY     = genv_f("BALFEM_SPONGE_Y", 8.0)
 mumax   = genv_f("BALFEM_MUMAX", 40.0)   # strong: kill the outgoing/boundary mode fast
 dt      = genv_f("BALFEM_DT", 0.02)
-periods = genv_f("BALFEM_PERIODS", 15.0)
+periods = genv_f("BALFEM_PERIODS", 26.0)   # 19 Tp transit + 3 Tp; oblique paths are longer
 Tp      = tp_val()
 Tfinal  = haskey(ENV, "BALFEM_TFINAL") ? genv_f("BALFEM_TFINAL", 0.0) : periods * Tp
 save_ev = genv_i("BALFEM_SAVE_EVERY", 10)
@@ -88,7 +98,10 @@ diags, vert, prob = setup_and_run_distributed(
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     h_val=d, T_wave=Tp, A_wave=hs_val()/2,
     wave_gen=:bc_gen, wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
-    T_ramp=tramp_val(), relax_bc=relax_flag(), relax_width=relax_w_val(),
+    #  relax_bc defaults ON here: sponge_wL=0, so without the relaxation zone NOTHING
+    #  absorbs what the domain radiates back at the clamped Dirichlet inflow.
+    T_ramp=tramp_val(), relax_bc=genv_b("BALFEM_RELAX", 1),
+    relax_width=genv_f("BALFEM_RELAX_W", 6.0),
     sponge_wL=0.0, sponge_wR=spR, sponge_wB=spY, sponge_wT=spY, mu_max=mumax,
     T_final=Tfinal, dt=dt, h_bathy=h_bathy,
     regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(1),

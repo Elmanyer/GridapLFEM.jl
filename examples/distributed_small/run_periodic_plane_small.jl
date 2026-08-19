@@ -16,8 +16,14 @@
 #    BALFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
 #
 #  Fixed defaults baked in here (rarely overridden): domain 50x20, mesh 200x40,
-#  partition 8x4 (32 ranks), p_horizontal 2, dt 0.02, d 3.5, x_wm 12, sponges 6/10,
-#  mu_max 10, periods 12, save_every 10. All still env-overridable.
+#  partition 8x4 (32 ranks), p_horizontal 2, dt 0.02, d 3.5, x_wm 12, sponges 10/10,
+#  mu_max 40, periods 14, save_every 10. All still env-overridable.
+#
+#  DURATION IS TRANSIT-BASED, not a round number. At T=2.0 / d=3.5 (kd=3.53),
+#  c_g = 1.58 m/s, so the front needs (40-12)/1.58 = 17.7 s = 8.9 T to reach the
+#  right sponge; the settling rule t_settle = transit + 3T gives 11.9 T. 14 keeps
+#  ~2 periods of margin. Reading a steady state before that measures a FILLING
+#  DOMAIN (rising eta_max with a MOVING x_at_max), not the wave field.
 #
 #  LAUNCH (px*py MUST equal -n): see run/dist_small/*.sh
 # ==============================================================
@@ -58,7 +64,7 @@ save_ev = genv_i("BALFEM_SAVE_EVERY", 10)
 # ---- per-case knobs (defaults = base case) ----
 Twave   = genv_f("BALFEM_TWAVE", 2.0)
 Awave   = genv_f("BALFEM_AWAVE", 0.1)
-periods = genv_f("BALFEM_PERIODS", 12.0)
+periods = genv_f("BALFEM_PERIODS", 14.0)   # transit 8.9 T + 3 T settle = 11.9; margin to 14
 Tfinal  = haskey(ENV, "BALFEM_TFINAL") ? genv_f("BALFEM_TFINAL", 0.0) : periods * Twave
 
 # bathymetry: flat_bed=false => variable bathymetry => build the y-invariant bar

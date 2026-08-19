@@ -10,7 +10,7 @@
 # Memory: the rome node default (2 GB/core) was TESTED (2026-08) and the job was
 # still OOM-killed. This request is therefore NOT provisional headroom for a
 # compile spike -- it is required until the consumption is attributed; see
-# building_files/LOCAL_VALIDATION_PLAN.md section 2.2. Sized so it FITS a rome
+# building_files/OPEN_ITEMS.md section 1. Sized so it FITS a rome
 # node (256 GB / 128 cores): 16 ranks x 4 GB over 1 node(s) = 64 GB/node.
 # Do NOT drop this on the argument that the sysimage removes the per-rank
 # compile: that argument was tested and refuted.

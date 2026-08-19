@@ -15,6 +15,7 @@
 > | [`WAVE_GENERATION.md`](building_files/WAVE_GENERATION.md) | sources, Dirichlet generation, sponge, WaveSpec coupling |
 > | [`RUNNING.md`](building_files/RUNNING.md) | how to launch: local, cluster, sysimage, env vars |
 > | [`OPEN_ITEMS.md`](building_files/OPEN_ITEMS.md) | open work, each with its decisive next step |
+> | [`PENDING_TASKS.md`](building_files/PENDING_TASKS.md) | studies designed but not begun, with their blocking prerequisites |
 >
 > **One-line status (2026-08-19).** The solver is feature-complete in serial and distributed. The
 > analytic MMS verifies **six of the eight models** — all four `:none` and both `:native` — at

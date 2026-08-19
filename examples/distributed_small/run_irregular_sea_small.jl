@@ -14,8 +14,14 @@
 #    BALFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
 #
 #  Fixed defaults: mesh 200x40, partition 8x4 (32 ranks), p_horizontal 2, dt 0.02,
-#  d 3.5, right sponge 12, mu_max 8, inflow relaxation zone 6, periods 15,
-#  save_every 10.
+#  d 3.5, right sponge 12, mu_max 40, inflow relaxation zone ON (width 6 m),
+#  periods 26 (transit-based), save_every 10.
+#
+#  DURATION. Generation at x=0, sponge from x=38. The settling time is set by the
+#  SLOW end of the spectrum, not by Tp: at Tp=1.6 the peak band has c_g=1.25 m/s
+#  => transit 30.4 s = 19 Tp, and t_settle = transit + 3Tp = 22 Tp. 26 matches the
+#  transit-aware default already adopted for the 1-D flume. Shorter runs end while
+#  the domain is still filling.
 #
 #  NOTE: uses build_airy_state => depends on the WaveSpec change_seed! fix.
 #  LAUNCH (px*py MUST equal -n): see run/dist_small/*irregular*.sh
@@ -57,7 +63,7 @@ d       = genv_f("BALFEM_D", 3.5)
 spR     = genv_f("BALFEM_SPONGE_R", 12.0)
 mumax   = genv_f("BALFEM_MUMAX", 40.0)   # strong: kill the outgoing/boundary mode fast
 dt      = genv_f("BALFEM_DT", 0.02)
-periods = genv_f("BALFEM_PERIODS", 15.0)
+periods = genv_f("BALFEM_PERIODS", 26.0)   # 19 Tp transit + 3 Tp; matches the 1-D default
 Tp      = tp_val()
 Tfinal  = haskey(ENV, "BALFEM_TFINAL") ? genv_f("BALFEM_TFINAL", 0.0) : periods * Tp
 save_ev = genv_i("BALFEM_SAVE_EVERY", 10)
@@ -84,7 +90,10 @@ diags, vert, prob = setup_and_run_distributed(
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     h_val=d, T_wave=Tp, A_wave=hs_val()/2,
     wave_gen=:bc_gen, wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
-    T_ramp=tramp_val(), relax_bc=relax_flag(), relax_width=relax_w_val(),
+    #  relax_bc defaults ON here: sponge_wL=0, so without the relaxation zone NOTHING
+    #  absorbs what the domain radiates back at the clamped Dirichlet inflow.
+    T_ramp=tramp_val(), relax_bc=genv_b("BALFEM_RELAX", 1),
+    relax_width=genv_f("BALFEM_RELAX_W", 6.0),
     sponge_wL=0.0, sponge_wR=spR, sponge_wB=0.0, sponge_wT=0.0, mu_max=mumax,
     T_final=Tfinal, dt=dt, h_bathy=h_bathy,
     regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(1),

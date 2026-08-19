@@ -11,9 +11,18 @@
 #    BALFEM_AWAVE        wave amplitude [m]                    (default 0.1)
 #    BALFEM_TWAVE        wave period [s]                       (default 2.0)
 #
-#  Fixed defaults: domain 50x20, mesh 200x80 (square 0.25 m cells, isotropic for
-#  the ring), partition 8x8 (64 ranks), p_horizontal 2, dt 0.02, d 3.5, 4-side
-#  sponges L/R 6 / B/T 4, mu_max 12, periods 12, save_every 10.
+#  Fixed defaults: domain 40x40, mesh 160x160 (square 0.25 m cells — isotropic is
+#  required here, see below), partition 8x8 (64 ranks), p_horizontal 2, dt 0.02,
+#  d 3.5, 4-side sponges X/Y 7 m (= 1.12 lambda), mu_max 40, periods 12,
+#  save_every 10.
+#
+#  ISOTROPIC CELLS ARE A SOLVER REQUIREMENT, NOT AN AESTHETIC ONE: GMRES iteration
+#  count grows with mesh anisotropy (a 4:1 mesh measured ~760 iters/solve against
+#  ~480 isotropic). This case also carries solid lateral walls, which cost a further
+#  ~40%% — it is the most linear-solver-expensive case in the suite.
+#
+#  Duration: point source at the centre (20,20), sponge from r=16 m, c_g=1.58 m/s
+#  => transit 10.1 s = 5.1 T, t_settle = 8.1 T. 12 periods is ample.
 #  (Flat bed only: a ring has no meaningful shore-parallel bar variant.)
 #
 #  LAUNCH (px*py MUST equal -n): see run/dist_small/run_nl_ring_flat_small.sh
@@ -54,8 +63,14 @@ Twave   = genv_f("BALFEM_TWAVE", 2.0)
 Awave   = genv_f("BALFEM_AWAVE", 0.1)
 x_wm    = genv_f("BALFEM_XWM", Lx/2)
 y_wm    = genv_f("BALFEM_YWM", Ly/2)
-spX     = genv_f("BALFEM_SPONGE_X", 4.0)
-spY     = genv_f("BALFEM_SPONGE_Y", 4.0)
+#  Sponge width is set by the WAVELENGTH, not by the domain: at T=2.0/d=3.5,
+#  lambda = 6.23 m, and a sponge under 1 lambda reflects. 4.0 m was 0.64 lambda.
+#  7 m = 1.12 lambda leaves a clean radius of 13 m = 2.1 lambda, ample for the
+#  1/sqrt(r) radial-decay check. Strength cannot substitute: mu_max/omega is
+#  already ~13, far past the mu ~ 5*omega saturation point where WIDTH is the
+#  only remaining lever.
+spX     = genv_f("BALFEM_SPONGE_X", 7.0)
+spY     = genv_f("BALFEM_SPONGE_Y", 7.0)
 mumax   = genv_f("BALFEM_MUMAX", 40.0)   # strong: kill the reflected/boundary mode fast
 dt      = genv_f("BALFEM_DT", 0.02)
 periods = genv_f("BALFEM_PERIODS", 12.0)
