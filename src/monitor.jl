@@ -172,7 +172,7 @@ steps (independently of the ODE solver's own assembly). See
 [`check_residuals`](@ref).
 """
 struct ResidualChecker
-    prob     :: LFEMProblem
+    prob     :: BALFEMProblem
     U        :: Any
     V        :: Any
     trian    :: Any

@@ -1,5 +1,5 @@
 # ==============================================================
-#  vertical.jl — Stage 1: the σ-mesh and the full LFE-M vertical tensor set
+#  vertical.jl — Stage 1: the σ-mesh and the full BALFE-M vertical tensor set
 #
 #  This is the "small dense vertical algebra" half of the model. It is run once,
 #  before time stepping, and is independent of the horizontal mesh: given the
@@ -70,7 +70,7 @@ end
 """
     assemble_vertical_tensors(M, p, c_bdy) → NamedTuple
 
-Full LFE-M vertical static tensor set. Fields:
+Full BALFE-M vertical static tensor set. Fields:
 
   N_dof            number of vertical DOFs (= M·p + 1)
   Phi   (N)        depth weights ∫φⱼ                        (ΣΦ = 1)

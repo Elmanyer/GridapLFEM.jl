@@ -42,7 +42,7 @@
 #  has no wave-to-bathymetry transit requirement, so the differential starts
 #  accumulating immediately and a 6-period run suffices. (The bar variant is
 #  richer -- it also activates the grad-h half of the block -- but the wave
-#  needs ~5 periods just to REACH the bar. Run LFEM_FLAT_BED=0 as a follow-up
+#  needs ~5 periods just to REACH the bar. Run BALFEM_FLAT_BED=0 as a follow-up
 #  once the flat result is in, with more periods.)
 #
 #  Mesh is 64x24 (dx=dy=0.625, ~6.4 cells/wavelength) rather than the 96x36 of
@@ -59,13 +59,13 @@
 #  USAGE
 #    run/local/sweep_nlpressure_amplitude.sh                  # all four
 #    PERIODS=4 run/local/sweep_nlpressure_amplitude.sh        # cheaper
-#    LFEM_FLAT_BED=0 PERIODS=12 run/local/... .sh             # the bar variant
+#    BALFEM_FLAT_BED=0 PERIODS=12 run/local/... .sh             # the bar variant
 #
 #  Results: output/local/logs/sweep_nlpressure_amplitude.csv (+ printed analysis)
 # ==============================================================
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
-source run/local/lfem_local.sh
+source run/local/balfem_local.sh
 
 RANKS="${RANKS:-12}"
 PERIODS="${PERIODS:-6}"
@@ -76,14 +76,14 @@ echo "case,A_wave,nl_pressure,flat_bed,periods,steps,s_per_step,gmres_min,gmres_
 
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JULIA_NUM_THREADS=1
 # ---- the fixed case: everything except A_wave and nl_pressure is held ----
-export LFEM_WAVE_GEN=line LFEM_REGIME=nonlinear
-export LFEM_FLAT_BED="${LFEM_FLAT_BED:-1}"
-export LFEM_LX=40.0 LFEM_LY=15.0 LFEM_NX=64 LFEM_NY=24
-export LFEM_PX=4 LFEM_PY=3 LFEM_MPI=1
-export LFEM_DT=0.04 LFEM_PERIODS="$PERIODS"
-export LFEM_SAVE_EVERY=0 LFEM_WRITE_W=0 LFEM_WRITE_PRESSURE=0
-export LFEM_PRINT_EVERY=20 LFEM_DIAG_EVERY=5
-export LFEM_PRECOND=jacobi          # tolerances: validated defaults, not overridden
+export BALFEM_WAVE_GEN=line BALFEM_REGIME=nonlinear
+export BALFEM_FLAT_BED="${BALFEM_FLAT_BED:-1}"
+export BALFEM_LX=40.0 BALFEM_LY=15.0 BALFEM_NX=64 BALFEM_NY=24
+export BALFEM_PX=4 BALFEM_PY=3 BALFEM_MPI=1
+export BALFEM_DT=0.04 BALFEM_PERIODS="$PERIODS"
+export BALFEM_SAVE_EVERY=0 BALFEM_WRITE_W=0 BALFEM_WRITE_PRESSURE=0
+export BALFEM_PRINT_EVERY=20 BALFEM_DIAG_EVERY=5
+export BALFEM_PRECOND=jacobi          # tolerances: validated defaults, not overridden
 
 #  A_wave   nl_pressure   label
 CONFIGS=(
@@ -96,19 +96,19 @@ CONFIGS=(
 for cfg in "${CONFIGS[@]}"; do
   set -- $cfg; aw=$1; nlp=$2; label=$3
   echo "=================================================================="
-  echo "=== $label : A_wave=$aw  nl_pressure=$nlp  flat_bed=$LFEM_FLAT_BED"
+  echo "=== $label : A_wave=$aw  nl_pressure=$nlp  flat_bed=$BALFEM_FLAT_BED"
   echo "=================================================================="
-  export LFEM_AWAVE="$aw" LFEM_NL_PRESSURE="$nlp"
-  export LFEM_OUTDIR="output/local/sweep_nlp_${label}"
+  export BALFEM_AWAVE="$aw" BALFEM_NL_PRESSURE="$nlp"
+  export BALFEM_OUTDIR="output/local/sweep_nlp_${label}"
   log="$OUT/sweep_nlp_${label}.log"
-  lfem_local_mpi "$RANKS" examples/local_2d/run_small_2d.jl > "$log" 2>&1
+  balfem_local_mpi "$RANKS" examples/local_2d/run_small_2d.jl > "$log" 2>&1
   rc=$?
 
   sps=$(grep -oE '\([0-9.]+ s/step average\)' "$log" | grep -oE '[0-9.]+' | head -1)
   gmin=$(grep -oE 'gmres [0-9]+' "$log" | grep -oE '[0-9]+' | sort -n | head -1)
   gmax=$(grep -oE 'gmres [0-9]+' "$log" | grep -oE '[0-9]+' | sort -n | tail -1)
   steps=$(python3 -c "print(int(round($PERIODS*1.6/0.04)))")
-  read nlps meta rss <<<"$(python3 - "$LFEM_OUTDIR/diagnostics.csv" <<'PY'
+  read nlps meta rss <<<"$(python3 - "$BALFEM_OUTDIR/diagnostics.csv" <<'PY'
 import csv,sys
 try:
     rows=list(csv.DictReader(open(sys.argv[1])))
@@ -119,7 +119,7 @@ except Exception:
     print("nan nan nan")
 PY
 )"
-  echo "$label,$aw,$nlp,$LFEM_FLAT_BED,$PERIODS,$steps,${sps:-nan},${gmin:-nan},${gmax:-nan},$nlps,$meta,$rss,$rc" >> "$CSV"
+  echo "$label,$aw,$nlp,$BALFEM_FLAT_BED,$PERIODS,$steps,${sps:-nan},${gmin:-nan},${gmax:-nan},$nlps,$meta,$rss,$rc" >> "$CSV"
   printf "    s/step=%-8s gmres=%s-%s  NL/step=%s  max|eta|=%s  (exit %d)\n" \
          "${sps:-?}" "${gmin:-?}" "${gmax:-?}" "$nlps" "$meta" "$rc"
 done

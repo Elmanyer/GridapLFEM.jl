@@ -229,7 +229,7 @@ end
 
 function setup_and_run(;
     # ---- Vertical discretisation ---------------------------------------------
-    M            :: Int     = 2,          # number of vertical σ-elements (LFE-M order: 2/3/4)
+    M            :: Int     = 2,          # number of vertical σ-elements (BALFE-M order: 2/3/4)
     p_vertical   :: Int     = 1,          # polynomial order of each σ-element (Nσ = M·p_vertical+1)
     c_bdy                   = nothing,    # σ-node boundary positions in [0,1]; nothing → optimised set
     # ---- Horizontal discretisation -------------------------------------------
@@ -331,7 +331,7 @@ function setup_and_run(;
 
     # --- STAGE 1: VERTICAL PRE-COMPUTATION (MESH INDEPENDENT, DONE ONCE) -------
     # Build the σ-basis and integrate every vertical tensor the residual needs.
-    println("=== Vertical FE problem (algebraic LFE-M) ===")
+    println("=== Vertical FE problem (algebraic BALFE-M) ===")
     vert = assemble_vertical_tensors(M, p_vertical, c_bdy)
     @printf("  Nσ=%d   ΣΦ=%.6f\n", vert.N_dof, sum(vert.Phi))   # ΣΦ=1 sanity check
 

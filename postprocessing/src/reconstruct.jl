@@ -37,9 +37,9 @@ end
 """
     sigma_basis(c_bdy; p=1) -> SigmaBasis
 
-Build the LFE-M vertical basis. Nodes = `p+1` equispaced points per element,
+Build the BALFE-M vertical basis. Nodes = `p+1` equispaced points per element,
 deduplicated at shared boundaries, ordered by ascending σ — matching Gridap's
-DOF order for the `p=1` optimised-node meshes used by LFE-2/3/4 (mode `j` ↔
+DOF order for the `p=1` optimised-node meshes used by P1LFE-2/3/4 (mode `j` ↔
 σ-node `j`). For `p>1` the interior-node order should be verified against the
 solver's `phi_fns`.
 """
@@ -62,7 +62,7 @@ function sigma_basis(c_bdy::AbstractVector; p::Int=1)
     return SigmaBasis(collect(float.(c_bdy)), p, gnodes, local_nodes, nxt)
 end
 
-# 5-point Gauss–Legendre on [-1,1] (exact to degree 9 ⇒ exact for all LFE-M p≤3)
+# 5-point Gauss–Legendre on [-1,1] (exact to degree 9 ⇒ exact for all BALFE-M p≤3)
 const _GL_X = (-0.9061798459386640, -0.5384693101056831, 0.0,
                 0.5384693101056831,  0.9061798459386640)
 const _GL_W = ( 0.2369268850561891,  0.4786286704993665, 0.5688888888888889,

@@ -1,5 +1,5 @@
 # ==============================================================
-#  GridapLFEM.jl — Algebraic (loop-free) 2D LFE-M Wave Solver
+#  GridapBALFEM.jl — Algebraic (loop-free) 2D LFE-M Wave Solver
 #
 #  Depth-integrated, non-hydrostatic free-surface wave solver for the LFE-M
 #  model (Yang & Liu 2024, JFM 999 A32). The water column σ∈[0,1] is resolved
@@ -17,19 +17,19 @@
 #  u[1]=η, u[2]=𝖴x, u[3]=𝖴y. This keeps the assembly well-typed and compact,
 #  and lets the identical code run sequentially and distributed.
 #
-#  Usage (GridapLFEM is a Julia package; activate this directory as the project):
-#    julia --project=/path/to/GridapLFEM.jl
-#    using GridapLFEM
+#  Usage (GridapBALFEM is a Julia package; activate this directory as the project):
+#    julia --project=/path/to/GridapBALFEM.jl
+#    using GridapBALFEM
 #    diags, vert, prob = setup_and_run(M=2, T_wave=1.6, A_wave=0.001)
 #
-#  It is loaded with `using GridapLFEM`, never `include`d: being a real package is
+#  It is loaded with `using GridapBALFEM`, never `include`d: being a real package is
 #  what lets PackageCompiler bake the solver AND its Gridap specialisations into
 #  the cluster system image (see compile/), and what gives every sequential run a
 #  cached precompile. An `include()`d module is rebuilt in every process, which is
 #  what used to OOM-kill the 32-64 rank runs.
 # ==============================================================
 
-module GridapLFEM
+module GridapBALFEM
 
 using Gridap
 using Gridap.Algebra
@@ -69,7 +69,7 @@ const rho = 1025.0    # water density [kg/m³]
 include("vertical.jl")       # Stage 1: σ-mesh + full vertical tensor set (incl. P, Pcal)
 include("tensors.jl")        # constant-tensor constructors + pointwise Operation helpers
 include("horizontal.jl")     # Stage 2: 2D mesh + stacked [η,𝖴x,𝖴y] FE spaces + wall BCs
-include("problem.jl")        # LFEMProblem struct + loop-free residual + hand Jacobians
+include("problem.jl")        # BALFEMProblem struct + loop-free residual + hand Jacobians
 include("nlpressure.jl")     # FULL nonlinear pressure (native / ∇h exact-IBP / frozen proj.)
 include("reconstruct.jl")    # w / total-pressure σ-level VTK fields (serial + distributed)
 include("monitor.jl")        # solver monitor + governing-eq residual checker + reports
@@ -95,7 +95,7 @@ export build_horizontal_model
 export build_fe_spaces
 
 # Problem
-export LFEMProblem, build_problem, build_problem_raw, resolve_physics
+export BALFEMProblem, build_problem, build_problem_raw, resolve_physics
 export global_residual, jacobian_u, jacobian_u_t
 export build_ode_operator, build_ode_operator_ad
 
@@ -154,4 +154,4 @@ export build_ode_solver_distributed
 export run_time_loop_dist
 export setup_and_run_distributed
 
-end # module GridapLFEM
+end # module GridapBALFEM

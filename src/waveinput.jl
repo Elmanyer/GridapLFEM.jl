@@ -12,7 +12,7 @@
 #  data deterministic — identical on every MPI rank and across sessions).
 #
 #  Vertical polarization per component (ω_c, θ_c):
-#    :model (default) — the DISCRETE LFE-M plane-wave eigenmode:
+#    :model (default) — the DISCRETE BALFE-M plane-wave eigenmode:
 #         u_j = (g k/ω) [ (Mmat − k²d²B)⁻¹ Φ ]_j · A_c,
 #         k from the model dispersion  ω² = g d k² Φᵀ(Mmat − k²d²B)⁻¹Φ.
 #      The boundary data is then an exact solution of the linearised
@@ -67,7 +67,7 @@ end
 """
     model_wavenumber(vert, omega, d, g) → k
 
-Wavenumber of the DISCRETE LFE-M dispersion relation
+Wavenumber of the DISCRETE BALFE-M dispersion relation
     ω² = g d k² Φᵀ (Mmat − k²d²B)⁻¹ Φ
 (secant iteration seeded at the Airy k). The model frequency saturates above
 the applicable-kd band; if ω lies beyond it (or the iteration fails) the Airy

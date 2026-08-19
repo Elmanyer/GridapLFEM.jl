@@ -14,7 +14,7 @@
 #
 #  Deliberately dependency-free (stdlib only) so it runs against a cluster
 #  output directory without the postprocessing environment. For fields,
-#  spectra and plots use postprocessing/GridapLFEMPost instead.
+#  spectra and plots use postprocessing/GridapBALFEMPost instead.
 #
 #  USAGE
 #    julia --project=. examples/inspect_run.jl <output_dir> [<output_dir> ...]

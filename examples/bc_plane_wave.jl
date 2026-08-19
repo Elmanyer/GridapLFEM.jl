@@ -6,14 +6,14 @@
 #  discrete-eigenmode :model polarization), propagates down the flume and is
 #  absorbed by the right sponge. Hann ramp over 2 periods; cold start.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/bc_plane_wave.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/bc_plane_wave.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 println("=" ^ 60)
-println("  bc_plane_wave.jl — Dirichlet-generated plane wave (LFE-2)")
+println("  bc_plane_wave.jl — Dirichlet-generated plane wave (P1LFE-2)")
 println("=" ^ 60)
 
 # ── Physical parameters (Reg06-like linear regime) ────────────
@@ -47,7 +47,7 @@ diags, vert, prob = setup_and_run(
     wave_gen    = :bc_gen,  # parametrised boundary wave
     wave_bc     = :regular,         # ← Dirichlet generation (no wavemaker)
     bc_side     = :left,
-    bc_profile  = :model,           # discrete LFE-M eigenmode polarization
+    bc_profile  = :model,           # discrete BALFE-M eigenmode polarization
     sponge_wL   = 0.0,              # nothing may damp the generation boundary
     sponge_wR   = 20.0,
     sponge_wB   = 0.0,
@@ -72,4 +72,4 @@ for (i, gxy) in enumerate(gauges)
     amp = isempty(gv) ? 0.0 : maximum(abs.(gv[n2:end]))
     @printf("  gauge %d at x=%.1f m:  steady amplitude ≈ %.5f m\n", i, gxy[1], amp)
 end
-println("\n  VTK output: GridapLFEM.jl/output/bc_plane_wave/solution.pvd")
+println("\n  VTK output: GridapBALFEM.jl/output/bc_plane_wave/solution.pvd")

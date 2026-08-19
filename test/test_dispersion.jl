@@ -1,15 +1,15 @@
 # ==============================================================
 #  test_dispersion.jl — FEM dispersion gate (SMALL & FAST)
 #
-#  Port of ../../LFE-M_2D_solver/test/test_dispersion_lfem2D.jl.
+#  Port of ../../LFE-M_2D_solver/test/test_dispersion_balfem2D.jl.
 #  Time-domain check that the algebraic solver's R_P (leading pressure)
 #  term reproduces the linear dispersion end-to-end: kd = 3, gauges 2λ from
 #  the wavemaker separated λ/2, DFT phase at the forcing frequency.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_dispersion.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_dispersion.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 60)

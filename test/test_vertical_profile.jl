@@ -16,10 +16,10 @@
 #  L∞ profile error over σ∈[0,1] at several kd and require it small inside the
 #  applicable band and clearly larger past it.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_vertical_profile.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_vertical_profile.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using Printf, LinearAlgebra
 
@@ -55,27 +55,27 @@ function profile_error(vert, kd; nσ=41)
     return err
 end
 
-# ---- LFE-2 (applicable to kd≈10.9): accurate at kd=1,3,5; degraded at kd=14 ----
+# ---- P1LFE-2 (applicable to kd≈10.9): accurate at kd=1,3,5; degraded at kd=14 ----
 vert2 = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
-println("\n  LFE-2  (kd_app ≈ $(round(applicable_kd(vert2,g,d),digits=1)))")
+println("\n  P1LFE-2  (kd_app ≈ $(round(applicable_kd(vert2,g,d),digits=1)))")
 for kd in (1.0, 3.0, 5.0)
     e = profile_error(vert2, kd)
     @printf("    kd=%4.1f   L∞ w-profile error = %.4f\n", kd, e)
-    check("LFE-2 w-profile matches Airy at kd=$kd (L∞ < 5%)", e < 0.05,
+    check("P1LFE-2 w-profile matches Airy at kd=$kd (L∞ < 5%)", e < 0.05,
           "($(round(100e,digits=2))%)")
 end
 e_deep2 = profile_error(vert2, 14.0)
 @printf("    kd=14.0   L∞ w-profile error = %.4f (beyond band)\n", e_deep2)
-check("LFE-2 w-profile degrades past kd_app (kd=14 error > 5%)", e_deep2 > 0.05,
+check("P1LFE-2 w-profile degrades past kd_app (kd=14 error > 5%)", e_deep2 > 0.05,
       "($(round(100e_deep2,digits=2))%)")
 
-# ---- LFE-3 (applicable to kd≈39): accurate at kd=5,15,30 -------------------------
+# ---- P1LFE-3 (applicable to kd≈39): accurate at kd=5,15,30 -------------------------
 vert3 = assemble_vertical_tensors(3, 1, [0.0, 0.726, 0.925, 1.0])
-println("\n  LFE-3  (kd_app ≈ $(round(applicable_kd(vert3,g,d),digits=1)))")
+println("\n  P1LFE-3  (kd_app ≈ $(round(applicable_kd(vert3,g,d),digits=1)))")
 for kd in (5.0, 15.0, 30.0)
     e = profile_error(vert3, kd)
     @printf("    kd=%4.1f   L∞ w-profile error = %.4f\n", kd, e)
-    check("LFE-3 w-profile matches Airy at kd=$kd (L∞ < 6%)", e < 0.06,
+    check("P1LFE-3 w-profile matches Airy at kd=$kd (L∞ < 6%)", e < 0.06,
           "($(round(100e,digits=2))%)")
 end
 

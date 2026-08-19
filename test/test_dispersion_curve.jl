@@ -6,16 +6,16 @@
 #  the Stage-1 tensors: the model phase celerity is the Rayleigh quotient
 #     Cm²(kd) = g d · Φᵀ (M − (kd)² B)⁻¹ Φ,          (B ⪯ 0)
 #  and the exact Airy celerity is  Ce²(kd) = g d tanh(kd)/(kd).
-#  We sweep kd for LFE-2/3/4, print the Cm/Ce curve, and check:
+#  We sweep kd for P1LFE-2/3/4, print the Cm/Ce curve, and check:
 #    * |Cm/Ce − 1| ≤ 2% throughout kd ∈ (0, kd_app]  (definition of kd_app),
-#    * kd_app matches Yang & Liu Table 1/2 (LFE-2≈10.9, LFE-3≈39.2, LFE-4≈127.9),
+#    * kd_app matches Yang & Liu Table 1/2 (P1LFE-2≈10.9, P1LFE-3≈39.2, P1LFE-4≈127.9),
 #    * the error is (essentially) monotone increasing past kd_app.
 #  No time stepping — this is the cheapest, most fundamental physics check.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_dispersion_curve.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_dispersion_curve.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 64)
@@ -30,9 +30,9 @@ check(name, cond) = (global n_pass, n_fail;
 g = 9.81; d = 3.5
 
 models = [
-    (name="LFE-2", M=2, c_bdy=[0.0, 0.728, 1.0],               kd_ref=10.9, tol=1.0),
-    (name="LFE-3", M=3, c_bdy=[0.0, 0.726, 0.925, 1.0],        kd_ref=39.2, tol=2.0),
-    (name="LFE-4", M=4, c_bdy=[0.0, 0.745, 0.923, 0.977, 1.0], kd_ref=127.9, tol=6.0),
+    (name="P1LFE-2", M=2, c_bdy=[0.0, 0.728, 1.0],               kd_ref=10.9, tol=1.0),
+    (name="P1LFE-3", M=3, c_bdy=[0.0, 0.726, 0.925, 1.0],        kd_ref=39.2, tol=2.0),
+    (name="P1LFE-4", M=4, c_bdy=[0.0, 0.745, 0.923, 0.977, 1.0], kd_ref=127.9, tol=6.0),
 ]
 
 for m in models

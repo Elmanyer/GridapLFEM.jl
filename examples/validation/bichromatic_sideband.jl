@@ -6,8 +6,8 @@
 #  A two-frequency wavemaker (ω₁,ω₂ close) generates a wave GROUP whose envelope
 #  evolves through sum/difference nonlinear interactions. In deep water a single
 #  carrier seeded with small sidebands additionally exhibits Benjamin–Feir
-#  modulational growth. These are the most demanding LFE-M validations: deep
-#  water (large kd — use LFE-3/LFE-4 to stay inside the applicable band), fine
+#  modulational growth. These are the most demanding BALFE-M validations: deep
+#  water (large kd — use P1LFE-3/P1LFE-4 to stay inside the applicable band), fine
 #  resolution, LONG domains and runs, and the full nonlinear pressure.
 #
 #  This script is a SCAFFOLD: it builds a custom bichromatic mass source via the
@@ -17,10 +17,10 @@
 #  enlarge the domain to many group lengths, extend the run, and (for sidebands)
 #  replace the source by a carrier + seeded ±δω perturbation.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/validation/bichromatic_sideband.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/validation/bichromatic_sideband.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using Printf, LinearAlgebra
 
@@ -36,7 +36,7 @@ k1 = find_wavenumber(ω1, d, g); k2 = find_wavenumber(ω2, d, g)
 lam = 2π/max(k1,k2); kd1 = k1*d
 @printf("  T₁=%.2f (kd=%.1f)  T₂=%.2f  Δω=%.3f  group T=%.1f s\n",
         T1, kd1, T2, abs(ω1-ω2), 2π/abs(ω1-ω2))
-# LFE-3 needed for deep water (LFE-2 applicable only to kd≈10.9)
+# P1LFE-3 needed for deep water (P1LFE-2 applicable only to kd≈10.9)
 M = kd1 > 9 ? 3 : 2
 c_bdy = M == 3 ? [0.0,0.726,0.925,1.0] : [0.0,0.728,1.0]
 

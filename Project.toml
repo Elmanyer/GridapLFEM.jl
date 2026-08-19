@@ -1,4 +1,4 @@
-name = "GridapLFEM"
+name = "GridapBALFEM"
 uuid = "43e94d05-4d7d-4679-96a4-d46e2615da34"
 authors = ["Pau Manyer <p.manyerfuertes@tudelft.nl>", "Oriol Colomés <j.o.colomesgene@tudelft.nl>"]
 version = "0.1.0"

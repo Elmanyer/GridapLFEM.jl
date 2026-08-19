@@ -54,12 +54,12 @@ Run these at scale for the physical validation. Two at-scale correctness signals
 1. **In-run governing-equation residual check.** All distributed runs enable `check_every` — every N
    steps the θ-scheme discrete residual is *independently reassembled* and its `‖R‖∞` printed; it must
    stay `≤ check_tol` (≈1e-8). A `WARN` here means the parallel solve is not solving the equations. Set
-   `LFEM_CHECK_EVERY` (via the driver) and watch the `[check]` lines.
+   `BALFEM_CHECK_EVERY` (via the driver) and watch the `[check]` lines.
 2. **Stability envelope + solver stats.** The `eta_max` time series and per-step Newton/GMRES counts
    (printed by the monitor) show the run stays bounded and the solver converges over the whole run.
 
 The **physical** metrics (dispersion celerity, bound-harmonic amplitudes `H₁,₂,₃(x)`, radial `1/√r`
-decay) are extracted **offline** from the VTK snapshots (`LFEM_SAVE_EVERY>0`, `LFEM_WRITE_W`/`_PRESSURE`)
+decay) are extracted **offline** from the VTK snapshots (`BALFEM_SAVE_EVERY>0`, `BALFEM_WRITE_W`/`_PRESSURE`)
 — open `output/…/solution.pvd` in ParaView, or sample the fields with a small serial post-process, and
 apply the same DFT-at-forcing-frequency analysis used by the sequential `examples/validation/` scripts.
 
@@ -70,14 +70,14 @@ machine. `px·py` **must** equal `-n`, and `nx`/`ny` should divide evenly by `px
 
 ```bash
 # distributed conservation, 8 ranks, 2000×200 mesh, 400 steps
-LFEM_PX=8 LFEM_PY=1 LFEM_NX=2000 LFEM_NY=200 LFEM_DT=0.02 LFEM_TFINAL=8.0 \
+BALFEM_PX=8 BALFEM_PY=1 BALFEM_NX=2000 BALFEM_NY=200 BALFEM_DT=0.02 BALFEM_TFINAL=8.0 \
   ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-      GridapLFEM.jl/test/cluster/cluster_conservation.jl
+      GridapBALFEM.jl/test/cluster/cluster_conservation.jl
 
 # distributed unsteady nonlinear MMS, 8 ranks, 400×200 mesh, 200 steps
-LFEM_PX=4 LFEM_PY=2 LFEM_NX=400 LFEM_NY=200 LFEM_NSTEPS=200 LFEM_NLPFULL=1 \
+BALFEM_PX=4 BALFEM_PY=2 BALFEM_NX=400 BALFEM_NY=200 BALFEM_NSTEPS=200 BALFEM_NLPFULL=1 \
   ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-      GridapLFEM.jl/test/cluster/cluster_selfconsistency.jl
+      GridapBALFEM.jl/test/cluster/cluster_selfconsistency.jl
 ```
 
 A SLURM template is in `slurm_validation.sh` (edit the account/partition/module lines for your

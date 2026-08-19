@@ -1,4 +1,4 @@
-# `GridapLFEMPost` — postprocessing library: design & plan
+# `GridapBALFEMPost` — postprocessing library: design & plan
 
 ## 1. Purpose and scope
 
@@ -86,7 +86,7 @@ end
 postprocessing/
 ├── Project.toml                 # ReadVTK, Plots, GR, FFTW, Interpolations
 ├── README.md                    # quick-start + gallery
-├── src/GridapLFEMPost.jl        # module entry: deps, includes, exports
+├── src/GridapBALFEMPost.jl        # module entry: deps, includes, exports
 │   ├── io.jl          # load_simulation / load_snapshot / regularize! / load_csv
 │   ├── probes.jl      # gauge / timeseries / transect / field_at / sigma_profile
 │   ├── spectral.jl    # dft_at / amplitude_at / phase_at / spectrum / harmonics / celerity

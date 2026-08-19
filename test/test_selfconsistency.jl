@@ -59,10 +59,10 @@
 #  nonlinear terms are a SIGNIFICANT fraction of the residual (genuinely
 #  nonlinear); (3) the native nonlinear-pressure block is computed (nonzero).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_selfconsistency.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_selfconsistency.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using Gridap.ODEs
 using LinearAlgebra, Printf

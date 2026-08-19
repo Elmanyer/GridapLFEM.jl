@@ -8,12 +8,12 @@
 #
 #  Config via env (launcher overrides ONLY what changes; base = nonlinear / full
 #  pressure / flat bed / A=0.1 / T=2.0):
-#    LFEM_REGIME       linear | nonlinear                    (default nonlinear)
-#    LFEM_NL_PRESSURE  none | native | full                  (default full)
-#    LFEM_FLAT_BED     1 flat | 0 variable (=> submerged bar built here)  (1)
-#    LFEM_AWAVE        wave amplitude [m]                    (default 0.1)
-#    LFEM_TWAVE        wave period [s]                       (default 2.0)
-#    LFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
+#    BALFEM_REGIME       linear | nonlinear                    (default nonlinear)
+#    BALFEM_NL_PRESSURE  none | native | full                  (default full)
+#    BALFEM_FLAT_BED     1 flat | 0 variable (=> submerged bar built here)  (1)
+#    BALFEM_AWAVE        wave amplitude [m]                    (default 0.1)
+#    BALFEM_TWAVE        wave period [s]                       (default 2.0)
+#    BALFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
 #
 #  Fixed defaults baked in here (rarely overridden): domain 50x20, mesh 200x40,
 #  partition 8x4 (32 ranks), p_horizontal 2, dt 0.02, d 3.5, x_wm 12, sponges 6/10,
@@ -25,52 +25,58 @@
 include(joinpath(@__DIR__, "..", "distributed", "_dist_common.jl"))
 
 # base-case physics (launcher overrides; get! => banner and solver stay consistent)
-get!(ENV, "LFEM_REGIME", "nonlinear")
-get!(ENV, "LFEM_NL_PRESSURE", "full")
-get!(ENV, "LFEM_FLAT_BED", "1")
+get!(ENV, "BALFEM_REGIME", "nonlinear")
+get!(ENV, "BALFEM_NL_PRESSURE", "full")
+get!(ENV, "BALFEM_FLAT_BED", "1")
 
 # ---- fixed geometry / numerics defaults (common to all periodic-plane cases) ----
-M       = genv_i("LFEM_M", 2)
-px, py  = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 4)      # 8*4 = 32 ranks
-nx, ny  = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 40)   # dx=0.25, dy=0.5
-feord   = genv_i("LFEM_FE_ORDER", 2)
+M       = genv_i("BALFEM_M", 2)
+#  Vertical BASIS ORDER. The model is named P{p_vert}LFE-{M}: `Pp` is the
+#  vertical Lagrange order and `M` the number of vertical elements, so the run
+#  says which member of the BALFE-M family it actually exercises. Default p=1
+#  reproduces the piecewise-linear models of Yang & Liu.
+p_vert  = genv_i("BALFEM_P_VERT", 1)
+model_name = "P$(p_vert)LFE-$(M)"
+px, py  = genv_i("BALFEM_PX", 8), genv_i("BALFEM_PY", 4)      # 8*4 = 32 ranks
+nx, ny  = genv_i("BALFEM_NX", 200), genv_i("BALFEM_NY", 40)   # dx=0.25, dy=0.5
+feord   = genv_i("BALFEM_FE_ORDER", 2)
 #  p_eta = 0 keeps the historical EQUAL-ORDER spaces (unchanged default).
-#  Set LFEM_P_ETA = LFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
+#  Set BALFEM_P_ETA = BALFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
 #  the only one measured to reach the theoretical order in BOTH fields. It is
 #  NOT automatically the better production choice: at a GIVEN mesh the
 #  equal-order spaces were 40x more accurate, because eta sits in a richer
 #  space. Compare error-vs-DOF before switching.
-p_eta   = genv_i("LFEM_P_ETA", 0)
-Lx, Ly  = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)
-d       = genv_f("LFEM_D", 3.5)
-x_wm    = genv_f("LFEM_XWM", 12.0)
-spL     = genv_f("LFEM_SPONGE_L", 10.0)
-spR     = genv_f("LFEM_SPONGE_R", 10.0)
-mumax   = genv_f("LFEM_MUMAX", 40.0)   # strong: kill the reflected/boundary mode fast
-dt      = genv_f("LFEM_DT", 0.02)
-save_ev = genv_i("LFEM_SAVE_EVERY", 10)
+p_eta   = genv_i("BALFEM_P_ETA", 0)
+Lx, Ly  = genv_f("BALFEM_LX", 50.0), genv_f("BALFEM_LY", 20.0)
+d       = genv_f("BALFEM_D", 3.5)
+x_wm    = genv_f("BALFEM_XWM", 12.0)
+spL     = genv_f("BALFEM_SPONGE_L", 10.0)
+spR     = genv_f("BALFEM_SPONGE_R", 10.0)
+mumax   = genv_f("BALFEM_MUMAX", 40.0)   # strong: kill the reflected/boundary mode fast
+dt      = genv_f("BALFEM_DT", 0.02)
+save_ev = genv_i("BALFEM_SAVE_EVERY", 10)
 # ---- per-case knobs (defaults = base case) ----
-Twave   = genv_f("LFEM_TWAVE", 2.0)
-Awave   = genv_f("LFEM_AWAVE", 0.1)
-periods = genv_f("LFEM_PERIODS", 12.0)
-Tfinal  = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Twave
+Twave   = genv_f("BALFEM_TWAVE", 2.0)
+Awave   = genv_f("BALFEM_AWAVE", 0.1)
+periods = genv_f("BALFEM_PERIODS", 12.0)
+Tfinal  = haskey(ENV, "BALFEM_TFINAL") ? genv_f("BALFEM_TFINAL", 0.0) : periods * Twave
 
 # bathymetry: flat_bed=false => variable bathymetry => build the y-invariant bar
 usebar  = !flat_bed_flag(1)
-hbar    = genv_f("LFEM_HBAR", 1.5); xbar = genv_f("LFEM_XBAR", 26.0); wbar = genv_f("LFEM_WBAR", 6.0)
+hbar    = genv_f("BALFEM_HBAR", 1.5); xbar = genv_f("BALFEM_XBAR", 26.0); wbar = genv_f("BALFEM_WBAR", 6.0)
 sramp   = wbar / 3.0
 h_bathy = usebar ?
     (x -> d - 0.5*hbar*(tanh((x[1]-(xbar-wbar))/sramp) - tanh((x[1]-(xbar+wbar))/sramp))) : nothing
 
 bedtag  = usebar ? "bar" : "flat"
 tag     = "$(regime_sym())_$(nl_pressure_sym())_$(bedtag)_A$(Awave)_T$(Twave)"
-outdir  = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "small_plane_$(tag)_M$(M)"))
+outdir  = genv("BALFEM_OUTDIR", joinpath(ROOT, "output", "small_plane_$(tag)_$(model_name)"))
 
 banner("SMALL | periodic plane wave | $(regime_sym()) $(nl_pressure_sym()) $bedtag A=$Awave T=$Twave",
        M, (px,py), (nx,ny), nx*ny, outdir)
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
+    cpu_grid=(px,py), M=M, p_vertical=p_vert, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     wave_gen=:inner_res,                                           # interior line source
     h_val=d, T_wave=Twave, A_wave=Awave, x_wm=x_wm, y_wm=nothing,   # line source
@@ -85,7 +91,7 @@ diags, vert, prob = setup_and_run_distributed(
     ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(), precond=precond_sym(),
     diag_every=diag_every_val(), diag_csv=diag_csv_flag(),
     div_factor=div_factor_val(), eta_ref=eta_ref_val(),
-    print_every=genv_i("LFEM_PRINT_EVERY", 10))
+    print_every=genv_i("BALFEM_PRINT_EVERY", 10))
 
 is_rank0() && @printf("periodic_plane [%s] done: %d steps, %d snapshots to %s\n",
                       tag, length(diags), length(diags) ÷ max(save_ev,1), outdir)

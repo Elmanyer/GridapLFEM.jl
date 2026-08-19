@@ -1,7 +1,7 @@
 #!/bin/bash
 # CLUSTER quasi-1D flume - nl_native_inner_flat
 #   The native {3,6,7,8} nonlinear-pressure tier
-#SBATCH --job-name="LFEM_1d_nl_native_inner_flat"
+#SBATCH --job-name="BALFEM_1d_nl_native_inner_flat"
 #SBATCH --partition=rome
 #SBATCH --time=11:59:00
 #SBATCH --ntasks=32
@@ -19,24 +19,24 @@
 #SBATCH --output=%x.%j.out
 #SBATCH --error=%x.%j.err
 
-source $HOME/GridapLFEM.jl/run/lfem_env.sh
+source $HOME/GridapBALFEM.jl/run/balfem_env.sh
 
 # --- MPI process grid: a 1-D flume is partitioned in x only ---
-export LFEM_MPI=1
-export LFEM_PX=32           # 32 x 1 = 32 ranks; LFEM_NX must divide by LFEM_PX
+export BALFEM_MPI=1
+export BALFEM_PX=32           # 32 x 1 = 32 ranks; BALFEM_NX must divide by BALFEM_PX
 
-export LFEM_WAVE_GEN=inner
-export LFEM_REGIME=nonlinear
-export LFEM_NL_PRESSURE=native
-export LFEM_FLAT_BED=1
+export BALFEM_WAVE_GEN=inner
+export BALFEM_REGIME=nonlinear
+export BALFEM_NL_PRESSURE=native
+export BALFEM_FLAT_BED=1
 
 # cluster sizing: 200 x 3 m, dx=0.25, 60 periods
-export LFEM_LX=200.0
-export LFEM_NX=800
-export LFEM_XBAR=100.0
-export LFEM_PERIODS=60
-export LFEM_SAVE_EVERY=25
-export LFEM_DIAG_EVERY=10
-export LFEM_PRINT_EVERY=10
+export BALFEM_LX=200.0
+export BALFEM_NX=800
+export BALFEM_XBAR=100.0
+export BALFEM_PERIODS=60
+export BALFEM_SAVE_EVERY=25
+export BALFEM_DIAG_EVERY=10
+export BALFEM_PRINT_EVERY=10
 
-lfem_run 32 examples/local_1d/run_flume_1d.jl
+balfem_run 32 examples/local_1d/run_flume_1d.jl

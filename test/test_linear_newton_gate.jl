@@ -27,7 +27,7 @@
 #  RUN:  julia --project=. test/test_linear_newton_gate.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using Printf
 
@@ -35,7 +35,7 @@ println("=" ^ 72)
 println("  test_linear_newton_gate.jl — linear regime ⇒ 1 Newton iteration/stage")
 println("=" ^ 72)
 
-const G   = GridapLFEM.g
+const G   = GridapBALFEM.g
 const D0  = 2.5      # ≠ 1 deliberately: d = 1 makes the h-weighting invisible
 const AB  = 0.2      # bed-slope amplitude; > 0 ⇒ an actually varying bed
 const KBX = 1.3

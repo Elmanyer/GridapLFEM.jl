@@ -19,14 +19,14 @@
 #  RUN:  julia --project=. test/test_mms_forcing_nonlinear.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 println("=" ^ 76)
 println("  test_mms_forcing_nonlinear.jl — nonlinear MMS forcing gates")
 println("=" ^ 76)
 
-const G  = GridapLFEM.g
+const G  = GridapBALFEM.g
 const D0 = 2.5      # ≠ 1: a unit depth makes the H-weighting invisible
 const AB = 0.2      # > 0: else Model 4 degenerates to Model 3
 const AE = 0.8      # a_eta ≤ h_min/3 keeps H = h+η* > 0 with margin

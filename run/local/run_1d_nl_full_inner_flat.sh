@@ -11,19 +11,19 @@
 # it 2-3x at this problem size. The 12 cores are used by running several CASES
 # side by side instead (see run_all_1d.sh), which is strictly faster than
 # 12-way-decomposing one case. Sequential also KEEPS the point gauges.
-source "$(dirname "${BASH_SOURCE[0]}")/lfem_local.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/balfem_local.sh"
 
-export LFEM_WAVE_GEN=inner
-export LFEM_REGIME=nonlinear
-export LFEM_NL_PRESSURE=full
-export LFEM_FLAT_BED=1
+export BALFEM_WAVE_GEN=inner
+export BALFEM_REGIME=nonlinear
+export BALFEM_NL_PRESSURE=full
+export BALFEM_FLAT_BED=1
 
 # 12-rank sizing: 60 x 3 m, dx=0.25 (16 cells/lambda at kd=5.5), 16 periods
-export LFEM_MPI=0           # direct LU: measured 2-3x faster than any MPI split here
-export LFEM_LX=60.0
-export LFEM_NX=240
-export LFEM_PERIODS=16
-export LFEM_SAVE_EVERY=10
-export LFEM_DIAG_EVERY=5
+export BALFEM_MPI=0           # direct LU: measured 2-3x faster than any MPI split here
+export BALFEM_LX=60.0
+export BALFEM_NX=240
+export BALFEM_PERIODS=16
+export BALFEM_SAVE_EVERY=10
+export BALFEM_DIAG_EVERY=5
 
-lfem_local_run examples/local_1d/run_flume_1d.jl
+balfem_local_run examples/local_1d/run_flume_1d.jl

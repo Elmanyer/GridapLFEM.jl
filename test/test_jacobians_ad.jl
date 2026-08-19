@@ -66,13 +66,13 @@
 #  that was an extrapolation from a single model and it was wrong.)
 #  Consequences: this file sits in the :slow tier of runtests.jl, progress is
 #  flushed after every model so a long run is visibly alive, and
-#  LFEM_JAC_MODELS=M5,M6 finishes a clipped tail without redoing what passed.
+#  BALFEM_JAC_MODELS=M5,M6 finishes a clipped tail without redoing what passed.
 #
 #  RUN:  julia --project=. test/test_jacobians_ad.jl
-#        LFEM_JAC_MODELS=M5,M6,M7,M8 julia --project=. test/test_jacobians_ad.jl
+#        BALFEM_JAC_MODELS=M5,M6,M7,M8 julia --project=. test/test_jacobians_ad.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using Gridap.ODEs
 using Gridap.FESpaces
@@ -84,7 +84,7 @@ println("  test_jacobians_ad.jl — hand Jacobians vs AD, every model")
 println("=" ^ 78)
 flush(stdout)
 
-const G   = GridapLFEM.g
+const G   = GridapBALFEM.g
 const D0  = 2.5      # ≠ 1 deliberately: d = 1 makes the h-weighting invisible
 const AB  = 0.2      # bed-slope amplitude; > 0 ⇒ a genuinely varying bed
 const KBX = 1.3
@@ -194,12 +194,12 @@ all_models = [
     (tag="M8", name="M8  nonlinear / var  bed / :full  ", regime=:nonlinear, nlp=:full,   flat=false, exact=false),
 ]
 
-#  Model selection, e.g. LFEM_JAC_MODELS=M5,M6,M7,M8.
+#  Model selection, e.g. BALFEM_JAC_MODELS=M5,M6,M7,M8.
 #  This exists because the AD compile is paid PER BRANCH COMBINATION, not once
 #  per process (measured — see the cost note in the header), so the full sweep is
 #  long enough that being able to finish a clipped tail without re-deriving the
 #  models that already passed is worth the six lines.
-const SEL = get(ENV, "LFEM_JAC_MODELS", "all")
+const SEL = get(ENV, "BALFEM_JAC_MODELS", "all")
 models = SEL == "all" ? all_models :
          let want = strip.(split(SEL, ","))
              bad = setdiff(want, [m.tag for m in all_models])

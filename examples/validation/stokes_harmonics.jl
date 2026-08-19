@@ -13,10 +13,10 @@
 #  QUICK default (short flume, ~15 periods). Production: longer flume, more
 #  periods, finer mesh, and a resolved second harmonic (≥8 cells per λ/2).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/validation/stokes_harmonics.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/validation/stokes_harmonics.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 64)

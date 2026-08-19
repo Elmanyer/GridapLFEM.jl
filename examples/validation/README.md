@@ -17,13 +17,13 @@ The fast, gated correctness tests live in `../../test/` (see `../../ValidationTe
 ## Running
 
 ```bash
-# from inside GridapLFEM.jl/
+# from inside GridapBALFEM.jl/
 julia --project=. examples/validation/<script>.jl
 # or from the parent repository
-julia --project=GridapLFEM.jl GridapLFEM.jl/examples/validation/<script>.jl
+julia --project=GridapBALFEM.jl GridapBALFEM.jl/examples/validation/<script>.jl
 ```
 
-The project must be the **`GridapLFEM.jl` package environment**: the scripts do `using GridapLFEM`,
+The project must be the **`GridapBALFEM.jl` package environment**: the scripts do `using GridapBALFEM`,
 which only resolves where the package is available.
 
 All default to a **quick** size; each script's header documents the production size (finer mesh, more
@@ -33,7 +33,7 @@ periods) needed for a publication-quality comparison. Key rules (see the root `C
 - IC-release problems (`solitary_wave.jl`) require `x_wall_bc=true` (closed basin).
 - Nonlinear runs need `A_wave` small (`≲ 0.001` scaled) for long-run stability; `stokes_harmonics.jl`
   deliberately uses a larger amplitude to generate a measurable bound harmonic, over a short run.
-- Deep-water cases (`bichromatic_sideband.jl`) use LFE-3 to keep `kd` inside the applicable band.
+- Deep-water cases (`bichromatic_sideband.jl`) use P1LFE-3 to keep `kd` inside the applicable band.
 - Measurement uses a DFT at the forcing frequency over the second half of the record.
 
 ## What still needs the paper's data

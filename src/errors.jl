@@ -4,7 +4,7 @@
 #  Template: GridapUtilities.jl (GridapSWE.jl), which defines
 #      l2(u,dΩ) = sqrt(sum( ∫( u⊙u )*dΩ ))
 #  and forms the error as `Ua(tn) - Uh` before taking that norm. The same idea is
-#  used here, with three adaptations the LFE-M layout and the MMS demand:
+#  used here, with three adaptations the BALFE-M layout and the MMS demand:
 #
 #  1. STACKED FIELDS. Velocity is two VectorValue{Nσ} fields, so `ΔU⊙ΔU` already
 #     contracts over the layer index j. e_u = (Σⱼ‖uⱼ−u*ⱼ‖²)^{1/2} therefore comes

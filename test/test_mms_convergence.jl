@@ -50,7 +50,7 @@
 #  asserting an unreachable number is worth nothing.
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 println("="^70)

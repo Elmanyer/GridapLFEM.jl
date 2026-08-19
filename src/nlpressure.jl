@@ -50,7 +50,7 @@ of c ∈ {6,7,8} is cancelled analytically against one prefactor H (M_c ≡ H·N
     ∂_a𝖺 = (∂_a∂_x h)𝖴x + (∂_xh)∂_a𝖴x + (∂_a∂_y h)𝖴y + (∂_yh)∂_a𝖴y.
 Every term is subtracted (momentum RHS).
 """
-function nlp_native_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy, dHx, dHy,
+function nlp_native_contrib(prob::BALFEMProblem, d_cf, η, H, dhx, dhy, dHx, dHy,
                             Ux, Uy, Wx, Wy, DW, af, bf, S, DU, dΩh)
     # M_c = H·N_c for c = 6,7,8 (first slot carries k = the u_k-type factor)
     M6 = (-1.0)*alg_outer(af, S)
@@ -105,7 +105,7 @@ ANALYTIC bed Hessian. Boundary integrals vanish on solid walls (u·n = 0
 enters every q) / behind sponges — dropped. Vanishes identically on a flat
 bed. Residual-only (no per-step state) → works serial AND distributed.
 """
-function nlp_gradh_contrib(prob::LFEMProblem, d_cf, η, H, dhx, dhy,
+function nlp_gradh_contrib(prob::BALFEMProblem, d_cf, η, H, dhx, dhy,
                            Ux, Uy, Wx, Wy, af, bf, S, DU, dΩh)
     hxx, hxy, hyy = alg_bed_hessian(d_cf)
     ddx = dhx + alg_dx(η)                       # ∂_x H
@@ -169,7 +169,7 @@ end
 Surface-slope (𝓚, ∇H-prefactored) half of c ∈ {1,2,4,5} using the frozen
 projections (irreducible ∂²η — IBP does not help here).
 """
-function nlp_gradH_frozen_contrib(prob::LFEMProblem, H, dHx, dHy,
+function nlp_gradH_frozen_contrib(prob::BALFEMProblem, H, dHx, dHy,
                                   Wx, Wy, N1, N2, N4, N5, dΩh)
     NK = alg_dc3(prob.K3[1], N1) + alg_dc3(prob.K3[2], N2) +
          alg_dc3(prob.K3[4], N4) + alg_dc3(prob.K3[5], N5)
@@ -182,7 +182,7 @@ end
 Leading-pressure (𝓟) part of c ∈ {1,2,4,5} using the frozen projections
 (IBP unusable — it would need second TEST derivatives through D_W).
 """
-function nlp_P_frozen_contrib(prob::LFEMProblem, H, DW, N1, N2, N4, N5, dΩh)
+function nlp_P_frozen_contrib(prob::BALFEMProblem, H, DW, N1, N2, N4, N5, dΩh)
     NP = alg_dc3(prob.P3[1], N1) + alg_dc3(prob.P3[2], N2) +
          alg_dc3(prob.P3[4], N4) + alg_dc3(prob.P3[5], N5)
     return ∫( (-1.0)*(H*H)*(NP ⋅ DW) ) * dΩh
@@ -245,7 +245,7 @@ step's residual (project-then-differentiate, one-step lag). Uses `ctx.solve`
 RHS/solution vectors are matrix-derived (see `build_nlp_ctx` docstring) so
 they are exactly compatible with `ctx.Mmass`'s partition on both paths.
 """
-function update_nlp_state!(prob::LFEMProblem, ctx, u_n)
+function update_nlp_state!(prob::BALFEMProblem, ctx, u_n)
     η  = u_n[1];  Ux = u_n[2];  Uy = u_n[3]
     d_cf = CellField(prob.h_bathy, ctx.trian)
     H  = d_cf + η

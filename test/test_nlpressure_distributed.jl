@@ -10,10 +10,10 @@
 #
 #  RUN:
 #    ~/.julia/bin/mpiexecjl --project=. -n 4 julia --project=. \
-#        GridapLFEM.jl/test/test_nlpressure_distributed.jl
+#        GridapBALFEM.jl/test/test_nlpressure_distributed.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 # sequential reference (same config, run once via setup_and_run): see

@@ -10,15 +10,15 @@
 #
 #  RUN:  julia --project=. examples/vertical_profiles.jl [pvd-or-dir] [x] [y] [kd] [d]
 # ==============================================================
-include(joinpath(@__DIR__, "..", "src", "GridapLFEMPost.jl"))
-using .GridapLFEMPost
+include(joinpath(@__DIR__, "..", "src", "GridapBALFEMPost.jl"))
+using .GridapBALFEMPost
 
 src = length(ARGS) ≥ 1 ? ARGS[1] : joinpath(@__DIR__, "..", "..", "output", "pp_demo")
 x   = length(ARGS) ≥ 2 ? parse(Float64, ARGS[2]) : 24.0
 y   = length(ARGS) ≥ 3 ? parse(Float64, ARGS[3]) : 5.0
 kd  = length(ARGS) ≥ 4 ? parse(Float64, ARGS[4]) : 5.5
 d   = length(ARGS) ≥ 5 ? parse(Float64, ARGS[5]) : 3.5
-c_bdy = [0.0, 0.728, 1.0]        # LFE-2 σ-mesh (match the run's M/c_bdy)
+c_bdy = [0.0, 0.728, 1.0]        # P1LFE-2 σ-mesh (match the run's M/c_bdy)
 out = joinpath(@__DIR__, "..", "..", "output", "pp_plots"); mkpath(out)
 
 sim = load_simulation(src)

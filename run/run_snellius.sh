@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name="GridapLFEM"
+#SBATCH --job-name="GridapBALFEM"
 #SBATCH --partition=rome
 #SBATCH --time=72:00:00
 #SBATCH --nodes=2
@@ -15,9 +15,9 @@
 # Do NOT drop this on the argument that the sysimage removes the per-rank
 # compile: that argument was tested and refuted.
 #SBATCH --mem-per-cpu=4G
-#SBATCH --output=GridapLFEM.%j.out
-#SBATCH --error=GridapLFEM.%j.err
+#SBATCH --output=GridapBALFEM.%j.out
+#SBATCH --error=GridapBALFEM.%j.err
 
-source $HOME/GridapLFEM.jl/run/lfem_env.sh
+source $HOME/GridapBALFEM.jl/run/balfem_env.sh
 
-lfem_run 128 examples/distributed/run_plane_wave_dist.jl
+balfem_run 128 examples/distributed/run_plane_wave_dist.jl

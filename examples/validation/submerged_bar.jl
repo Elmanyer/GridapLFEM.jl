@@ -16,10 +16,10 @@
 #  the harmonic-amplitude evolution H₁(x),H₂(x),H₃(x). QUICK default; production
 #  = finer mesh, more periods, and comparison to digitised experimental curves.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/validation/submerged_bar.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/validation/submerged_bar.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 64)

@@ -17,10 +17,10 @@
 #  a short-run artifact, not attenuation. Production runs (200+ Tp) develop
 #  the whole domain and sharpen the Welch peak (Δf ~ 1/window).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/bc_irregular_sea.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/bc_irregular_sea.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 using DelimitedFiles
 
@@ -102,5 +102,5 @@ Hs_g2 = 4.0 * sqrt(sum(abs2, g2[n2:end] .- sum(g2[n2:end])/length(g2[n2:end])) /
 @printf("\n  max η over run     = %.5f m   (target Hs = %.4f m)\n", emax, Hs)
 @printf("  Hs (4σ) at gauge 2 = %.5f m   (steady half-window)\n", Hs_g2)
 println("  gauge CSV : $csv")
-println("  VTK output: GridapLFEM.jl/output/bc_irregular_sea/solution.pvd")
+println("  VTK output: GridapBALFEM.jl/output/bc_irregular_sea/solution.pvd")
 println("  → spectral validation: postprocessing/examples/spectral_validation.jl")

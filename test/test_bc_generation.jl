@@ -1,24 +1,24 @@
 # ==============================================================
 #  test_bc_generation.jl — Dirichlet boundary wave generation (FEM, e2e)
 #
-#  Regular wave, kd = 3, LFE-2, generated PURELY from time-varying Dirichlet
+#  Regular wave, kd = 3, P1LFE-2, generated PURELY from time-varying Dirichlet
 #  data on the left boundary (no interior wavemaker), absorbed by the right
 #  sponge. Gates:
 #    A. :model polarization, linearised — stability, gauge amplitude at 2λ
 #       within 10% of A, phase speed vs the MODEL celerity ω/k_mod < 2%
 #       (and vs Airy < 3.5%);
 #    B. :airy polarization — stable, amplitude within 15% (the cosh nodal
-#       sampling violates the discrete continuity closure at LFE-2 — see
+#       sampling violates the discrete continuity closure at P1LFE-2 — see
 #       test_waveinput.jl);
 #    C. relaxation zone (relax_bc=true, no left sponge) — stable, amplitude
 #       within 10%;
 #    D. fully nonlinear short run — stability of the Dirichlet BCs with the
 #       H-weighted terms and advection.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_bc_generation.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_bc_generation.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 60)

@@ -1,7 +1,7 @@
 # ==============================================================
 #  test_conservation.jl — mass conservation (SMALL & FAST)
 #
-#  Port of ../../LFE-M_2D_solver/test/test_conservation_lfem2D.jl.
+#  Port of ../../LFE-M_2D_solver/test/test_conservation_balfem2D.jl.
 #  Closed basin (all 4 walls solid — x_wall_bc MANDATORY for IC problems),
 #  NO wavemaker, NO sponge, initial Gaussian η hump. The continuity weak form
 #  with no-flux BCs conserves ∫η dΩ exactly (test ψ≡const ⇒ d/dt∫η = 0);
@@ -9,10 +9,10 @@
 #  Nonlinear advection ON (unlike the old solver, the plain Gridap path
 #  handles it — no owned V⊗H loop).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_conservation.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_conservation.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using Printf
 

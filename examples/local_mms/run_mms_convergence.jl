@@ -11,25 +11,25 @@
 #  driver also needs the final FE solution to form the L² error.
 #
 #  CONFIG (env)
-#    LFEM_MMS_MODE     space | time | both        both
-#    LFEM_MMS_LEVELS   refinement levels           4
-#    LFEM_MMS_NX0/NY0  coarsest mesh (space)       6 / 4
-#    LFEM_MMS_DT0      time step                   2e-4 (space) / 8e-3 (time)
-#    LFEM_MMS_NXF/NYF  fixed fine mesh (time)      24 / 16
-#    LFEM_MMS_TFINAL   final time                  0.02 (space) / 0.08 (time)
-#    LFEM_MMS_M        vertical elements           2
-#    LFEM_MMS_ORDER    VELOCITY FE order p_u       3   (optimal u rate = p_u+1)
-#    LFEM_MMS_PETA     SURFACE  FE order p_eta     p_u−1 (optimal eta rate = p_eta+1)
-#    LFEM_MMS_LX/LY    domain                      1.7 / 1.1
-#    LFEM_MMS_D        still-water depth           1.0
-#    LFEM_MMS_SOLVER   sdirk | theta               sdirk
-#    LFEM_MMS_OUT      output directory            output/local/mms
+#    BALFEM_MMS_MODE     space | time | both        both
+#    BALFEM_MMS_LEVELS   refinement levels           4
+#    BALFEM_MMS_NX0/NY0  coarsest mesh (space)       6 / 4
+#    BALFEM_MMS_DT0      time step                   2e-4 (space) / 8e-3 (time)
+#    BALFEM_MMS_NXF/NYF  fixed fine mesh (time)      24 / 16
+#    BALFEM_MMS_TFINAL   final time                  0.02 (space) / 0.08 (time)
+#    BALFEM_MMS_M        vertical elements           2
+#    BALFEM_MMS_ORDER    VELOCITY FE order p_u       3   (optimal u rate = p_u+1)
+#    BALFEM_MMS_PETA     SURFACE  FE order p_eta     p_u−1 (optimal eta rate = p_eta+1)
+#    BALFEM_MMS_LX/LY    domain                      1.7 / 1.1
+#    BALFEM_MMS_D        still-water depth           1.0
+#    BALFEM_MMS_SOLVER   sdirk | theta               sdirk
+#    BALFEM_MMS_OUT      output directory            output/local/mms
 #    -- model selection (the four MMS models) --
-#    LFEM_MMS_REGIME   linear | nonlinear          linear
-#    LFEM_MMS_NLP      none | native | full        none   (≠none available since 2026-08-18)
-#    LFEM_MMS_FLATBED  1 flat | 0 variable bed     1
-#    LFEM_MMS_AB       bed amplitude if FLATBED=0  0.2
-#    LFEM_MMS_NLITER   Newton budget               50 linear / 400 nonlinear
+#    BALFEM_MMS_REGIME   linear | nonlinear          linear
+#    BALFEM_MMS_NLP      none | native | full        none   (≠none available since 2026-08-18)
+#    BALFEM_MMS_FLATBED  1 flat | 0 variable bed     1
+#    BALFEM_MMS_AB       bed amplitude if FLATBED=0  0.2
+#    BALFEM_MMS_NLITER   Newton budget               50 linear / 400 nonlinear
 #
 #  ⚠ THE FE PAIRING IS PART OF THE MEASUREMENT. η enters momentum
 #  undifferentiated (via ∇·v after IBP), so it plays the pressure role of a
@@ -41,48 +41,48 @@
 #
 #  ⚠ NONLINEAR MODELS NEED ITERATION BUDGET, NOT LOOSER TOLERANCES. The
 #  nonlinear Jacobians are quasi-Newton by design, so Newton converges linearly;
-#  raise LFEM_MMS_NLITER. Loosening nl_tol would put the algebraic error inside
+#  raise BALFEM_MMS_NLITER. Loosening nl_tol would put the algebraic error inside
 #  the discretisation error being measured.
 #
 #  RUN
 #    julia --project=. examples/local_mms/run_mms_convergence.jl
-#    LFEM_MMS_MODE=space LFEM_MMS_LEVELS=5 julia --project=. examples/local_mms/run_mms_convergence.jl
+#    BALFEM_MMS_MODE=space BALFEM_MMS_LEVELS=5 julia --project=. examples/local_mms/run_mms_convergence.jl
 #    # Model 3 (nonlinear, flat bed):
-#    LFEM_MMS_REGIME=nonlinear julia --project=. examples/local_mms/run_mms_convergence.jl
+#    BALFEM_MMS_REGIME=nonlinear julia --project=. examples/local_mms/run_mms_convergence.jl
 #    # Model 2 (linear, variable bed):
-#    LFEM_MMS_FLATBED=0 LFEM_MMS_D=2.5 julia --project=. examples/local_mms/run_mms_convergence.jl
+#    BALFEM_MMS_FLATBED=0 BALFEM_MMS_D=2.5 julia --project=. examples/local_mms/run_mms_convergence.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 genv(k, d)   = get(ENV, k, d)
 genv_i(k, d) = parse(Int,     get(ENV, k, string(d)))
 genv_f(k, d) = parse(Float64, get(ENV, k, string(d)))
 
-mode    = Symbol(genv("LFEM_MMS_MODE", "both"))
-levels  = genv_i("LFEM_MMS_LEVELS", 4)
-nx0     = genv_i("LFEM_MMS_NX0", 6);   ny0  = genv_i("LFEM_MMS_NY0", 4)
-nxf     = genv_i("LFEM_MMS_NXF", 24);  nyf  = genv_i("LFEM_MMS_NYF", 16)
-Mvert   = genv_i("LFEM_MMS_M", 2)
-order   = genv_i("LFEM_MMS_ORDER", 3)          # velocity order p_u (Q3 by default)
+mode    = Symbol(genv("BALFEM_MMS_MODE", "both"))
+levels  = genv_i("BALFEM_MMS_LEVELS", 4)
+nx0     = genv_i("BALFEM_MMS_NX0", 6);   ny0  = genv_i("BALFEM_MMS_NY0", 4)
+nxf     = genv_i("BALFEM_MMS_NXF", 24);  nyf  = genv_i("BALFEM_MMS_NYF", 16)
+Mvert   = genv_i("BALFEM_MMS_M", 2)
+order   = genv_i("BALFEM_MMS_ORDER", 3)          # velocity order p_u (Q3 by default)
 #  Surface order. Default = order−1 (Taylor-Hood-like), the ONLY pairing measured
 #  optimal in BOTH fields. Set equal to `order` to reproduce the old equal-order
 #  behaviour — but then expect p, not p+1, in both fields.
-p_eta   = genv_i("LFEM_MMS_PETA", order - 1)
-Lx      = genv_f("LFEM_MMS_LX", 1.7);  Ly   = genv_f("LFEM_MMS_LY", 1.1)
-dval    = genv_f("LFEM_MMS_D", 1.0)
-solver  = Symbol(genv("LFEM_MMS_SOLVER", "sdirk"))
-outdir  = genv("LFEM_MMS_OUT", "output/local/mms")
+p_eta   = genv_i("BALFEM_MMS_PETA", order - 1)
+Lx      = genv_f("BALFEM_MMS_LX", 1.7);  Ly   = genv_f("BALFEM_MMS_LY", 1.1)
+dval    = genv_f("BALFEM_MMS_D", 1.0)
+solver  = Symbol(genv("BALFEM_MMS_SOLVER", "sdirk"))
+outdir  = genv("BALFEM_MMS_OUT", "output/local/mms")
 mkpath(outdir)
 
 #  Model selection — the SAME three symbols drive the forcing and the solver
 #  (run_mms_case passes both from one variable each), so they cannot drift apart.
-regime      = Symbol(genv("LFEM_MMS_REGIME", "linear"))
-nlp         = Symbol(genv("LFEM_MMS_NLP", "none"))
-flat_bed    = genv_i("LFEM_MMS_FLATBED", 1) != 0
-a_b         = genv_f("LFEM_MMS_AB", 0.2)       # bed amplitude when flat_bed=0
-nl_iter     = genv_i("LFEM_MMS_NLITER", regime === :linear ? 50 : 400)
+regime      = Symbol(genv("BALFEM_MMS_REGIME", "linear"))
+nlp         = Symbol(genv("BALFEM_MMS_NLP", "none"))
+flat_bed    = genv_i("BALFEM_MMS_FLATBED", 1) != 0
+a_b         = genv_f("BALFEM_MMS_AB", 0.2)       # bed amplitude when flat_bed=0
+nl_iter     = genv_i("BALFEM_MMS_NLITER", regime === :linear ? 50 : 400)
 #  Variable bed ⇒ hand run_mms_case the same bathymetry object it gives the forcing.
 hfun    = flat_bed ? nothing : bathymetry_field(; d0=dval, a_b=a_b, kbx=1.3, kby=0.0)
 
@@ -101,14 +101,14 @@ println("#    expected: space  eta→$(opt_eta)  u→$(opt_u)   |   time 2")
 if order == p_eta
     println("#    ⚠ EQUAL ORDER: eta enters momentum undifferentiated (∇·v after IBP), so")
     println("#      this pairing is inf-sup deficient and converges at p, NOT p+1. The")
-    println("#      expectations printed above are unreachable — use LFEM_MMS_PETA=$(order-1).")
+    println("#      expectations printed above are unreachable — use BALFEM_MMS_PETA=$(order-1).")
 end
 println("#"^70)
 
 rows = []
 if mode in (:space, :both)
-    dt0 = genv_f("LFEM_MMS_DT0", 2e-4)
-    tF  = genv_f("LFEM_MMS_TFINAL", 0.02)
+    dt0 = genv_f("BALFEM_MMS_DT0", 2e-4)
+    tF  = genv_f("BALFEM_MMS_TFINAL", 0.02)
     sp  = run_mms_refinement(:space; levels=levels, nx0=nx0, ny0=ny0,
                              dt0=dt0, T_final=tF, CASE...)
     for i in eachindex(sp.param)
@@ -119,8 +119,8 @@ if mode in (:space, :both)
             sp.p_eta, opt_eta, sp.p_u, opt_u)
 end
 if mode in (:time, :both)
-    dt0 = genv_f("LFEM_MMS_DT0_T", 8e-3)
-    tF  = genv_f("LFEM_MMS_TFINAL_T", 0.08)
+    dt0 = genv_f("BALFEM_MMS_DT0_T", 8e-3)
+    tF  = genv_f("BALFEM_MMS_TFINAL_T", 0.08)
     tp  = run_mms_refinement(:time; levels=levels, nx_fine=nxf, ny_fine=nyf,
                              dt0=dt0, T_final=tF, CASE...)
     for i in eachindex(tp.param)

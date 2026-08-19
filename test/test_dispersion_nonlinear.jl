@@ -15,7 +15,7 @@
 #  fit the wavenumber ROBUSTLY: take the complex temporal DFT at ω at each of many
 #  gauges spread over 3λ in the FAR field (past the evanescent near-field), then
 #  scan k continuously to maximise |Σ Ĉ(xⱼ) e^{-ik xⱼ}| — a clean, unbiased fit.
-#  Swept over kd = 1, 3, 5 (LFE-2); each gated |Cm/Ce−1| < 4%.
+#  Swept over kd = 1, 3, 5 (P1LFE-2); each gated |Cm/Ce−1| < 4%.
 #
 #  Tolerance. kd = 1 and 3 land at 0.9% and 0.4%. Deep water (kd = 5) reaches
 #  ~3%: its group velocity is low, so in a finite record the far-field gauges are
@@ -24,10 +24,10 @@
 #  to kd≈10.9). The 4% gate reflects that floor and still catches regressions (a
 #  broken solver reads ~25% off). CSV written for plotting.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_dispersion_nonlinear.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_dispersion_nonlinear.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 66)

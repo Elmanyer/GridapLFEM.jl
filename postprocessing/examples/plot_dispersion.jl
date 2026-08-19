@@ -6,12 +6,12 @@
 #
 #  RUN:  julia --project=. examples/plot_dispersion.jl [csv] [kd_app]
 # ==============================================================
-include(joinpath(@__DIR__, "..", "src", "GridapLFEMPost.jl"))
-using .GridapLFEMPost
+include(joinpath(@__DIR__, "..", "src", "GridapBALFEMPost.jl"))
+using .GridapBALFEMPost
 
 csv = length(ARGS) ≥ 1 ? ARGS[1] :
       joinpath(@__DIR__, "..", "..", "output", "dispersion_nonlinear.csv")
-kd_app = length(ARGS) ≥ 2 ? parse(Float64, ARGS[2]) : 10.9   # LFE-2 default
+kd_app = length(ARGS) ≥ 2 ? parse(Float64, ARGS[2]) : 10.9   # P1LFE-2 default
 out = joinpath(@__DIR__, "..", "..", "output", "pp_plots"); mkpath(out)
 
 tbl = load_csv(csv)

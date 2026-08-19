@@ -1,15 +1,15 @@
 # ==============================================================
-#  GridapLFEMPost.jl — postprocessing library for the GridapLFEM solver
+#  GridapBALFEMPost.jl — postprocessing library for the GridapBALFEM solver
 #
 #  Reads the solver's VTK (solution.pvd + sol_t_*.vtu) and CSV outputs into
 #  Julia data structures, provides wave-analysis operations (gauges, transects,
 #  DFT/harmonics, celerity, radial/harmonic diagnostics), and visualises them
 #  with Plots.jl. Self-contained: no dependency on the solver.
 #
-#  Load:  include("postprocessing/src/GridapLFEMPost.jl"); using .GridapLFEMPost
+#  Load:  include("postprocessing/src/GridapBALFEMPost.jl"); using .GridapBALFEMPost
 #  (activate the postprocessing/ environment first).
 # ==============================================================
-module GridapLFEMPost
+module GridapBALFEMPost
 
 using ReadVTK
 using FFTW

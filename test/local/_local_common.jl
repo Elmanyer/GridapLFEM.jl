@@ -21,7 +21,7 @@
 #  of this mesh by 2-3x (see building_files/SOLVER_ASSESSMENT_2026-08.md §3).
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra, DelimitedFiles
 
 # --------------------------------------------------------------
@@ -213,7 +213,7 @@ flume_k(; d=FLUME.d, T=FLUME.T, g=9.81) = find_wavenumber(2π/T, d, g)
 
 "Scratch output directory for a local test case (never inside the repo tree by default)."
 function local_outdir(name::String)
-    root = get(ENV, "LFEM_LOCAL_OUT",
+    root = get(ENV, "BALFEM_LOCAL_OUT",
                joinpath(@__DIR__, "..", "..", "output", "local"))
     dir = joinpath(root, name)
     mkpath(dir)

@@ -38,7 +38,7 @@
 #    julia --project=. examples/local_mms/run_varbed_study.jl              # Model 2
 #    REGIME=nonlinear julia --project=. examples/local_mms/run_varbed_study.jl  # Model 4
 # ==============================================================
-using GridapLFEM, Printf
+using GridapBALFEM, Printf
 gi(k,d)=parse(Int,get(ENV,k,string(d))); gf(k,d)=parse(Float64,get(ENV,k,string(d)))
 p_u=gi("PU",3); dom=Symbol(get(ENV,"DOMAIN","d1")); mode=Symbol(get(ENV,"MODE","static"))
 lv=gi("LEVELS",4); nx0=gi("NX0",16); ab=gf("AB",0.2); d0=gf("D0",2.5)

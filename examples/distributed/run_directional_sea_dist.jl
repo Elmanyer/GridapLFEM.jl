@@ -6,21 +6,21 @@
 #  component with its own direction. The left Dirichlet boundary prescribes
 #  η, 𝖴x AND 𝖴y (directional seas REQUIRE y_wall_bc=:open — the lateral
 #  boundaries are sponge-absorbed instead of solid walls). Result: a genuinely
-#  2D short-crested sea surface evolving under the LFE-M dynamics.
+#  2D short-crested sea surface evolving under the BALFE-M dynamics.
 #
 #  LAUNCH (px·py MUST equal -n):
-#    LFEM_M=2 LFEM_PX=16 LFEM_PY=8 \
+#    BALFEM_M=2 BALFEM_PX=16 BALFEM_PY=8 \
 #    ~/.julia/bin/mpiexecjl --project=. -n 128 julia --project=. \
-#        GridapLFEM.jl/examples/distributed/run_directional_sea_dist.jl
+#        GridapBALFEM.jl/examples/distributed/run_directional_sea_dist.jl
 #
 #  Case-specific env vars (sea-state + shared ones in _dist_common.jl):
-#    LFEM_LX,LFEM_LY  domain size [m]              default 400 × 100
-#    LFEM_D           still-water depth [m]        3.5
-#    LFEM_SPONGE      right/lateral sponge [m]     40
-#    LFEM_MUMAX       sponge strength              5
-#    LFEM_PERIODS     run length in Tp units       20
-#    LFEM_NTHETA      angle samples (bins = n-1)   7 (short-crested default)
-#    LFEM_SPREAD_STD  spreading σθ [deg]           20
+#    BALFEM_LX,BALFEM_LY  domain size [m]              default 400 × 100
+#    BALFEM_D           still-water depth [m]        3.5
+#    BALFEM_SPONGE      right/lateral sponge [m]     40
+#    BALFEM_MUMAX       sponge strength              5
+#    BALFEM_PERIODS     run length in Tp units       20
+#    BALFEM_NTHETA      angle samples (bins = n-1)   7 (short-crested default)
+#    BALFEM_SPREAD_STD  spreading σθ [deg]           20
 #
 #  Oblique components travel a longer lateral path — keep Ly wide enough that
 #  the ±θmax components clear the working area before the lateral sponges.
@@ -28,39 +28,51 @@
 
 include(joinpath(@__DIR__, "_dist_common.jl"))
 
-M        = genv_i("LFEM_M", 3)
-px, py   = genv_i("LFEM_PX", 16), genv_i("LFEM_PY", 8)
-nx, ny   = genv_i("LFEM_NX", 1200), genv_i("LFEM_NY", 600)
-feord    = genv_i("LFEM_FE_ORDER", 2)
+M        = genv_i("BALFEM_M", 3)
+
+#  Vertical BASIS ORDER. The model is named P{p_vert}LFE-{M}: `Pp` is the
+
+#  vertical Lagrange order and `M` the number of vertical elements, so the run
+
+#  says which member of the BALFE-M family it actually exercises. Default p=1
+
+#  reproduces the piecewise-linear models of Yang & Liu.
+
+p_vert  = genv_i("BALFEM_P_VERT", 1)
+
+model_name = "P$(p_vert)LFE-$(M)"
+px, py   = genv_i("BALFEM_PX", 16), genv_i("BALFEM_PY", 8)
+nx, ny   = genv_i("BALFEM_NX", 1200), genv_i("BALFEM_NY", 600)
+feord    = genv_i("BALFEM_FE_ORDER", 2)
 #  p_eta = 0 keeps the historical EQUAL-ORDER spaces (unchanged default).
-#  Set LFEM_P_ETA = LFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
+#  Set BALFEM_P_ETA = BALFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
 #  the only one measured to reach the theoretical order in BOTH fields. It is
 #  NOT automatically the better production choice: at a GIVEN mesh the
 #  equal-order spaces were 40x more accurate, because eta sits in a richer
 #  space. Compare error-vs-DOF before switching.
-p_eta    = genv_i("LFEM_P_ETA", 0)
-Lx, Ly   = genv_f("LFEM_LX", 400.0), genv_f("LFEM_LY", 100.0)
-d        = genv_f("LFEM_D", 3.5)
-sponge   = genv_f("LFEM_SPONGE", 40.0)
-mumax    = genv_f("LFEM_MUMAX", 5.0)
-dt       = genv_f("LFEM_DT", 0.02)
-periods  = genv_f("LFEM_PERIODS", 20.0)
+p_eta    = genv_i("BALFEM_P_ETA", 0)
+Lx, Ly   = genv_f("BALFEM_LX", 400.0), genv_f("BALFEM_LY", 100.0)
+d        = genv_f("BALFEM_D", 3.5)
+sponge   = genv_f("BALFEM_SPONGE", 40.0)
+mumax    = genv_f("BALFEM_MUMAX", 5.0)
+dt       = genv_f("BALFEM_DT", 0.02)
+periods  = genv_f("BALFEM_PERIODS", 20.0)
 Tp       = tp_val()
-Tfinal   = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Tp
-save_ev  = genv_i("LFEM_SAVE_EVERY", 1)  # SAVE A LOT OF SCREENSHOTS FOR VISUALISATION
-outdir   = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "directional_sea_dist_M$(M)"))
+Tfinal   = haskey(ENV, "BALFEM_TFINAL") ? genv_f("BALFEM_TFINAL", 0.0) : periods * Tp
+save_ev  = genv_i("BALFEM_SAVE_EVERY", 1)  # SAVE A LOT OF SCREENSHOTS FOR VISUALISATION
+outdir   = genv("BALFEM_OUTDIR", joinpath(ROOT, "output", "directional_sea_dist_$(model_name)"))
 
 state = build_airy_state(d; directional=true)
 
 banner("DIRECTIONAL SEA (JONSWAP × spreading, Dirichlet BCs) — distributed",
        M, (px,py), (nx,ny), nx*ny, outdir)
 is_rank0() && @printf("#   Hs=%.4g m Tp=%.3g s | nθ=%d σθ=%.1f° | bc=%s/%s seed=%d\n",
-                      hs_val(), Tp, genv_i("LFEM_NTHETA", 7),
-                      genv_f("LFEM_SPREAD_STD", 20.0), string(bc_side_sym()),
-                      string(bc_profile_sym()), genv_i("LFEM_SEED", 20260723))
+                      hs_val(), Tp, genv_i("BALFEM_NTHETA", 7),
+                      genv_f("BALFEM_SPREAD_STD", 20.0), string(bc_side_sym()),
+                      string(bc_profile_sym()), genv_i("BALFEM_SEED", 20260723))
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
+    cpu_grid=(px,py), M=M, p_vertical=p_vert, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     h_val=d, T_wave=Tp, A_wave=hs_val()/2,
     wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
@@ -68,17 +80,17 @@ diags, vert, prob = setup_and_run_distributed(
     sponge_wL=0.0, sponge_wR=sponge, sponge_wB=sponge, sponge_wT=sponge,
     mu_max=mumax,
     T_final=Tfinal, dt=dt,
-    regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(),          # flat sea bed (∇h≡0); set LFEM_FLAT_BED=0 for variable bathymetry
+    regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(),          # flat sea bed (∇h≡0); set BALFEM_FLAT_BED=0 for variable bathymetry
     y_wall_bc=:open, x_wall_bc=false,       # REQUIRED: v ≠ 0 at the inflow
     output_dir=outdir, save_every=save_ev,
-    write_w=genv_b("LFEM_WRITE_W", 0), write_pressure=genv_b("LFEM_WRITE_PRESSURE", 0),
+    write_w=genv_b("BALFEM_WRITE_W", 0), write_pressure=genv_b("BALFEM_WRITE_PRESSURE", 0),
     rho=rho_val(),
     solver_type=solver_sym(), tableau=tableau_sym(),
     nl_iter=nl_iter_val(), nl_tol=nl_tol_val(),
     ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(), precond=precond_sym(),
     diag_every=diag_every_val(), diag_csv=diag_csv_flag(),
     div_factor=div_factor_val(), eta_ref=eta_ref_val(),
-    print_every=genv_i("LFEM_PRINT_EVERY", 10))
+    print_every=genv_i("BALFEM_PRINT_EVERY", 10))
 
 is_rank0() && @printf("directional_sea_dist done: %d steps, %d snapshots to %s\n",
                       length(diags), save_ev > 0 ? length(diags) ÷ save_ev : 0, outdir)

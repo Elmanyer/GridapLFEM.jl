@@ -8,14 +8,14 @@
 #  wave-height statistics against the Rayleigh law of a linear sea.
 #
 #  RUN (from the repo root, postprocessing env):
-#    julia --project=GridapLFEM.jl/postprocessing \
-#          GridapLFEM.jl/postprocessing/examples/spectral_validation.jl
+#    julia --project=GridapBALFEM.jl/postprocessing \
+#          GridapBALFEM.jl/postprocessing/examples/spectral_validation.jl
 # ==============================================================
 
-if !isdefined(Main, :GridapLFEMPost)
-    include(joinpath(@__DIR__, "..", "src", "GridapLFEMPost.jl"))
+if !isdefined(Main, :GridapBALFEMPost)
+    include(joinpath(@__DIR__, "..", "src", "GridapBALFEMPost.jl"))
 end
-using .GridapLFEMPost
+using .GridapBALFEMPost
 using Printf
 
 # target sea state (must match examples/bc_irregular_sea.jl)

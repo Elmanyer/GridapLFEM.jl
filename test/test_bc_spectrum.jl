@@ -16,10 +16,10 @@
 #      largest component (linearised run ⇒ exact superposition);
 #    * stability.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_bc_spectrum.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_bc_spectrum.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 60)

@@ -14,8 +14,8 @@
 #  RUN:  julia --project=. test/test_mms_forcing.jl
 # ==============================================================
 
-using GridapLFEM
-using Gridap.TensorValues: VectorValue      # NOT re-exported by GridapLFEM
+using GridapBALFEM
+using Gridap.TensorValues: VectorValue      # NOT re-exported by GridapBALFEM
 using Printf
 
 println("="^64)
@@ -116,7 +116,7 @@ println("\n--- G5: independence from problem.jl ---")
 mms_src_path = joinpath(@__DIR__, "..", "src", "mms.jl")
 body = read(mms_src_path, String)
 banned = ["global_residual", "jacobian_u", "jacobian_u_t",
-          "build_ode_operator", "nlp_native_contrib", "LFEMProblem"]
+          "build_ode_operator", "nlp_native_contrib", "BALFEMProblem"]
 hits = String[]
 for b in banned
     # ignore prose mentions inside comment lines; flag real code references

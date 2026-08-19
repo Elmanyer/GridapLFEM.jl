@@ -1,7 +1,7 @@
 # ==============================================================
 #  test_shallow_water.jl — shallow-water (long-wave) limit
 #
-#  The other asymptotic limit of the LFE-M: as kd → 0 the non-hydrostatic
+#  The other asymptotic limit of the BALFE-M: as kd → 0 the non-hydrostatic
 #  dispersion term vanishes and the model must reduce to the NON-DISPERSIVE
 #  shallow-water equations, celerity c → √(gd) independent of k.
 #
@@ -21,10 +21,10 @@
 #    is enough to fail the physics gates and look like a model defect. See the
 #    measured sweep at the mesh definition below.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_shallow_water.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_shallow_water.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 64)
@@ -39,7 +39,7 @@ check(name, cond, extra="") = (global n_pass, n_fail;
 g = 9.81
 
 # ---- (1) closed-form identity ΦᵀM⁻¹Φ = 1 ⇒ Cm(kd→0) = √(gd) --------------------
-for (M, cb, name) in ((2,[0.0,0.728,1.0],"LFE-2"), (3,[0.0,0.726,0.925,1.0],"LFE-3"))
+for (M, cb, name) in ((2,[0.0,0.728,1.0],"P1LFE-2"), (3,[0.0,0.726,0.925,1.0],"P1LFE-3"))
     vert = assemble_vertical_tensors(M, 1, cb)
     id   = dot(vert.Phi, vert.Mmat \ vert.Phi)           # ΦᵀM⁻¹Φ
     @printf("  %s:  ΦᵀM⁻¹Φ = %.12f   (partition-of-unity ⇒ 1)\n", name, id)

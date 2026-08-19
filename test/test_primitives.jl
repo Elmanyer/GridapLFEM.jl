@@ -8,10 +8,10 @@
 #    * ∂x/∂y = e⋅∇f orientation on VectorValue{Nσ} FE fields,
 #    * outer product (a⊗b)[k,j] = a[k]b[j].
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_primitives.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_primitives.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using LinearAlgebra, Printf
 

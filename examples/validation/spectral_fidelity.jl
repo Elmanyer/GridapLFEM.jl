@@ -18,10 +18,10 @@
 #  Results are printed as a table and appended to spectral_fidelity.csv.
 #  Quick default: 60 Tp, 20 bins. Production: 200+ Tp, 40+ bins.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/validation/spectral_fidelity.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/validation/spectral_fidelity.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 64)
@@ -39,7 +39,7 @@ seed  = 20260723
 # Frequency band and bin count are MEASUREMENT-DRIVEN (first-run lesson,
 # 2026-07-23: energy-domain bins spaced 0.02 Hz leaked into each other over
 # the 64 s window, and the 1/(0.55Tp) tail reached kd = 21.7 — outside the
-# LFE-2 band (10.9) and mesh-unresolved):
+# P1LFE-2 band (10.9) and mesh-unresolved):
 #   * uniform FREQUENCY sampling, spacing ≥ 3/window (leakage-free-ish DFT);
 #   * fmax = 1/(0.75 Tp) → kd ≤ ~10, inside the band and ≥ 6 cells/λ.
 spec  = WaveSpec.ContinuousSpectrums.JONSWAP(Hs, Tp)

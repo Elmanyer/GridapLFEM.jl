@@ -7,8 +7,8 @@
 #
 #  RUN:  julia --project=. examples/conservation_plots.jl [csv]
 # ==============================================================
-include(joinpath(@__DIR__, "..", "src", "GridapLFEMPost.jl"))
-using .GridapLFEMPost
+include(joinpath(@__DIR__, "..", "src", "GridapBALFEMPost.jl"))
+using .GridapBALFEMPost
 
 out = joinpath(@__DIR__, "..", "..", "output", "pp_plots"); mkpath(out)
 csvs = isempty(ARGS) ?

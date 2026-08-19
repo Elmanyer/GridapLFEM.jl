@@ -11,10 +11,10 @@
 #  This is the demonstrator for the :periodic lateral boundary condition. The
 #  x-ends keep sponge layers (open flume); only the y-edges are periodic.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/periodic_plane_wave.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/periodic_plane_wave.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 println("=" ^ 60)
@@ -93,4 +93,4 @@ end
 # y-invariant plane wave) — a large spread would signal a seam artefact.
 spread = isempty(amps) ? 0.0 : (maximum(amps) - minimum(amps)) / max(maximum(amps), 1e-30)
 @printf("  y-invariance (amplitude spread across y): %.2f%%\n", 100*spread)
-println("\n  VTK output: GridapLFEM.jl/output/periodic_plane_wave/solution.pvd")
+println("\n  VTK output: GridapBALFEM.jl/output/periodic_plane_wave/solution.pvd")

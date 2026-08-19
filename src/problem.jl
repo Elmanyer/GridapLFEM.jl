@@ -1,9 +1,9 @@
 # ==============================================================
-#  problem.jl — the LFEMProblem bundle + the loop-free residual + hand Jacobians
+#  problem.jl — the BALFEMProblem bundle + the loop-free residual + hand Jacobians
 #
 #  This file assembles the single scalar residual of §8 of the derivation — the
 #  total virtual work ∫_Ω R·v that Gridap's MultiField solver drives to zero at
-#  each stage. `LFEMProblem` gathers the precomputed vertical tensors (as Gridap
+#  each stage. `BALFEMProblem` gathers the precomputed vertical tensors (as Gridap
 #  constants) and the physics flags; `global_residual` evaluates the weak form;
 #  `jacobian_u`/`jacobian_u_t` provide the exact spatial and effective-mass
 #  Jacobians so Newton needs no finite differencing or automatic differentiation.
@@ -21,7 +21,7 @@
 # ==============================================================
 
 """
-    LFEMProblem
+    BALFEMProblem
 
 Coefficient bundle carried through the time loop and consumed by the residual.
 It holds the vertical tensors as Gridap constants (built once by
@@ -31,7 +31,7 @@ switch individual residual terms on or off. Third-order tensors use the index
 order `[i,k,j]` = [test layer, u_k layer, u_j layer], so contraction over the
 trailing two indices directly yields the mode-i momentum contribution.
 """
-struct LFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
+struct BALFEMProblem{PV,MV,BV,PT,AT,KT,M3T,G3T,A3T,K3T,P3T}
     g            :: Float64
     h_bathy       :: Function          # still-water depth d(x,y)
     Nσ           :: Int
@@ -118,7 +118,7 @@ end
 
 """
     build_problem(vert; g, h_bathy, regime=:nonlinear, nl_pressure=:none,
-                        flat_bed=false, mu_sponge, wm_src, relax_*) → LFEMProblem
+                        flat_bed=false, mu_sponge, wm_src, relax_*) → BALFEMProblem
 
 Assemble the problem bundle from the high-level physics selection (see
 [`resolve_physics`](@ref) for the `regime`/`nl_pressure`/`flat_bed` semantics).
@@ -151,7 +151,7 @@ function build_problem(vert;
 end
 
 """
-    build_problem_raw(vert; g, h_bathy, <7 boolean flags>, mu_sponge, wm_src, relax_*) → LFEMProblem
+    build_problem_raw(vert; g, h_bathy, <7 boolean flags>, mu_sponge, wm_src, relax_*) → BALFEMProblem
 
 Low-level constructor taking the individual physics booleans directly
 (`linearised, advection, lin_pressure, P_full, nl_pressure68, nl_pressure_full, flat_bed`).
@@ -191,7 +191,7 @@ function build_problem_raw(vert;
     P3 = ntuple(c -> alg_to_tensor3(vert.Pcal[:, :, :, c]), 8)
     relax_bc && relax_tg === nothing &&
         error("build_problem: relax_bc=true requires relax_tg (incident_fields NamedTuple)")
-    return LFEMProblem(g, h_bathy, vert.N_dof, Φ, Mv, Bv, P, Av, Kv, M3, G3,
+    return BALFEMProblem(g, h_bathy, vert.N_dof, Φ, Mv, Bv, P, Av, Kv, M3, G3,
                          A3, K3, P3, linearised, advection, lin_pressure,
                          P_full, nl_pressure68, nl_pressure_full, flat_bed,
                          Ref{Any}(nothing), mu_sponge, wm_src,
@@ -204,7 +204,7 @@ end
 Single scalar Gridap residual, stacked layout. `u` is a TransientCellField
 (`∂t(u)` available); `u[1]=η`, `u[2]=𝖴x`, `u[3]=𝖴y`. No per-layer loops.
 """
-function global_residual(t::Real, u, v, prob::LFEMProblem, trian, dΩh)
+function global_residual(t::Real, u, v, prob::BALFEMProblem, trian, dΩh)
     ut = ∂t(u)
     η,  Ux,  Uy  = u[1], u[2], u[3]
     ηt, Uxt, Uyt = ut[1], ut[2], ut[3]
@@ -463,7 +463,7 @@ end
 # ----------------------------------------------------------
 
 "∂R/∂u̇ — effective mass operator (acceleration + R_P dispersion)."
-function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dΩh)
+function jacobian_u_t(t::Real, u, dut, v, prob::BALFEMProblem, trian, dΩh)
     η = u[1]
     dηt, dUxt, dUyt = dut[1], dut[2], dut[3]
     q, Wx, Wy = v[1], v[2], v[3]
@@ -547,7 +547,7 @@ function jacobian_u_t(t::Real, u, dut, v, prob::LFEMProblem, trian, dΩh)
 end
 
 "∂R/∂u — continuity + gravity + sponge + (nonlinear Acc η-term) + FULL advection derivative."
-function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dΩh)
+function jacobian_u(t::Real, u, du, v, prob::BALFEMProblem, trian, dΩh)
     η,  Ux,  Uy  = u[1], u[2], u[3]
     dη, dUx, dUy = du[1], du[2], du[3]
     q,  Wx,  Wy  = v[1], v[2], v[3]
@@ -626,7 +626,7 @@ function jacobian_u(t::Real, u, du, v, prob::LFEMProblem, trian, dΩh)
 end
 
 "TransientFEOperator with the hand Jacobians (default; fast)."
-function build_ode_operator(prob::LFEMProblem, U, V, trian, dΩh)
+function build_ode_operator(prob::BALFEMProblem, U, V, trian, dΩh)
     r  = (t, u, v)      -> global_residual(t, u, v, prob, trian, dΩh)
     j  = (t, u, du, v)  -> jacobian_u(t, u, du, v, prob, trian, dΩh)
     jt = (t, u, dut, v) -> jacobian_u_t(t, u, dut, v, prob, trian, dΩh)
@@ -637,7 +637,7 @@ end
 differentiation of `global_residual` instead of using the hand Jacobians —
 useful for cross-checking. The three-field stacked residual keeps the AD
 expression tree small enough to be practical."
-function build_ode_operator_ad(prob::LFEMProblem, U, V, trian, dΩh)
+function build_ode_operator_ad(prob::BALFEMProblem, U, V, trian, dΩh)
     r = (t, u, v) -> global_residual(t, u, v, prob, trian, dΩh)
     return TransientFEOperator(r, U, V)
 end

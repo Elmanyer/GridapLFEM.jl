@@ -1,11 +1,15 @@
-# GridapLFEM.jl — the algebraic LFE-M wave solver
+# GridapBALFEM.jl — the algebraic BALFE-M wave solver
 
-A loop-free, serial-and-distributed Gridap implementation of the **LFE-M** (Layer-averaged Finite
-Element Multilayer) depth-integrated, non-hydrostatic wave model of Yang & Liu (2024, *J. Fluid
-Mech.* 999, A32). It uses a **stacked value-type layout** that turns every per-layer sum in the
+A loop-free, serial-and-distributed Gridap implementation of the **BALFE-M**
+(*Basis-Agnostic Layer-integrated Finite Element*, `M` vertical elements) family of depth-integrated,
+non-hydrostatic wave models — this project's generalisation of the **LFE-M** model of Yang & Liu
+(2024, *J. Fluid Mech.* 999, A32) from a fixed piecewise-linear vertical basis to an arbitrary one.
+A concrete member is named **P*p*LFE-*M*** after the basis it uses, so P1LFE-2 is the two-layer
+piecewise-linear model (the direct counterpart of Yang & Liu's LFE-2); *LFE-M* is reserved for their
+published models. It uses a **stacked value-type layout** that turns every per-layer sum in the
 governing equations into a native Gridap tensor contraction instead of a Julia `for`-loop.
 
-Repository: `GridapLFEM.jl`. Module: `src/GridapLFEM.jl` → `module GridapLFEM`. Fully self-contained.
+Repository: `GridapBALFEM.jl`. Module: `src/GridapBALFEM.jl` → `module GridapBALFEM`. Fully self-contained.
 
 ---
 
@@ -35,7 +39,7 @@ Every vertical sum becomes a single algebraic operation on `VectorValue{Nσ}` /
 No custom contraction helpers are needed — `⋅`, `⊗`, `double_contraction`, and `∇` are all
 native Gridap operators on these value types. The authoritative derivation and rationale live in the
 LaTeX project `building_files/LFEM_discretisation.zip` (§8, *Gridap solver implementation*), mirrored
-in `building_files/LFEM_Gridap.md`, with the term-by-term operator simplifications in
+in `building_files/BALFEM_Gridap.md`, with the term-by-term operator simplifications in
 `building_files/algebraic_residual_math.md`.
 
 **Why it's worth doing:** collapsing the layer sums into single dense contractions keeps the
@@ -75,7 +79,7 @@ The **complete** LaTeX §8 global residual, every term:
 - **Dirichlet boundary wave generation** (`:bc_gen`) — waves enter through time-varying Dirichlet
   data (η, 𝖴x, and 𝖴y for directional seas) on a domain side, no interior source: regular waves,
   hand-built multichromatic seas, or **WaveSpec.jl stochastic sea states** (JONSWAP/TMA/…, angular
-  spreading) via the `AiryState → WaveInput` converter. Discrete LFE-M eigenmode vertical
+  spreading) via the `AiryState → WaveInput` converter. Discrete BALFE-M eigenmode vertical
   polarization (`:model`, default) or Airy cosh sampling (`:airy`); Hann start-up ramp; optional
   generation/absorption relaxation zone (`relax_bc`). See `building_files/boundary_wave_generation.md`.
 
@@ -92,7 +96,7 @@ The physics is chosen through three high-level switches, mapped to the internal 
 
 `regime`/`nl_pressure` fix *which* physics the model carries; `flat_bed` fixes the *bed geometry* it is
 solved over. `regime=:linear` with `nl_pressure≠:none` is rejected. The frequency dispersion (the
-defining LFE-M feature) is present in every configuration through `R_P`. The low-level
+defining BALFE-M feature) is present in every configuration through `R_P`. The low-level
 `build_problem_raw` still exposes the individual internal booleans for the rare split the high-level
 interface deliberately ties (used by the oracle-equivalence test).
 
@@ -104,13 +108,13 @@ of the same weak form; see [Validation](#validation).
 ## Repository layout
 
 ```
-GridapLFEM.jl/
-├── src/                          # the solver package (module GridapLFEM)
-│   ├── GridapLFEM.jl             module entry: deps, includes, exports, g/rho constants
+GridapBALFEM.jl/
+├── src/                          # the solver package (module GridapBALFEM)
+│   ├── GridapBALFEM.jl             module entry: deps, includes, exports, g/rho constants
 │   ├── vertical.jl              Stage 1: σ-mesh + vertical tensor set (M, Φ, 𝓜, 𝓖, A, K, P, 𝓝, …)
 │   ├── tensors.jl               constant-tensor constructors + pointwise Operation helpers
 │   ├── horizontal.jl            Stage 2: 2D mesh + stacked FE spaces (serial + distributed; periodic-y)
-│   ├── problem.jl               LFEMProblem, resolve_physics, residual, hand Jacobians
+│   ├── problem.jl               BALFEMProblem, resolve_physics, residual, hand Jacobians
 │   ├── nlpressure.jl            full nonlinear pressure (native / exact-IBP / frozen projections)
 │   ├── reconstruct.jl           w(σ) / total-pressure σ-level VTK field reconstruction
 │   ├── monitor.jl               runtime SolverMonitor + independent governing-equation residual checker
@@ -132,11 +136,11 @@ GridapLFEM.jl/
 │   ├── local_1d/                 parametric quasi-1D flume (local sequential + cluster MPI)
 │   └── local_2d/                 parametric small 2-D case (25×10 m, 6 ranks)
 ├── run/                          # SLURM launchers — all sysimage-based (see Running on a cluster)
-│   ├── lfem_env.sh              shared helper: modules + sysimage + lfem_run <nranks> <script.jl>
+│   ├── balfem_env.sh              shared helper: modules + sysimage + balfem_run <nranks> <script.jl>
 │   ├── run_*.sh                 9 production cases (snellius; run_blue.sh = DelftBlue)
 │   ├── dist_small/              20 small-domain (50×20) jobs + 7 quasi-1D flume jobs
-│   └── local/                   lfem_local.sh + 15 workstation launchers (≤6 cores) + README
-├── postprocessing/GridapLFEMPost # self-contained VTK/CSV analysis + plotting library (own env)
+│   └── local/                   balfem_local.sh + 15 workstation launchers (≤6 cores) + README
+├── postprocessing/GridapBALFEMPost # self-contained VTK/CSV analysis + plotting library (own env)
 ├── compile/                      # cluster sysimage build (compile.jl, warmup.jl, module loaders) + README
 ├── Project.toml / Manifest.toml  package manifest (name/uuid/version) + its environment
 └── CLAUDE.md                     # up-to-date status/notes for this folder
@@ -151,16 +155,16 @@ demand.
 
 ## Environment / activation
 
-`GridapLFEM.jl/` **is a Julia package** — `name = "GridapLFEM"`,
+`GridapBALFEM.jl/` **is a Julia package** — `name = "GridapBALFEM"`,
 `uuid = 43e94d05-4d7d-4679-96a4-d46e2615da34`, `version = 0.1.0`. Activate this directory as the
 project and load it by name:
 
 ```julia
-# julia --project=/path/to/GridapLFEM.jl
-using GridapLFEM
+# julia --project=/path/to/GridapBALFEM.jl
+using GridapBALFEM
 ```
 
-Never `include("src/GridapLFEM.jl")`. Being a package is not cosmetic: it is what allows
+Never `include("src/GridapBALFEM.jl")`. Being a package is not cosmetic: it is what allows
 PackageCompiler to bake the solver *and its Gridap specialisations* into the cluster system image
 (`compile/`), and what gives sequential runs a cached precompile (~3.5 s to load). An `include`d
 module is rebuilt in every process — which is what made the 32–64 rank cluster runs recompile the
@@ -189,7 +193,7 @@ tooling are run directly against it (`julia --project=. test/test_basic.jl`), wh
 > version-controlled guard that the fork keeps working is **gate A0 of
 > `test/test_jacobians_ad.jl`** — an instant `hasmethod` check for the fork's Tuple-argument
 > `TransientMultiFieldCellField` constructor, which stock Gridap does not provide.
-> Rebuild the cluster sysimage after changing this — `run/lfem_env.sh` hashes `src/*.jl` only and
+> Rebuild the cluster sysimage after changing this — `run/balfem_env.sh` hashes `src/*.jl` only and
 > will NOT notice a changed dependency.
 >
 > **Dependency versions.** This environment **and the cluster** run **Gridap 0.20.x /
@@ -208,11 +212,11 @@ tooling are run directly against it (`julia --project=. test/test_basic.jl`), wh
 ## Quick start
 
 ```julia
-using GridapLFEM
+using GridapBALFEM
 
 # Sequential run: nonlinear plane wave in a flat-bed flume
 diags, vert, prob = setup_and_run(
-    M            = 2,                          # vertical layers (LFE-2)
+    M            = 2,                          # vertical layers (P1LFE-2)
     domain       = ((0.0, 60.0), (0.0, 10.0)),
     partition    = (120, 20),                  # horizontal mesh
     p_horizontal = 2,                          # Q2 (≥2 required — Q1 zeroes dispersion)
@@ -256,7 +260,7 @@ with a PMIx version mismatch. `nx`/`ny` in `partition` must divide evenly by `px
 ### Running on a cluster (SLURM + system image)
 
 On the cluster, runs are launched from `run/` and **always against a prebuilt system image**
-(`GridapLFEM_sysimage.so`). Without it every rank JIT-compiles the full Gridap FEM stack: ~30–45 min
+(`GridapBALFEM_sysimage.so`). Without it every rank JIT-compiles the full Gridap FEM stack: ~30–45 min
 of wall time per run and a ~4–8 GB/rank memory spike that OOM'd whole nodes at 32–128 ranks. With
 it the ranks mmap one shared, already-compiled image — no compile, no spike — and the jobs fit the
 cheap `rome`/L1 budget.
@@ -270,34 +274,34 @@ cheap `rome`/L1 budget.
 
 ```bash
 # 1. build the image once (~45-60 min; rebuild after changing src/*.jl or upgrading packages)
-cd ~/GridapLFEM.jl/compile && sbatch compile_snellius.sh
+cd ~/GridapBALFEM.jl/compile && sbatch compile_snellius.sh
 
 # 2. submit any case — all launchers already use the image
-cd ~/GridapLFEM.jl
+cd ~/GridapBALFEM.jl
 sbatch run/dist_small/run_nl_periodic_plane_flat_small.sh   # small-domain (50x20) suite, 20 cases
 sbatch run/run_irregularsea.sh                              # production case, 9 total
 ```
 
-Every launcher is a thin wrapper: its `#SBATCH` header, the case's `LFEM_*` env overrides, and one
-call to the shared helper `run/lfem_env.sh`, which loads the cluster modules the image was built
+Every launcher is a thin wrapper: its `#SBATCH` header, the case's `BALFEM_*` env overrides, and one
+call to the shared helper `run/balfem_env.sh`, which loads the cluster modules the image was built
 with, verifies the image, and launches:
 
 ```bash
-source $HOME/GridapLFEM.jl/run/lfem_env.sh
-export LFEM_PX=8; export LFEM_PY=4          # 8*4 = 32 ranks
-export LFEM_REGIME=linear
-lfem_run 32 examples/distributed_small/run_periodic_plane_small.jl
+source $HOME/GridapBALFEM.jl/run/balfem_env.sh
+export BALFEM_PX=8; export BALFEM_PY=4          # 8*4 = 32 ranks
+export BALFEM_REGIME=linear
+balfem_run 32 examples/distributed_small/run_periodic_plane_small.jl
 ```
 
-Helper knobs: `LFEM_PROJ`, `LFEM_CLUSTER` (`snellius`/`blue`), `LFEM_SYSIMAGE`, and
-`LFEM_NO_SYSIMAGE=1` to drop `-J` and fall back to the JIT path (useful while the image is stale or
+Helper knobs: `BALFEM_PROJ`, `BALFEM_CLUSTER` (`snellius`/`blue`), `BALFEM_SYSIMAGE`, and
+`BALFEM_NO_SYSIMAGE=1` to drop `-J` and fall back to the JIT path (useful while the image is stale or
 rebuilding). A missing image aborts the job immediately rather than silently taking the slow path.
 
 Because the image bakes a *compiled copy* of `src/*.jl`, editing the solver without rebuilding would
 otherwise make the job run the old code silently. The helper therefore checks freshness before
 launching and **warns** if the image no longer matches `src/`: exactly, by comparing a hash of
 `src/*.jl` against the stamp written at build time (so a `touch` or re-clone does not cry wolf), or
-by mtime when an image predates that stamp. Set `LFEM_STRICT_SYSIMAGE=1` to abort instead of warning
+by mtime when an image predates that stamp. Set `BALFEM_STRICT_SYSIMAGE=1` to abort instead of warning
 — worth it for long production jobs. Full build walkthrough and troubleshooting:
 `compile/README.md`. Per-case physics/geometry env vars: `examples/distributed/README.md`,
 `examples/distributed_small/`.
@@ -356,11 +360,11 @@ GMRES+Jacobi+Newton. It drops `gauges` (global reductions instead).
 ## Validation
 
 All gates below are standalone Julia scripts in `test/`; run with
-`julia --project=GridapLFEM.jl GridapLFEM.jl/test/<name>.jl` from the parent repo, or
-`julia --project=. test/<name>.jl` from inside `GridapLFEM.jl/` (distributed ones via `mpiexecjl`,
+`julia --project=GridapBALFEM.jl GridapBALFEM.jl/test/<name>.jl` from the parent repo, or
+`julia --project=. test/<name>.jl` from inside `GridapBALFEM.jl/` (distributed ones via `mpiexecjl`,
 see file headers). The project must be the **package** environment — since the migration the tests
-do `using GridapLFEM`, which the parent repository's environment cannot resolve unless you also
-`Pkg.develop(path="GridapLFEM.jl")` there.
+do `using GridapBALFEM`, which the parent repository's environment cannot resolve unless you also
+`Pkg.develop(path="GridapBALFEM.jl")` there.
 The full suite is **27 test files + `runtests.jl` + `test/cluster/` + `test/local/`**. As of
 2026-08-17, all re-measured after two solver fixes: **sequential 21/21 PASS**
 (`julia --project=. test/runtests.jl`), **distributed 13/13 gates PASS** on 4 ranks,
@@ -387,10 +391,10 @@ expectations computed with the solver's own residual, where an error can cancel.
 | `test_primitives.jl` | tensor index order, `∂x/∂y` orientation, contraction semantics | 9/9 PASS |
 | `test_equivalence.jl` | virtual-work match vs the older per-layer solver | **RETIRED — not a correctness gate.** The external solver was not maintained in step with the weak form (it lacks the leading-pressure term `R_P`), so a disagreement measures its age, not a defect here |
 | `test_dispersion.jl` | FEM phase speed vs linear theory at kd=3 | PASS, err 0.90% |
-| `test_dispersion_curve.jl` | `Cm/Ce(kd)` sweep vs Airy, LFE-2/3/4 applicable-kd | 9/9 PASS (10.8/39.2/127.9) |
+| `test_dispersion_curve.jl` | `Cm/Ce(kd)` sweep vs Airy, P1LFE-2/3/4 applicable-kd | 9/9 PASS (10.8/39.2/127.9) |
 | `test_dispersion_nonlinear.jl` | full-NL solver ⇒ Airy at vanishing amplitude (kd 1/3/5) | 3/3 PASS |
 | `test_shallow_water.jl` | `kd→0 ⇒ √(gd)` limit | 6/6 PASS |
-| `test_sloshing.jl` | standing-wave period vs LFE-M theory | PASS, err 1.44% |
+| `test_sloshing.jl` | standing-wave period vs BALFE-M theory | PASS, err 1.44% |
 | `test_energy.jl` | non-dissipativity / amplitude preservation | 3/3 PASS |
 | `test_conservation.jl` | mass conservation, closed basin, nonlinear advection | PASS, drift 7.8e-16 |
 | `test_nlpressure.jl` | exact-IBP identity, structural scaling, dynamics (all pressure tiers) | 9/9 PASS |
@@ -544,5 +548,5 @@ records are in `building_files/DESIGN_RECORDS.md`.
   in `change_seed!`, check that `WaveSpec.jl/` has not been reset to a release tag.
 - The cluster **system image must be rebuilt after editing `src/*.jl`** — it bakes a compiled copy of
   the solver, so a stale image runs old code. This is now *detected* (the launchers warn, or abort
-  under `LFEM_STRICT_SYSIMAGE=1`) but not prevented: rebuild with `compile/compile_snellius.sh`, or
-  launch with `LFEM_NO_SYSIMAGE=1` to run the current sources via JIT.
+  under `BALFEM_STRICT_SYSIMAGE=1`) but not prevented: rebuild with `compile/compile_snellius.sh`, or
+  launch with `BALFEM_NO_SYSIMAGE=1` to run the current sources via JIT.

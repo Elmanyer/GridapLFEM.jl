@@ -1,6 +1,6 @@
 #!/bin/bash
 # SMALL run — nonlinear full irregular sea over a bar, Hs=0.2
-#SBATCH --job-name="LFEM_nl_irregular_varbed"
+#SBATCH --job-name="BALFEM_nl_irregular_varbed"
 #SBATCH --partition=rome
 #SBATCH --time=119:59:00
 #SBATCH --ntasks=32
@@ -18,13 +18,13 @@
 #SBATCH --output=%x.%j.out
 #SBATCH --error=%x.%j.err
 
-source $HOME/GridapLFEM.jl/run/lfem_env.sh
+source $HOME/GridapBALFEM.jl/run/balfem_env.sh
 
-# --- MPI process grid (PX*PY MUST equal the rank count given to lfem_run) ---
-export LFEM_PX=8
-export LFEM_PY=4            # 8*4 = 32 ranks
+# --- MPI process grid (PX*PY MUST equal the rank count given to balfem_run) ---
+export BALFEM_PX=8
+export BALFEM_PY=4            # 8*4 = 32 ranks
 
 # --- Case-specific overrides (only what differs from the script's base) ---
-export LFEM_FLAT_BED=0
+export BALFEM_FLAT_BED=0
 
-lfem_run 32 examples/distributed_small/run_irregular_sea_small.jl
+balfem_run 32 examples/distributed_small/run_irregular_sea_small.jl

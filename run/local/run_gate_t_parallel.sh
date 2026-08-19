@@ -7,12 +7,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 OUT=output/local/logs; mkdir -p "$OUT"
 run_tol() {
     rt="$1"
-    LFEM_CONV_PU="${PU:-3}" LFEM_CONV_DOMAIN=d1 LFEM_CONV_MODE=static \
-    LFEM_CONV_LEVELS=1 LFEM_CONV_NX0="${NX0:-64}" LFEM_CONV_NY0=3 \
-    LFEM_CONV_DIST=1 LFEM_CONV_PX=4 LFEM_CONV_PY=1 \
-    LFEM_CONV_LSRTOL="$rt" LFEM_CONV_NLTOL="$rt" \
-    LFEM_CONV_DT=1e-5 LFEM_CONV_NSTEPS=100 \
-    LFEM_CONV_OUT="output/local/mms_conv_tol_$rt" \
+    BALFEM_CONV_PU="${PU:-3}" BALFEM_CONV_DOMAIN=d1 BALFEM_CONV_MODE=static \
+    BALFEM_CONV_LEVELS=1 BALFEM_CONV_NX0="${NX0:-64}" BALFEM_CONV_NY0=3 \
+    BALFEM_CONV_DIST=1 BALFEM_CONV_PX=4 BALFEM_CONV_PY=1 \
+    BALFEM_CONV_LSRTOL="$rt" BALFEM_CONV_NLTOL="$rt" \
+    BALFEM_CONV_DT=1e-5 BALFEM_CONV_NSTEPS=100 \
+    BALFEM_CONV_OUT="output/local/mms_conv_tol_$rt" \
     OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JULIA_NUM_THREADS=1 \
         stdbuf -oL -eL "$HOME/.julia/bin/mpiexecjl" --project=. -n 4 \
         julia --project=. examples/local_mms/run_mms_matrix.jl > "$OUT/gateT_$rt.log" 2>&1

@@ -1,4 +1,4 @@
-# `GridapLFEMPost` — postprocessing library
+# `GridapBALFEMPost` — postprocessing library
 
 Turns the solver's **VTK** (`solution.pvd` + `sol_t_*.vtu`, fields `eta, u1x, …, w_s<σ>, p_s<σ>`) and
 **CSV** outputs into Julia data structures you can sample, transform (DFT / harmonics / celerity /
@@ -17,8 +17,8 @@ import Pkg; Pkg.activate("postprocessing"); Pkg.instantiate()   # ReadVTK, Plots
 Load it by file path (it is not a registered package):
 
 ```julia
-include("postprocessing/src/GridapLFEMPost.jl")
-using .GridapLFEMPost
+include("postprocessing/src/GridapBALFEMPost.jl")
+using .GridapBALFEMPost
 ```
 
 ## Producing input for it

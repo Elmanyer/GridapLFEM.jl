@@ -1,5 +1,5 @@
 # ==============================================================
-#  warmup.jl — trace-compile the LFE-M solver into the sysimage
+#  warmup.jl — trace-compile the BALFE-M solver into the sysimage
 #
 #  Run as PackageCompiler's precompile_execution_file (see compile.jl). It runs a
 #  handful of TINY solves so the heavy Gridap FEM kernels — the residual, both hand
@@ -13,15 +13,15 @@
 #  every cluster rank later just LOADS the sysimage instead of recompiling (which
 #  is what was OOM-killing the 32-rank runs).
 #
-#  GridapLFEM is loaded as a PACKAGE here, and compile.jl lists :GridapLFEM among
+#  GridapBALFEM is loaded as a PACKAGE here, and compile.jl lists :GridapBALFEM among
 #  the baked packages. That combination is what makes this trace stick: the
 #  specialisations compiled below belong to the package, so they are retained in
 #  the image. Under the old `include()` loading they belonged to a throw-away
-#  `Main.GridapLFEM` and were discarded — the trace ran, but bought nothing.
+#  `Main.GridapBALFEM` and were discarded — the trace ran, but bought nothing.
 # ==============================================================
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
-using GridapLFEM
+using GridapBALFEM
 
 # ── tiny SEQUENTIAL solve — specializes residual/Jacobians for CellField ──────
 seq(reg, nlp) = setup_and_run(

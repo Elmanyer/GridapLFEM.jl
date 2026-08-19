@@ -15,36 +15,36 @@
 #  the amplitude bounded over the WHOLE run. Fully nonlinear by default.
 #
 #  LAUNCH (px·py MUST equal -n):
-#    LFEM_PX=8 LFEM_PY=1 LFEM_NX=2000 LFEM_NY=200 LFEM_STEPS=4000 \
+#    BALFEM_PX=8 BALFEM_PY=1 BALFEM_NX=2000 BALFEM_NY=200 BALFEM_STEPS=4000 \
 #    ~/.julia/bin/mpiexecjl --project=. -n 8 julia --project=. \
-#        GridapLFEM.jl/test/cluster/cluster_conservation.jl
+#        GridapBALFEM.jl/test/cluster/cluster_conservation.jl
 #
-#  Env vars: LFEM_PX,LFEM_PY (grid); LFEM_NX,LFEM_NY (mesh); LFEM_LX,LFEM_LY
-#    (domain); LFEM_D (depth); LFEM_A (hump amplitude); LFEM_DT; LFEM_STEPS or
-#    LFEM_TFINAL; LFEM_M (layers); LFEM_LINEARISED,LFEM_ADVECTION,LFEM_NLP68;
-#    LFEM_PRINT_EVERY; LFEM_OUTDIR.
+#  Env vars: BALFEM_PX,BALFEM_PY (grid); BALFEM_NX,BALFEM_NY (mesh); BALFEM_LX,BALFEM_LY
+#    (domain); BALFEM_D (depth); BALFEM_A (hump amplitude); BALFEM_DT; BALFEM_STEPS or
+#    BALFEM_TFINAL; BALFEM_M (layers); BALFEM_LINEARISED,BALFEM_ADVECTION,BALFEM_NLP68;
+#    BALFEM_PRINT_EVERY; BALFEM_OUTDIR.
 # ==============================================================
 
 include(joinpath(@__DIR__, "..", "..", "examples", "distributed", "_dist_common.jl"))
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using PartitionedArrays, MPI
 using LinearAlgebra, Printf
 
 # ---- configuration (environment) ----------------------------------------------
-px, py = genv_i("LFEM_PX", 2), genv_i("LFEM_PY", 1)
-nx, ny = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 40)
-Lx, Ly = genv_f("LFEM_LX", 40.0), genv_f("LFEM_LY", 8.0)
-d0     = genv_f("LFEM_D", 1.0)
-A0     = genv_f("LFEM_A", 0.01)
-Mlay   = genv_i("LFEM_M", 2)
-dt     = genv_f("LFEM_DT", 0.02)
-nsteps = genv_i("LFEM_STEPS", 2000)                          # long run by default
-feord  = genv_i("LFEM_FE_ORDER", 2)
-prevery= genv_i("LFEM_PRINT_EVERY", 20)
-outdir = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "cluster_conservation"))
+px, py = genv_i("BALFEM_PX", 2), genv_i("BALFEM_PY", 1)
+nx, ny = genv_i("BALFEM_NX", 200), genv_i("BALFEM_NY", 40)
+Lx, Ly = genv_f("BALFEM_LX", 40.0), genv_f("BALFEM_LY", 8.0)
+d0     = genv_f("BALFEM_D", 1.0)
+A0     = genv_f("BALFEM_A", 0.01)
+Mlay   = genv_i("BALFEM_M", 2)
+dt     = genv_f("BALFEM_DT", 0.02)
+nsteps = genv_i("BALFEM_STEPS", 2000)                          # long run by default
+feord  = genv_i("BALFEM_FE_ORDER", 2)
+prevery= genv_i("BALFEM_PRINT_EVERY", 20)
+outdir = genv("BALFEM_OUTDIR", joinpath(ROOT, "output", "cluster_conservation"))
 g      = 9.81
-Tfinal = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : nsteps*dt
+Tfinal = haskey(ENV, "BALFEM_TFINAL") ? genv_f("BALFEM_TFINAL", 0.0) : nsteps*dt
 
 result = with_mpi() do distribute
     ranks = distribute(LinearIndices((px*py,)))
@@ -52,7 +52,7 @@ result = with_mpi() do distribute
     r0 && mkpath(outdir)
 
     vert = assemble_vertical_tensors(Mlay, 1, cbdy_override() === nothing ?
-              get(GridapLFEM.DEFAULT_CBDY, Mlay, collect(LinRange(0,1,Mlay+1))) : cbdy_override())
+              get(GridapBALFEM.DEFAULT_CBDY, Mlay, collect(LinRange(0,1,Mlay+1))) : cbdy_override())
     Nσ = vert.N_dof
     Mt = alg_to_tensor2(vert.Mmat); Bt = alg_to_tensor2(vert.B)
 

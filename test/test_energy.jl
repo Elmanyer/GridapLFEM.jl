@@ -13,10 +13,10 @@
 #  instability. We also report a period-averaged hydrostatic energy as a
 #  secondary diagnostic (its NET drift over the run should be tiny).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_energy.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_energy.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using LinearAlgebra, Printf
 

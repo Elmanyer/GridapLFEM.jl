@@ -1,16 +1,16 @@
 # ==============================================================
 #  test_sloshing.jl — standing-wave dynamics (SMALL & FAST)
 #
-#  Port of ../../LFE-M_2D_solver/test/test_sloshing_lfem2D.jl.
+#  Port of ../../LFE-M_2D_solver/test/test_sloshing_balfem2D.jl.
 #  Closed basin [0,L], first sloshing mode η₀ = A cos(πx/L), u = 0 IC.
-#  The standing wave must oscillate at the LFE-M dispersion frequency at
+#  The standing wave must oscillate at the BALFE-M dispersion frequency at
 #  k = π/L:  c² = g d · Φᵀ(M − (kd)²B)⁻¹Φ,  T = 2π/(kc). We measure the
 #  numerical period at the antinode gauge (DFT peak) and compare (<5%).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_sloshing.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_sloshing.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 60)
@@ -20,7 +20,7 @@ println("=" ^ 60)
 g = 9.81; h_val = 1.0; L = 2.0; Ly = 0.5
 vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
 
-# theory: ω from the LFE-M dispersion at k = π/L
+# theory: ω from the BALFE-M dispersion at k = π/L
 k = π / L; kd = k * h_val
 Meff = vert.Mmat .- (kd^2) .* vert.B                 # M − (kd)²B,  B ≤ 0
 c2 = g * h_val * dot(vert.Phi, Meff \ vert.Phi)

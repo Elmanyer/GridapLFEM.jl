@@ -13,10 +13,10 @@
 #  G3  Dynamics: short run over a tanh submerged bar with ALL pressure flags
 #      on — bounded, no NaN.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_nlpressure.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_nlpressure.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using Gridap.ODEs
 using LinearAlgebra, Printf
@@ -211,10 +211,12 @@ check("G3: bounded over the bar (max η < 20A)", emax < 0.02)
 #  sponge 6/8, mu_max=20 — NOT the distributed twin's 60x2/8/8/30; the two are
 #  different problems and comparing them once manufactured a phantom 2.5 %
 #  discrepancy). Tolerance is 1 %, limited by the 3 significant figures the old
-#  %.5f print gave; the print is now %.7f, so TIGHTEN THIS to ~1e-4 the next time
-#  the value is re-measured. Even at 1 % this would have caught the 58 % move.
-const REF_EMAX  = 0.00286
-const REF_RTOL  = 1e-2
+#  %.5f print gave. RE-MEASURED 2026-08-19 at %.7f: 0.0028640, so the tolerance is
+#  now 1e-4 as that note instructed (was 1 %). Even the old 1 % bound would have
+#  caught the 58 % move the nonlinear-gravity fix produced; 1e-4 makes it a sharp
+#  regression detector rather than a coarse one.
+const REF_EMAX  = 0.0028640
+const REF_RTOL  = 1e-4
 let rel = abs(emax - REF_EMAX) / REF_EMAX
     @printf("  G3 reference: %.7f vs %.5f  (rel %.2e, tol %.0e)\n",
             emax, REF_EMAX, rel, REF_RTOL)

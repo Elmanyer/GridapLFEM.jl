@@ -22,8 +22,8 @@
 #
 #  ORIGINAL DESCRIPTION FOLLOWS.
 #
-#  Assembles the package residual `GridapLFEM.global_residual` AND the old
-#  per-layer oracle `LFEModel2D.residual_lfem` on identical physical states
+#  Assembles the package residual `GridapBALFEM.global_residual` AND the old
+#  per-layer oracle `LFEModel2D.residual_balfem` on identical physical states
 #  and compares virtual works — no DOF-layout mapping:
 #    * identical analytic trial/u̇/test fields interpolated into BOTH layouts,
 #    * TransientCellField built by hand,
@@ -31,14 +31,14 @@
 #  Three flag configs × three test sets; requires rel < 1e-10.
 #
 #  Loads BOTH modules (oracle qualified) — heavier than the other tests.
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_equivalence.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_equivalence.jl
 # ==============================================================
 
 if !isdefined(Main, :LFEModel2D)
     include(joinpath(@__DIR__, "..", "..", "LFE-M_2D_solver", "src", "LFEModel2D.jl"))
 end
-using .LFEModel2D                      # oracle (unqualified: residual_lfem, LFEMProblemLFEM, …)
-import GridapLFEM as ALG             # package under test (qualified)
+using .LFEModel2D                      # oracle (unqualified: residual_balfem, BALFEMProblemBALFEM, …)
+import GridapBALFEM as ALG             # package under test (qualified)
 using Gridap
 using Gridap.ODEs
 using LinearAlgebra, Printf
@@ -58,7 +58,7 @@ M_v, p_v = 2, 1
 c_bdy  = [0.0, 0.728, 1.0]
 g_phys = 9.81
 
-vert_o = assemble_vertical_tensors_lfem(M_v, p_v, c_bdy)   # oracle tensors
+vert_o = assemble_vertical_tensors_balfem(M_v, p_v, c_bdy)   # oracle tensors
 vert_a = ALG.assemble_vertical_tensors(M_v, p_v, c_bdy)
 Nσ = vert_a.N_dof
 check("vertical tensors match oracle (Mmat,Phi,B,Mcal,Gcal,A,K,P,Acal,Kcal)",
@@ -128,7 +128,7 @@ configs = [
 
 for cfg in configs
     println("\n-- config $(cfg.name)")
-    prob_lay = LFEMProblemLFEM(g_phys, cfg.dfn,
+    prob_lay = BALFEMProblemBALFEM(g_phys, cfg.dfn,
         vert_o.Mmat, vert_o.Phi, vert_o.B, vert_o.Mcal, vert_o.Gcal, vert_o.A, vert_o.K,
         Nσ, cfg.lin, cfg.linp, cfg.adv, sponge, wm)
     # build_problem_raw: the oracle has lin_pressure WITHOUT P_full, a split the
@@ -138,7 +138,7 @@ for cfg in configs
         linearised=cfg.lin, advection=cfg.adv, lin_pressure=cfg.linp,
         P_full=false, nl_pressure68=false, mu_sponge=sponge, wm_src=wm)
 
-    r_lay = assemble_vector(v -> residual_lfem(t_eval, tu_lay, v, prob_lay, trian, dΩh), V_lay)
+    r_lay = assemble_vector(v -> residual_balfem(t_eval, tu_lay, v, prob_lay, trian, dΩh), V_lay)
     r = assemble_vector(v -> ALG.global_residual(t_eval, tu, v, prob, trian, dΩh), V)
 
     for s in 1:3
@@ -163,7 +163,7 @@ println("=" ^ 60)
 if n_fail > 0
     println("  RETIRED TEST — $n_fail mismatch(es) EXPECTED: the per-layer oracle")
     println("  predates R_P, so the two weak forms differ by the leading-pressure")
-    println("  (dispersion) term. This is NOT a defect in GridapLFEM. Use the")
+    println("  (dispersion) term. This is NOT a defect in GridapBALFEM. Use the")
     println("  analytic MMS tests for residual verification.")
 else
     println("  Package residual is oracle-equivalent in the configurations tested.")

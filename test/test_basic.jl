@@ -1,7 +1,7 @@
 # ==============================================================
 #  test_basic.jl — smoke test (SMALL & FAST)
 #
-#  Port of ../../LFE-M_2D_solver/test/test_basic_lfem2D.jl to the algebraic
+#  Port of ../../LFE-M_2D_solver/test/test_basic_balfem2D.jl to the algebraic
 #  package. Tiny flat-bed plane-wave flume (16×2 m, 16×2 Q2 cells, M=2,
 #  3 periods), run in BOTH regimes:
 #    regime=:linear    → validated linear baseline
@@ -17,10 +17,10 @@
 #  the reference values below were measured on this path. Setting flat_bed=true
 #  would be faster and equally correct — and would invalidate the Newton count.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_basic.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_basic.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 println("=" ^ 60)

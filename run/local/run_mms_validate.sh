@@ -25,7 +25,7 @@
 # ==============================================================
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
-source run/local/lfem_local.sh
+source run/local/balfem_local.sh
 OUT=output/local/logs; mkdir -p "$OUT"
 
 # gate <logfile> <description> — fails unless a "N PASS, 0 FAIL" summary is present
@@ -41,23 +41,23 @@ gate() {
 }
 
 echo "=== 1/3  LINEAR forcing gates (independent of the residual code) ==="
-lfem_local_run test/test_mms_forcing.jl 2>&1 | tee "$OUT/mms_forcing.log"
+balfem_local_run test/test_mms_forcing.jl 2>&1 | tee "$OUT/mms_forcing.log"
 gate "$OUT/mms_forcing.log" "linear forcing gates"
 
 echo
 echo "=== 2/3  NONLINEAR forcing gates (models 3 and 4, :none tier) ==="
-lfem_local_run test/test_mms_forcing_nonlinear.jl 2>&1 | tee "$OUT/mms_forcing_nl.log"
+balfem_local_run test/test_mms_forcing_nonlinear.jl 2>&1 | tee "$OUT/mms_forcing_nl.log"
 gate "$OUT/mms_forcing_nl.log" "nonlinear forcing gates"
 
 echo
 echo "=== 3/3  order of accuracy (the verification result) ==="
-lfem_local_run test/test_mms_convergence.jl 2>&1 | tee "$OUT/mms_convergence.log"
+balfem_local_run test/test_mms_convergence.jl 2>&1 | tee "$OUT/mms_convergence.log"
 
 if [ "${WITH_NONLINEAR_RATES:-0}" != "0" ]; then
     echo
     echo "=== extra  nonlinear order of accuracy (models 3 and 4) ==="
     echo "    Tens of minutes. Model 4 is quasi-Newton-limited and carries a"
     echo "    raised nl_iter — if it still stalls, raise the BUDGET, never nl_tol."
-    lfem_local_run test/test_mms_convergence_nonlinear.jl 2>&1 \
+    balfem_local_run test/test_mms_convergence_nonlinear.jl 2>&1 \
         | tee "$OUT/mms_convergence_nl.log"
 fi

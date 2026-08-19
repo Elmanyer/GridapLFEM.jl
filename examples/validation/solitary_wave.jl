@@ -15,10 +15,10 @@
 #  report the measured celerity and amplitude retention.
 #  Oracle reference (A/d=0.05): celerity err ≈1.3%, ~100% amplitude retained.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/validation/solitary_wave.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/validation/solitary_wave.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Gridap
 using Printf, LinearAlgebra
 

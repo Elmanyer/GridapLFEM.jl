@@ -27,9 +27,9 @@
 #
 #  USAGE
 #    julia --project=. test/runtests.jl              # default tier: fast+medium
-#    LFEM_TESTS=fast  julia --project=. test/runtests.jl
-#    LFEM_TESTS=all   julia --project=. test/runtests.jl   # incl. the slow MMS studies
-#    LFEM_TESTS=<comma-separated file names>         # an explicit subset
+#    BALFEM_TESTS=fast  julia --project=. test/runtests.jl
+#    BALFEM_TESTS=all   julia --project=. test/runtests.jl   # incl. the slow MMS studies
+#    BALFEM_TESTS=<comma-separated file names>         # an explicit subset
 #
 #  NOT INCLUDED: the MPI tests (they need mpiexecjl and a rank count) and
 #  test/local/ (its own runner, run_local_tests.sh). Both are listed at the end
@@ -41,7 +41,7 @@ using Printf
 const HERE    = @__DIR__
 const PROJECT = dirname(HERE)
 const JULIA   = joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
-const LOG_DIR = get(ENV, "LFEM_TEST_LOGS",
+const LOG_DIR = get(ENV, "BALFEM_TEST_LOGS",
                     joinpath(PROJECT, "output", "test_logs"))
 mkpath(LOG_DIR)
 
@@ -86,7 +86,7 @@ const MPI_TESTS = [
 ]
 
 # --- tier selection ----------------------------------------------------------
-sel = get(ENV, "LFEM_TESTS", "default")
+sel = get(ENV, "BALFEM_TESTS", "default")
 selected =
     if sel == "fast"
         [t for t in SUITE if t[2] === :fast]
@@ -103,7 +103,7 @@ selected =
     end
 
 println("=" ^ 78)
-println("  GridapLFEM sequential test suite — $(length(selected)) file(s), tier '$sel'")
+println("  GridapBALFEM sequential test suite — $(length(selected)) file(s), tier '$sel'")
 println("  Judged on GATE OUTPUT (PASS/FAIL lines), never on exit status alone.")
 println("  Logs: $LOG_DIR")
 println("=" ^ 78)
@@ -201,7 +201,7 @@ for (f, n, what) in MPI_TESTS
     println("        ($what)")
 end
 println("    bash test/local/run_local_tests.sh      (the local machinery suite)")
-println("    LFEM_TESTS=all                          (adds the slow MMS rate studies)")
+println("    BALFEM_TESTS=all                          (adds the slow MMS rate studies)")
 
 nbad == 0 ? println("\n  ALL SELECTED TESTS PASSED.") :
             error("runtests: $nbad file(s) failed, blank or errored — see the summary above.")

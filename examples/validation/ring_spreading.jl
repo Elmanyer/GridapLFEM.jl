@@ -12,10 +12,10 @@
 #
 #  QUICK default (8 periods, 100×100). Production: L=200, 200×200, 20 periods.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/validation/ring_spreading.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/validation/ring_spreading.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
 println("=" ^ 64)

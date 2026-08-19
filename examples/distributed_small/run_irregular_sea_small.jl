@@ -7,11 +7,11 @@
 #  6, 15, 16. Physics/sea via environment variables.
 #
 #  Config via env (base = nonlinear / full pressure / flat bed / Hs=0.2):
-#    LFEM_REGIME       linear | nonlinear                    (default nonlinear)
-#    LFEM_NL_PRESSURE  none | native | full                  (default full)
-#    LFEM_FLAT_BED     1 flat | 0 variable (=> submerged bar built here)   (1)
-#    LFEM_HS / LFEM_TP     sea state Hs [m], Tp [s]          (default 0.2 / 2.0)
-#    LFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
+#    BALFEM_REGIME       linear | nonlinear                    (default nonlinear)
+#    BALFEM_NL_PRESSURE  none | native | full                  (default full)
+#    BALFEM_FLAT_BED     1 flat | 0 variable (=> submerged bar built here)   (1)
+#    BALFEM_HS / BALFEM_TP     sea state Hs [m], Tp [s]          (default 0.2 / 2.0)
+#    BALFEM_HBAR/XBAR/WBAR   bar shape, used only when FLAT_BED=0   1.5 / 26 / 6
 #
 #  Fixed defaults: mesh 200x40, partition 8x4 (32 ranks), p_horizontal 2, dt 0.02,
 #  d 3.5, right sponge 12, mu_max 8, inflow relaxation zone 6, periods 15,
@@ -23,35 +23,47 @@
 
 include(joinpath(@__DIR__, "..", "distributed", "_dist_common.jl"))
 
-get!(ENV, "LFEM_REGIME", "nonlinear"); get!(ENV, "LFEM_NL_PRESSURE", "full")
-get!(ENV, "LFEM_FLAT_BED", "1")
-get!(ENV, "LFEM_HS", "0.2"); get!(ENV, "LFEM_TP", "2.0")
-get!(ENV, "LFEM_NFREQ", "15")
-get!(ENV, "LFEM_RELAX", "1"); get!(ENV, "LFEM_RELAX_W", "6")
+get!(ENV, "BALFEM_REGIME", "nonlinear"); get!(ENV, "BALFEM_NL_PRESSURE", "full")
+get!(ENV, "BALFEM_FLAT_BED", "1")
+get!(ENV, "BALFEM_HS", "0.2"); get!(ENV, "BALFEM_TP", "2.0")
+get!(ENV, "BALFEM_NFREQ", "15")
+get!(ENV, "BALFEM_RELAX", "1"); get!(ENV, "BALFEM_RELAX_W", "6")
 
-M       = genv_i("LFEM_M", 2)
-px, py  = genv_i("LFEM_PX", 8), genv_i("LFEM_PY", 4)      # 8*4 = 32 ranks
-nx, ny  = genv_i("LFEM_NX", 200), genv_i("LFEM_NY", 40)
-feord   = genv_i("LFEM_FE_ORDER", 2)
+M       = genv_i("BALFEM_M", 2)
+
+#  Vertical BASIS ORDER. The model is named P{p_vert}LFE-{M}: `Pp` is the
+
+#  vertical Lagrange order and `M` the number of vertical elements, so the run
+
+#  says which member of the BALFE-M family it actually exercises. Default p=1
+
+#  reproduces the piecewise-linear models of Yang & Liu.
+
+p_vert  = genv_i("BALFEM_P_VERT", 1)
+
+model_name = "P$(p_vert)LFE-$(M)"
+px, py  = genv_i("BALFEM_PX", 8), genv_i("BALFEM_PY", 4)      # 8*4 = 32 ranks
+nx, ny  = genv_i("BALFEM_NX", 200), genv_i("BALFEM_NY", 40)
+feord   = genv_i("BALFEM_FE_ORDER", 2)
 #  p_eta = 0 keeps the historical EQUAL-ORDER spaces (unchanged default).
-#  Set LFEM_P_ETA = LFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
+#  Set BALFEM_P_ETA = BALFEM_FE_ORDER-1 for the Taylor-Hood-like pairing, which is
 #  the only one measured to reach the theoretical order in BOTH fields. It is
 #  NOT automatically the better production choice: at a GIVEN mesh the
 #  equal-order spaces were 40x more accurate, because eta sits in a richer
 #  space. Compare error-vs-DOF before switching.
-p_eta   = genv_i("LFEM_P_ETA", 0)
-Lx, Ly  = genv_f("LFEM_LX", 50.0), genv_f("LFEM_LY", 20.0)
-d       = genv_f("LFEM_D", 3.5)
-spR     = genv_f("LFEM_SPONGE_R", 12.0)
-mumax   = genv_f("LFEM_MUMAX", 40.0)   # strong: kill the outgoing/boundary mode fast
-dt      = genv_f("LFEM_DT", 0.02)
-periods = genv_f("LFEM_PERIODS", 15.0)
+p_eta   = genv_i("BALFEM_P_ETA", 0)
+Lx, Ly  = genv_f("BALFEM_LX", 50.0), genv_f("BALFEM_LY", 20.0)
+d       = genv_f("BALFEM_D", 3.5)
+spR     = genv_f("BALFEM_SPONGE_R", 12.0)
+mumax   = genv_f("BALFEM_MUMAX", 40.0)   # strong: kill the outgoing/boundary mode fast
+dt      = genv_f("BALFEM_DT", 0.02)
+periods = genv_f("BALFEM_PERIODS", 15.0)
 Tp      = tp_val()
-Tfinal  = haskey(ENV, "LFEM_TFINAL") ? genv_f("LFEM_TFINAL", 0.0) : periods * Tp
-save_ev = genv_i("LFEM_SAVE_EVERY", 10)
+Tfinal  = haskey(ENV, "BALFEM_TFINAL") ? genv_f("BALFEM_TFINAL", 0.0) : periods * Tp
+save_ev = genv_i("BALFEM_SAVE_EVERY", 10)
 
 usebar  = !flat_bed_flag(1)
-hbar    = genv_f("LFEM_HBAR", 1.5); xbar = genv_f("LFEM_XBAR", 26.0); wbar = genv_f("LFEM_WBAR", 6.0)
+hbar    = genv_f("BALFEM_HBAR", 1.5); xbar = genv_f("BALFEM_XBAR", 26.0); wbar = genv_f("BALFEM_WBAR", 6.0)
 sramp   = wbar / 3.0
 h_bathy = usebar ?
     (x -> d - 0.5*hbar*(tanh((x[1]-(xbar-wbar))/sramp) - tanh((x[1]-(xbar+wbar))/sramp))) : nothing
@@ -59,16 +71,16 @@ h_bathy = usebar ?
 state   = build_airy_state(d; directional=false)
 bedtag  = usebar ? "bar" : "flat"
 tag     = "$(regime_sym())_$(nl_pressure_sym())_$(bedtag)_Hs$(hs_val())"
-outdir  = genv("LFEM_OUTDIR", joinpath(ROOT, "output", "small_irregular_$(tag)_M$(M)"))
+outdir  = genv("BALFEM_OUTDIR", joinpath(ROOT, "output", "small_irregular_$(tag)_$(model_name)"))
 
 banner("SMALL | irregular sea (Dirichlet BC) | $(regime_sym()) $(nl_pressure_sym()) $bedtag Hs=$(hs_val())",
        M, (px,py), (nx,ny), nx*ny, outdir)
 is_rank0() && @printf("#   Hs=%.4g m Tp=%.3g s | bed=%s bc_side=%s profile=%s seed=%d\n",
                       hs_val(), Tp, bedtag, string(bc_side_sym()),
-                      string(bc_profile_sym()), genv_i("LFEM_SEED", 20260723))
+                      string(bc_profile_sym()), genv_i("BALFEM_SEED", 20260723))
 
 diags, vert, prob = setup_and_run_distributed(
-    cpu_grid=(px,py), M=M, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
+    cpu_grid=(px,py), M=M, p_vertical=p_vert, c_bdy=cbdy_override(), p_horizontal=feord, p_eta=p_eta,
     domain=(0.0,Lx,0.0,Ly), partition=(nx,ny),
     h_val=d, T_wave=Tp, A_wave=hs_val()/2,
     wave_gen=:bc_gen, wave_bc=state, bc_side=bc_side_sym(), bc_profile=bc_profile_sym(),
@@ -78,14 +90,14 @@ diags, vert, prob = setup_and_run_distributed(
     regime=regime_sym(), nl_pressure=nl_pressure_sym(), flat_bed=flat_bed_flag(1),
     y_wall_bc=:wall, x_wall_bc=false,                              # long-crested => Uy == 0
     output_dir=outdir, save_every=save_ev,
-    write_w=genv_b("LFEM_WRITE_W", 0), write_pressure=genv_b("LFEM_WRITE_PRESSURE", 0),
+    write_w=genv_b("BALFEM_WRITE_W", 0), write_pressure=genv_b("BALFEM_WRITE_PRESSURE", 0),
     rho=rho_val(),
     solver_type=solver_sym(), tableau=tableau_sym(),
     nl_iter=nl_iter_val(), nl_tol=nl_tol_val(),
     ls_rtol=ls_rtol_val(), ls_maxiter=ls_maxiter_val(), krylov_m=krylov_m_val(), precond=precond_sym(),
     diag_every=diag_every_val(), diag_csv=diag_csv_flag(),
     div_factor=div_factor_val(), eta_ref=eta_ref_val(),
-    print_every=genv_i("LFEM_PRINT_EVERY", 10))
+    print_every=genv_i("BALFEM_PRINT_EVERY", 10))
 
 is_rank0() && @printf("irregular_sea [%s] done: %d steps, %d snapshots to %s\n",
                       tag, length(diags), save_ev > 0 ? length(diags) ÷ save_ev : 0, outdir)

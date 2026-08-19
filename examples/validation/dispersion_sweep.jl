@@ -7,27 +7,27 @@
 #  dispersion curve Cm/Ce(kd) — the time-domain counterpart of the closed-form
 #  test_dispersion_curve.jl, but using the actual production code path. The
 #  measured curve should track Airy (Cm/Ce ≈ 1) up to the model's applicable kd
-#  and fall away beyond it (LFE-2 ≈ 10.9).
+#  and fall away beyond it (P1LFE-2 ≈ 10.9).
 #
 #  Writes output/dispersion_sweep_M<M>.csv (kd, Cm, Ce, Cm/Ce, err) for plotting
 #  with the postprocessing library.
 #
 #  ANALYSIS SCRIPT (many FEM runs — tens of minutes). RUN:
-#    julia --project=. GridapLFEM.jl/examples/validation/dispersion_sweep.jl
-#  Env: LFEM_M (vertical layers, default 2), LFEM_KD (comma-sep kd list).
+#    julia --project=. GridapBALFEM.jl/examples/validation/dispersion_sweep.jl
+#  Env: BALFEM_M (vertical layers, default 2), BALFEM_KD (comma-sep kd list).
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf, LinearAlgebra
 
-M      = parse(Int, get(ENV, "LFEM_M", "2"))
+M      = parse(Int, get(ENV, "BALFEM_M", "2"))
 c_bdy  = M == 3 ? [0.0,0.726,0.925,1.0] :
          M == 4 ? [0.0,0.745,0.923,0.977,1.0] : [0.0,0.728,1.0]
-kd_list = haskey(ENV,"LFEM_KD") ? parse.(Float64, split(ENV["LFEM_KD"],",")) :
+kd_list = haskey(ENV,"BALFEM_KD") ? parse.(Float64, split(ENV["BALFEM_KD"],",")) :
           [0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0]
 
 println("=" ^ 66)
-@printf("  dispersion_sweep.jl — LFE-%d, full nonlinear, %d kd points\n", M, length(kd_list))
+@printf("  dispersion_sweep.jl — P1LFE-%d, full nonlinear, %d kd points\n", M, length(kd_list))
 println("=" ^ 66)
 
 g = 9.81; T_wave = 1.6; omega = 2π/T_wave; A_wave = 5e-4

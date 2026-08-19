@@ -7,10 +7,10 @@
 #  y_wall_bc=:open — the lateral boundaries are sponge-absorbed instead of
 #  solid walls). The result is a short-crested 2D sea surface.
 #
-#  RUN:  julia --project=. GridapLFEM.jl/examples/bc_directional_sea.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/examples/bc_directional_sea.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 println("=" ^ 60)
@@ -75,5 +75,5 @@ diags, vert, prob = setup_and_run(
 
 emax = maximum(d.eta_max for d in diags)
 @printf("\n  max η over run = %.5f m  (target Hs = %.4f m)\n", emax, Hs)
-println("  VTK output: GridapLFEM.jl/output/bc_directional_sea/solution.pvd")
+println("  VTK output: GridapBALFEM.jl/output/bc_directional_sea/solution.pvd")
 println("  (animate with postprocessing: animate_field(sim, \"eta\"))")

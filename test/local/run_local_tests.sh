@@ -15,7 +15,7 @@
 #    test/local/run_local_tests.sh                # all tests, 4 concurrent
 #    JOBS=6 test/local/run_local_tests.sh         # more concurrency
 #    test/local/run_local_tests.sh reststate sponge     # a subset (substring match)
-#    LFEM_TEST_PERIODS=8 test/local/run_local_tests.sh boundary   # a shorter gate
+#    BALFEM_TEST_PERIODS=8 test/local/run_local_tests.sh boundary   # a shorter gate
 #
 #  Logs land in $LOG_DIR (default output/local/logs); the exit status is
 #  non-zero if any test failed.
@@ -53,7 +53,7 @@ fi
 
 mkdir -p "$LOG_DIR"
 echo "=============================================================="
-echo " GridapLFEM local validation suite"
+echo " GridapBALFEM local validation suite"
 echo "   project     : $PROJ"
 echo "   tests       : ${TESTS[*]}"
 echo "   concurrency : $JOBS"

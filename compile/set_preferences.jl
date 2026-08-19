@@ -10,7 +10,7 @@
 #  RUN IT ONCE, with the SAME --project used to build the sysimage AND to launch
 #  runs (so the binding lands in the right LocalPreferences.toml):
 #      source compile/load_modules_snellius.sh
-#      julia --project=$HOME/GridapLFEM.jl compile/set_preferences.jl
+#      julia --project=$HOME/GridapBALFEM.jl compile/set_preferences.jl
 #
 #  The libmpi path below MUST match the OpenMPI module in load_modules_snellius.sh
 #  (Snellius: OpenMPI/5.0.3-GCC-13.3.0). If you change the module, change this.

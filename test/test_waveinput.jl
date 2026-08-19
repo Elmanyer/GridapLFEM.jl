@@ -10,10 +10,10 @@
 #    and the WaveSpec.AiryState converter (amplitude/phase snapshot, Hs
 #    recovery, seed reproducibility).
 #
-#  RUN:  julia --project=. GridapLFEM.jl/test/test_waveinput.jl
+#  RUN:  julia --project=. GridapBALFEM.jl/test/test_waveinput.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using LinearAlgebra, Printf
 using Gridap: VectorValue
 import Gridap
@@ -30,7 +30,7 @@ function check(name, cond)
 end
 
 g = 9.81; d = 3.5
-vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])   # LFE-2, Nσ=3
+vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])   # P1LFE-2, Nσ=3
 
 # ---- σ-nodes -----------------------------------------------------------------
 sig = sigma_dof_nodes(vert)
@@ -38,7 +38,7 @@ check("σ-nodes: sorted copy equals c_bdy (p=1)",
       isapprox(sort(sig), [0.0, 0.728, 1.0]; atol=1e-12))
 
 # ---- model dispersion --------------------------------------------------------
-T = 2.4                                    # kd ≈ 1.6 — well inside the LFE-2 band
+T = 2.4                                    # kd ≈ 1.6 — well inside the P1LFE-2 band
 omega = 2.0*pi/T
 k_airy = find_wavenumber(omega, d, g)
 k_mod  = model_wavenumber(vert, omega, d, g)

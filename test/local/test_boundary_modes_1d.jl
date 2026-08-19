@@ -34,7 +34,7 @@ cc = CheckCounter()
 
 Lx    = 40.0
 nx    = flume_nx(Lx)
-n_per = parse(Int, get(ENV, "LFEM_TEST_PERIODS", "18"))
+n_per = parse(Int, get(ENV, "BALFEM_TEST_PERIODS", "18"))
 Tf    = n_per * FLUME.T
 Twin  = 8 * FLUME.T                 # analysis window: the last 8 periods
 k     = flume_k()

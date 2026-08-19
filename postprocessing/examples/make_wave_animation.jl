@@ -7,8 +7,8 @@
 #  RUN (from the postprocessing/ folder):
 #    julia --project=. examples/make_wave_animation.jl [pvd-or-dir] [outdir]
 # ==============================================================
-include(joinpath(@__DIR__, "..", "src", "GridapLFEMPost.jl"))
-using .GridapLFEMPost
+include(joinpath(@__DIR__, "..", "src", "GridapBALFEMPost.jl"))
+using .GridapBALFEMPost
 
 src = length(ARGS) ≥ 1 ? ARGS[1] : joinpath(@__DIR__, "..", "..", "output", "pp_demo")
 out = length(ARGS) ≥ 2 ? ARGS[2] : joinpath(@__DIR__, "..", "..", "output", "pp_plots")

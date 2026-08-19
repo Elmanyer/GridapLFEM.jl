@@ -45,7 +45,7 @@
 #  RUN:  julia --project=. test/test_mms_convergence_nonlinear.jl
 # ==============================================================
 
-using GridapLFEM
+using GridapBALFEM
 using Printf
 
 println("=" ^ 76)

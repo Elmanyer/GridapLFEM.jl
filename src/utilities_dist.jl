@@ -1,5 +1,5 @@
 # ==============================================================
-#  utilities_dist.jl — Distributed (MPI) driver for the LFE-M solver
+#  utilities_dist.jl — Distributed (MPI) driver for the BALFE-M solver
 #
 #  `setup_and_run_distributed` is the parallel counterpart of `setup_and_run`.
 #  The horizontal mesh, FE spaces, assembly and solve are partitioned across MPI
@@ -29,7 +29,7 @@
 """
     setup_and_run_distributed(; cpu_grid, kwargs...) → (diags, vert, prob)
 
-Distributed (MPI) driver for the stacked LFE-M solver. Same physics and workflow
+Distributed (MPI) driver for the stacked BALFE-M solver. Same physics and workflow
 as [`setup_and_run`](@ref), with the horizontal mesh/assembly/solve partitioned
 across `cpu_grid = (px, py)` ranks (`px·py` must equal `mpiexecjl -n N`). Every
 physics flag is available in parallel. Returns `(diags, vert, prob)` with
@@ -40,7 +40,7 @@ documented inline on the signature below.
 function setup_and_run_distributed(;
     cpu_grid     :: Tuple   = (2, 2),      # (px,py) MPI process grid; px·py == mpiexecjl -n N
     # ---- Vertical discretisation (Stage 1, replicated on every rank) ---------
-    M            :: Int     = 2,           # number of vertical σ-elements (LFE-M order)
+    M            :: Int     = 2,           # number of vertical σ-elements (BALFE-M order)
     p_vertical       :: Int     = 1,           # σ-element polynomial order (Nσ = M·p_vertical+1)
     c_bdy                   = nothing,     # σ-node positions in [0,1]; nothing → optimised set
     # ---- Horizontal discretisation (partitioned over cpu_grid) ---------------
@@ -148,7 +148,7 @@ function setup_and_run_distributed(;
 
         # All console output is guarded by i_am_main so only rank 0 prints.
         if i_am_main(ranks)
-            println("=== 2D LFE-M ALGEBRAIC Distributed Solver (stacked [η,𝖴x,𝖴y]) ===")
+            println("=== 2D BALFE-M ALGEBRAIC Distributed Solver (stacked [η,𝖴x,𝖴y]) ===")
             println("  cpu_grid: $cpu_grid  ($(n_procs) ranks total)")
             flush(stdout)
         end

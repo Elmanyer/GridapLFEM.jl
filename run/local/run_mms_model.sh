@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================
-#  run_mms_model.sh — MODEL validation + convergence, linear flat-bed LFE-M
+#  run_mms_model.sh — MODEL validation + convergence, linear flat-bed BALFE-M
 #
 #  DISTINCT FROM run_mms_space/time.sh. Those force the solution with an analytic
 #  source and verify that the discretised OPERATOR is the intended one (code
@@ -17,17 +17,17 @@
 # ==============================================================
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
-source run/local/lfem_local.sh
+source run/local/balfem_local.sh
 mkdir -p output/local/logs output/local/mms_model
 
 MODE="${MODE:-space}"; LEVELS="${LEVELS:-3}"; NMODE="${NMODE:-1}"
-cat > /tmp/_lfem_mms_model.jl <<'JL'
-using GridapLFEM, Printf
+cat > /tmp/_balfem_mms_model.jl <<'JL'
+using GridapBALFEM, Printf
 mode   = Symbol(get(ENV, "MODE", "space"))
 levels = parse(Int, get(ENV, "LEVELS", "3"))
 nmode  = parse(Int, get(ENV, "NMODE", "1"))
 println("#"^70)
-println("#  MODEL VALIDATION — linear flat-bed LFE-M, exact standing mode n=$nmode")
+println("#  MODEL VALIDATION — linear flat-bed BALFE-M, exact standing mode n=$nmode")
 println("#  NO FORCING: the solver evolves the model's own dynamics.")
 println("#"^70)
 r = mode == :space ?
@@ -46,4 +46,4 @@ open("output/local/mms_model/model_convergence_$(mode).csv","w") do io
 end
 JL
 MODE="$MODE" LEVELS="$LEVELS" NMODE="$NMODE" \
-    lfem_local_run /tmp/_lfem_mms_model.jl 2>&1 | tee "output/local/logs/mms_model_${MODE}.log"
+    balfem_local_run /tmp/_balfem_mms_model.jl 2>&1 | tee "output/local/logs/mms_model_${MODE}.log"
