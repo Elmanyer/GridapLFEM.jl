@@ -7,7 +7,7 @@
 #  rate breaks rather than just that it did.
 #
 #  SEQUENTIAL BY DESIGN. These are small problems, and a direct LU beats every
-#  MPI split 2-3x at this size (measured, LOCAL_TESTS_RESULTS.md §5.3); the
+#  MPI split 2-3x at this size (measured, building_files/CONFIGURATION.md §6); the
 #  driver also needs the final FE solution to form the L² error.
 #
 #  CONFIG (env)

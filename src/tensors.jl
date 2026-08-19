@@ -9,7 +9,7 @@
 #
 #  Pointwise helpers wrap constants in Operation closures (closing over
 #  constants is fine — only CellFields must not be closed over in loops).
-#  Verified semantics (see algebraic_residual_math.md §0–§1):
+#  Verified semantics (see building_files/ARCHITECTURE.md §1):
 #    ∇ of a VectorValue{Nσ} field = TensorValue{2,Nσ} (spatial index FIRST)
 #      ⇒ ∂x f = e_x ⋅ ∇f   (use e⋅∇f, never ∇f⋅e)
 #    double_contraction(𝗧3, S) contracts the TRAILING two indices:

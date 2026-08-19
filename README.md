@@ -39,13 +39,12 @@ Every vertical sum becomes a single algebraic operation on `VectorValue{Nσ}` /
 No custom contraction helpers are needed — `⋅`, `⊗`, `double_contraction`, and `∇` are all
 native Gridap operators on these value types. The authoritative derivation and rationale live in the
 LaTeX project `building_files/LFEM_discretisation.zip` (§8, *Gridap solver implementation*), mirrored
-in `building_files/BALFEM_Gridap.md`, with the term-by-term operator simplifications in
-`building_files/algebraic_residual_math.md`.
+in `building_files/MODEL.md`, which also carries the term-by-term operator forms.
 
 **Why it's worth doing:** collapsing the layer sums into single dense contractions keeps the
 residual compact and well-typed, and makes assembly fast — on the fully nonlinear benchmark the
 stacked residual runs **~3.6× faster with ~13× fewer allocations** than a per-layer assembly of the
-same weak form (`building_files/DESIGN_RECORDS.md`), because there is no fused per-layer advection
+same weak form (`building_files/ARCHITECTURE.md` §1), because there is no fused per-layer advection
 integrand to expand. The same CellField algebra is forwarded to `DistributedCellField`, so the
 identical residual runs sequentially and across MPI ranks.
 
@@ -81,7 +80,7 @@ The **complete** LaTeX §8 global residual, every term:
   hand-built multichromatic seas, or **WaveSpec.jl stochastic sea states** (JONSWAP/TMA/…, angular
   spreading) via the `AiryState → WaveInput` converter. Discrete BALFE-M eigenmode vertical
   polarization (`:model`, default) or Airy cosh sampling (`:airy`); Hann start-up ramp; optional
-  generation/absorption relaxation zone (`relax_bc`). See `building_files/boundary_wave_generation.md`.
+  generation/absorption relaxation zone (`relax_bc`). See `building_files/WAVE_GENERATION.md`.
 
 ### Selecting the model — three orthogonal controls
 
@@ -189,7 +188,7 @@ tooling are run directly against it (`julia --project=. test/test_basic.jl`), wh
 > and says nothing about correctness. That exact inference was recorded here as fact and retracted
 > on 2026-08-15: the residual was at the time double-counting the `𝓐/𝓚` package, and AD agreed with
 > the hand Jacobian throughout. Only the analytic MMS verifies the residual. Analysis:
-> `building_files/AD_ISSUE.md` (untracked — `building_files/` is gitignored). The
+> `building_files/CONFIGURATION.md` §2 (untracked — `building_files/` is gitignored). The
 > version-controlled guard that the fork keeps working is **gate A0 of
 > `test/test_jacobians_ad.jl`** — an instant `hasmethod` check for the fork's Tuple-argument
 > `TransientMultiFieldCellField` constructor, which stock Gridap does not provide.
@@ -269,7 +268,7 @@ cheap `rome`/L1 budget.
 > `rome` node default (2 GB/core) was tried in 2026-08 and the job was OOM-killed with the same
 > error as the earlier crashes. The compile spike is therefore not the only consumer, and the
 > attribution experiment (per-rank JIT vs GMRES cache vs a per-step leak vs a baseline footprint
-> above 2 GB/core) is open — see `building_files/EXECUTED_PLANS.md` §2.2. Each launcher
+> above 2 GB/core) is open — see `building_files/OPEN_ITEMS.md` §1. Each launcher
 > sizes its request to fit a `rome` node (256 GB / 128 cores).
 
 ```bash
@@ -352,7 +351,7 @@ GMRES+Jacobi+Newton. It drops `gauges` (global reductions instead).
 >
 > Consequence for the reference below: `test_basic.jl` reports **240** Newton iterations at the
 > default tolerance (it was 408 at `nl_tol=1e-6`); `max η` and gauge amplitude are unchanged.
-> Full analysis: `building_files/LOCAL_TESTS_RESULTS.md` §5.4. Tests that need a sharper answer pin
+> Full analysis: `building_files/CONFIGURATION.md` §4. Tests that need a sharper answer pin
 > `nl_tol = 1e-8` explicitly.
 
 ---
@@ -439,7 +438,7 @@ concurrently, not to MPI. They are not part of the 21-file suite gate yet.
 The reference for `test_equivalence.jl` is an independent per-layer assembly of the same weak form in
 `../LFE-M_2D_solver/`, differently structured, so agreement to machine precision cross-checks the
 stacked residual. The full validation report is §9 of `building_files/LFEM_discretisation.zip`; design
-records are in `building_files/DESIGN_RECORDS.md`.
+records are in `building_files/ARCHITECTURE.md` and `building_files/MODEL.md`.
 
 ---
 
@@ -493,8 +492,9 @@ records are in `building_files/DESIGN_RECORDS.md`.
   rebuilt** under its new name `GridapBALFEM_sysimage.so`.
 
 - **`building_files/` is git-ignored**, so the LaTeX derivation (`BALFEM_models/`), its
-  bibliography, and the plan/audit notes (`MMS_CAMPAIGN.md`, `RESIDUAL_AUDIT.md`,
-  `LOCAL_TESTS_RESULTS.md`, `DESIGN_RECORDS.md`) exist **only on the working machine** and are not
+  bibliography, and the eight design/verification notes (`MODEL.md`, `ARCHITECTURE.md`,
+  `VERIFICATION.md`, `TEST_SUITE.md`, `CONFIGURATION.md`, `WAVE_GENERATION.md`, `RUNNING.md`,
+  `OPEN_ITEMS.md`) exist **only on the working machine** and are not
   pushed. If they should be versioned, ignore the *artefacts* (`*.zip`, built `*.pdf`) rather than
   the whole directory.
 
@@ -514,7 +514,7 @@ records are in `building_files/DESIGN_RECORDS.md`.
   derivatives. Prefer precise phrasing ("unvalidated by the local set", "validated structurally but
   not by value") over a bare "unvalidated". Full discussion, including the cheap experiment that
   would close the gap (the same case at `A = 1e-2`, where the effect grows as `A²` to ~1.3 %):
-  `building_files/LOCAL_TESTS_RESULTS.md` §7b.
+  `building_files/TEST_SUITE.md` §7.
 
 - **`test_equivalence.jl` is retired and must not be read as a correctness gate.** It compared the
   package residual against the older per-layer solver in `../LFE-M_2D_solver/`. That external code
@@ -560,12 +560,11 @@ records are in `building_files/DESIGN_RECORDS.md`.
   the suite*: the `𝓐/𝓚` package was missing from `∂R/∂u̇` (an `O(1)` omission — Newton stalled), and
   the nonlinear gravity branch was missing the `−η∇h` half of its own integration by parts. The
   latter was absent from the residual **and** from its own Jacobian, so every self-consistency check
-  cancelled the error identically. Full record: `building_files/MMS_CAMPAIGN.md`,
-  `building_files/RESIDUAL_AUDIT.md`.
+  cancelled the error identically. Full record: `building_files/VERIFICATION.md` §5.
 - **⚠ Equal-order FE spaces cost one order of convergence** (found by the above). `Q_p/Q_p` for
   `(η, 𝖴)` converges at `p`, not `p+1`. Mixed order `Q_p/Q_{p-1}` fixes the **surface** universally
   and the **velocity** at `Q3/Q2` — measured over a 12-study campaign
-  (`building_files/MMS_CAMPAIGN.md`); the two fields must be stated separately:
+  (`building_files/VERIFICATION.md` §3); the two fields must be stated separately:
   **`η` hits its optimal `p_e+1` in 12/12 studies** (`2.000/3.000/4.000` in 1-D, `1.980/2.997/3.994`
   in 2-D, static ≡ transient to 4 figures), while **`u` hits `p_u+1` only at `Q3/Q2`** (3.991 / 3.930);
   at `Q2/Q1` it stalls near 2.4 (optimal 3) and at `Q4/Q3` near 4.65 (optimal 5), rates still falling.

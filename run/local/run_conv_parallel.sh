@@ -6,7 +6,7 @@
 #  process, so they are embarrassingly parallel. This replaces the single-process
 #  serial sweep, which used 1 of 16 cores.
 #
-#  CONCURRENCY. Not 12. `LOCAL_TESTS_RESULTS.md` §6.2 measured three concurrent
+#  CONCURRENCY. Not 12. `building_files/CONFIGURATION.md` §7 measured three concurrent
 #  Julia processes each running at ~1/3 solo speed — MEMORY BANDWIDTH is the
 #  binding constraint, not core count, so throughput saturates early. These
 #  studies are smaller (1.2k-5k DOFs coarse) and should scale further, but

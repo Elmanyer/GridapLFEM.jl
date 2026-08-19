@@ -230,7 +230,7 @@ nlp_ctx = build_nlp_ctx(model, 2, Nσ, trian, dΩh)
 #  (the AD path) but a Vector when fed an array-like MultiField (the hand path),
 #  while the struct field is declared `Vector{<:TransientCellField}`.
 #  Stock Gridap has only the Vector method, so this predicate is exactly the
-#  fork's presence. See building_files/AD_ISSUE.md (untracked) — which is why
+#  fork's presence. See building_files/CONFIGURATION.md §2 — which is why
 #  this one-line check, not that document, is the durable record.
 # ---------------------------------------------------------------------------
 println()

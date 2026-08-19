@@ -73,7 +73,7 @@ flat_bed_flag(default::Int=1) = genv_b("BALFEM_FLAT_BED", default)
 #    BALFEM_LS_RTOL     GMRES relative tolerance         1e-5  (measured: 1e-9→1e-6→1e-5
 #                       each cut GMRES iterations with max|η| unmoved. NOTE this now
 #                       EQUALS BALFEM_NL_TOL rather than sitting one order below it —
-#                       see the ladder discussion in LOCAL_TESTS_RESULTS.md §5.4)
+#                       see the ladder discussion in building_files/CONFIGURATION.md §4)
 #    BALFEM_KRYLOV_M    GMRES basis size, restart=true    100   (MEMORY bound)
 #      NOTE BALFEM_KRYLOV_M and BALFEM_LS_MAXITER are different things: the basis
 #      costs m+1 distributed vectors plus a dense (m+1)×m Hessenberg PER RANK at

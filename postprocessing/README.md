@@ -4,7 +4,7 @@ Turns the solver's **VTK** (`solution.pvd` + `sol_t_*.vtu`, fields `eta, u1x, �
 **CSV** outputs into Julia data structures you can sample, transform (DFT / harmonics / celerity /
 integrals) and visualise with **Plots.jl**. Self‑contained — no dependency on the solver.
 
-The full design rationale is in `POSTPROCESSING_PLAN.md`.
+The full design rationale is in `../building_files/ARCHITECTURE.md` §7.
 
 ## Setup
 
