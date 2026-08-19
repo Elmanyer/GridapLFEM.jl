@@ -365,10 +365,13 @@ All gates below are standalone Julia scripts in `test/`; run with
 see file headers). The project must be the **package** environment — since the migration the tests
 do `using GridapBALFEM`, which the parent repository's environment cannot resolve unless you also
 `Pkg.develop(path="GridapBALFEM.jl")` there.
-The full suite is **27 test files + `runtests.jl` + `test/cluster/` + `test/local/`**. As of
-2026-08-17, all re-measured after two solver fixes: **sequential 21/21 PASS**
-(`julia --project=. test/runtests.jl`), **distributed 13/13 gates PASS** on 4 ranks,
-**Jacobian-vs-AD 8/8 models PASS**. Representative highlights.
+The full suite is **27 test files + `runtests.jl` + `test/cluster/` + `test/local/`**. **The whole
+suite was run end to end on 2026-08-18/19**, so every figure below is measured, not carried over:
+**sequential 20/20 counted files PASS** (`julia --project=. test/runtests.jl`; `test_equivalence` is
+RETIRED and correctly not counted), **distributed 13/13 gates PASS** on 4 ranks,
+**Jacobian-vs-AD 17/17 gates over 8 models PASS**, **nonlinear MMS 8/8**, **`test/local/` 50/50**.
+One gate failed in the entire campaign — `test_mms_convergence` G7, a gate-window specification
+defect, not a solver defect (see below). Representative highlights.
 
 **Read the first block separately from the rest.** Those five files are *verification*: the forcing
 is derived from the governing equations and never touches `problem.jl` (a grep gate enforces it), so
@@ -379,10 +382,10 @@ expectations computed with the solver's own residual, where an error can cancel.
 | Verification (analytic MMS + Jacobian gate) | What it checks | Result |
 |---|---|---|
 | `test_mms_forcing.jl` | forcing-level gates for the linear models, no FE solve; includes the grep gate that keeps `src/mms.jl` independent of the residual | 5/5 PASS |
-| `test_mms_forcing_nonlinear.jl` | forcing-level gates for the nonlinear models: Model 4 at constant `h` ≡ Model 3 exactly, `ε²` amplitude scaling, `H>0` guard | 10/10 PASS |
-| `test_mms_convergence.jl` | **order of accuracy**, Model 1 (linear, flat bed), on the `Q3/Q2` pairing | see §FE pairing |
-| `test_mms_convergence_nonlinear.jl` | order of accuracy, Models 3 and 4 (nonlinear) | **4/4 PASS** (run end-to-end 2026-08-17) — M3 `p_η=2.996`/`p_u=3.995`, M4 `2.996`/`3.997`, both at theoretical order, at the DEFAULT `nl_iter` |
-| `test_jacobians_ad.jl` | hand `∂R/∂u`, `∂R/∂u̇` vs **AD of the same residual**, matrix by matrix, all 8 models; gates the linear branch on equality and the nonlinear one on how the gap **scales with amplitude** (an O(1) gap is a defect, a vanishing one is the deliberate quasi-Newton choice) | `∂R/∂u̇` exact for all 8 |
+| `test_mms_forcing_nonlinear.jl` | forcing-level gates for the nonlinear models: Model 4 at constant `h` ≡ Model 3 exactly, `ε²` amplitude scaling, `H>0` guard, plus the four `𝓝`-tier families added when blocker B1 was closed | **20/20 PASS** |
+| `test_mms_convergence.jl` | **order of accuracy**, Model 1 (linear, flat bed), on the `Q3/Q2` pairing | **6/8** — spatial gates pass at theoretical order (`p_η=2.995`, `p_u=3.770`); the two temporal gates (G7) fail because their `Δt` window is pre-asymptotic at its coarse end and below the spatial floor at its fine end. Diagnosed, deliberately not re-specified — see `CLAUDE.md` |
+| `test_mms_convergence_nonlinear.jl` | order of accuracy, Models 3 and 4, at `nl_pressure` `:none` **and `:native`** (four studies) | **8/8 PASS** — M3 `2.996`/`3.995`, M4 `2.996`/`3.997`; `:native` M3 `2.996`/`3.995`, M4 `2.996`/`3.998`. All at theoretical order at the DEFAULT `nl_iter` |
+| `test_jacobians_ad.jl` | hand `∂R/∂u`, `∂R/∂u̇` vs **AD of the same residual**, matrix by matrix, all 8 models; gates the linear branch on equality and the nonlinear one on how the gap **scales with amplitude** (an O(1) gap is a defect, a vanishing one is the deliberate quasi-Newton choice) | **17/17 PASS** — `∂R/∂u̇` exact (`0.000e+00`) in all 8; `∂R/∂u` vanishing at order 1.11–1.16; gate A0 confirms the Gridap fork pin |
 | `test_linear_newton_gate.jl` | a LINEAR problem must converge in **one Newton iteration per implicit stage**, on a **sloping** bed — the configuration no flat-bed test can reach | 10/10 PASS |
 
 | Test | What it checks | Result |
@@ -390,16 +393,16 @@ expectations computed with the solver's own residual, where an error can cancel.
 | `test_vertical.jl` | vertical tensor identities, dispersion bridge vs Yang & Liu Table 1 | 15/15 PASS |
 | `test_primitives.jl` | tensor index order, `∂x/∂y` orientation, contraction semantics | 9/9 PASS |
 | `test_equivalence.jl` | virtual-work match vs the older per-layer solver | **RETIRED — not a correctness gate.** The external solver was not maintained in step with the weak form (it lacks the leading-pressure term `R_P`), so a disagreement measures its age, not a defect here |
-| `test_dispersion.jl` | FEM phase speed vs linear theory at kd=3 | PASS, err 0.90% |
+| `test_dispersion.jl` | FEM phase speed vs linear theory at kd=3 | PASS, err 0.93% |
 | `test_dispersion_curve.jl` | `Cm/Ce(kd)` sweep vs Airy, P1LFE-2/3/4 applicable-kd | 9/9 PASS (10.8/39.2/127.9) |
 | `test_dispersion_nonlinear.jl` | full-NL solver ⇒ Airy at vanishing amplitude (kd 1/3/5) | 3/3 PASS |
 | `test_shallow_water.jl` | `kd→0 ⇒ √(gd)` limit | 6/6 PASS |
-| `test_sloshing.jl` | standing-wave period vs BALFE-M theory | PASS, err 1.44% |
-| `test_energy.jl` | non-dissipativity / amplitude preservation | 3/3 PASS |
+| `test_sloshing.jl` | standing-wave period vs BALFE-M theory | PASS, err 1.93% |
+| `test_energy.jl` | non-dissipativity / amplitude preservation | 3/3 PASS (ΔE/E₀ = 3.7e-14) |
 | `test_conservation.jl` | mass conservation, closed basin, nonlinear advection | PASS, drift 7.8e-16 |
-| `test_nlpressure.jl` | exact-IBP identity, structural scaling, dynamics (all pressure tiers) | 9/9 PASS |
+| `test_nlpressure.jl` | exact-IBP identity, structural scaling, dynamics (all pressure tiers), **and a bar-reference VALUE gate** (`REF_EMAX = 0.0028640`, rtol 1e-4) added 2026-08-19 — this is the one sequential configuration that can see the bed-slope physics, and it previously asserted only boundedness | **10/10 PASS** |
 | `test_selfconsistency.jl` | **support, not model validation**: hand Jacobians are exact derivatives of the residual; multi-step integration self-consistent. Its forcing *is* the solver's own residual, so a wrong residual would still pass — see the file header | 3/3 PASS (~3e-9) |
-| `test_convergence.jl` | Richardson temporal order (→2) | 2/2 PASS (q≈1.72) |
+| `test_convergence.jl` | Richardson temporal order (→2) | 2/2 PASS (q≈1.73) |
 | `test_vertical_profile.jl` | reconstructed `w(σ)` vs Airy `sinh` shape | 7/7 PASS |
 | `test_basic.jl` | smoke run, linear + fully nonlinear | 6/6 PASS — references **bit-identical** through both 2026-08-17 fixes (max η 0.00410, gauge 0.00212, Newton 240) |
 | `test_waveinput.jl` | Dirichlet-generation data: identities, closures, AD, WaveSpec converter | 30/30 PASS |
@@ -481,6 +484,27 @@ records are in `building_files/DESIGN_RECORDS.md`.
 
 ## Known issues
 
+- **The repository was renamed `GridapLFEM` → `GridapBALFEM` on 2026-08-19** (commit `5c41605`),
+  package, module, directory, env vars (`LFEM_*` → `BALFEM_*`), shell helpers and sysimage.
+  Follow-through still needed outside this checkout: the **GitHub repository is still named
+  `GridapLFEM.jl`** (rename it, then `git remote set-url origin …GridapBALFEM.jl.git`; GitHub
+  redirects meanwhile), the **cluster checkout must be renamed to match** because
+  `run/balfem_env.sh` defaults `BALFEM_PROJ=$HOME/GridapBALFEM.jl`, and the **sysimage must be
+  rebuilt** under its new name `GridapBALFEM_sysimage.so`.
+
+- **`building_files/` is git-ignored**, so the LaTeX derivation (`BALFEM_models/`), its
+  bibliography, and the plan/audit notes (`MMS_CAMPAIGN.md`, `RESIDUAL_AUDIT.md`,
+  `LOCAL_TESTS_RESULTS.md`, `DESIGN_RECORDS.md`) exist **only on the working machine** and are not
+  pushed. If they should be versioned, ignore the *artefacts* (`*.zip`, built `*.pdf`) rather than
+  the whole directory.
+
+- **When re-zipping the LaTeX project, extract the zip and compile FROM THE EXTRACT.** A
+  `zip -x '*.pdf'` intended to skip a compiled `main.pdf` silently dropped four **PDF figures** the
+  document uses; every compile check passed because it ran against a copy of the *folder*, never the
+  zip that was actually being shipped. The folder is authoritative; verify the zip by `diff -rq`
+  against it plus a compile of the extract.
+
+
 - **On the word "validated" in this repository.** A test validates a term only if it can *resolve*
   that term's contribution — if switching the term off moves the measured quantity by less than the
   measurement's resolution, a passing test shows the code executes, not that the term is correct.
@@ -499,10 +523,10 @@ records are in `building_files/DESIGN_RECORDS.md`.
   its 1/10 result measures the reference's age, not a defect here. The construction (layout-
   independent virtual work) remains the right instrument should a *current* second implementation
   ever exist.
-- **Residual verification — ALL FOUR `:none` MODELS DONE (2026-08-17); the `𝓝` tiers open.** The
-  analytic MMS (`src/mms.jl`, `src/errors.jl`, `src/mms_driver.jl`, `test/test_mms_*.jl`) derives its
-  forcing from the governing equations *without touching* `problem.jl`, so — unlike every other test
-  here — the error does not cancel and the measured **order of accuracy** certifies the operator.
+- **Residual verification — SIX OF EIGHT MODELS DONE (2026-08-19).** The analytic MMS
+  (`src/mms.jl`, `src/errors.jl`, `src/mms_driver.jl`, `test/test_mms_*.jl`) derives its forcing from
+  the governing equations *without touching* `problem.jl`, so — unlike every other test here — the
+  error does not cancel and the measured **order of accuracy** certifies the operator.
 
   | Model | `regime` / bed / `nl_pressure` | `p_η` (opt 3) | `p_u` (opt 4) |
   |---|---|---|---|
@@ -510,12 +534,27 @@ records are in `building_files/DESIGN_RECORDS.md`.
   | 2 | `:linear` / **variable** / `:none` | 3.000 | 4.000 |
   | 3 | `:nonlinear` / flat / `:none` | 2.996 | 3.995 |
   | 4 | `:nonlinear` / **variable** / `:none` | 2.996 | 3.997 |
+  | 5 | `:nonlinear` / flat / **`:native`** | 2.996 | 3.995 |
+  | 6 | `:nonlinear` / **variable** / **`:native`** | 2.996 | 3.998 |
+  | 7–8 | `:nonlinear` / any / **`:full`** | 2.99 → 2.59 | **−0.00** |
 
-  So the verified scope is the **complete `:none` operator over arbitrary bathymetry** —
-  `H`-weighting, advection, the full three-component leading pressure, the `O(ε²)` surface-slope
-  package and the bed-slope terms. Only `nl_pressure=:native`/`:full` remain unverified, because
-  their MMS forcing is not available (three nested ForwardDiff levels; diagnosis **unconfirmed**).
-  **Say "the `:none` models are verified", never "the residual is verified".**
+  So the verified scope is the **complete `:none` operator over arbitrary bathymetry, plus the whole
+  `:native` non-linear-pressure tier** — `H`-weighting, advection, the full three-component leading
+  pressure, the `O(ε²)` surface-slope package, the bed-slope terms, and `𝓝` components {3,6,7,8}.
+
+  **`:full` can never pass a rate test, and that is a design fact, not a defect.** The solver
+  evaluates `𝓝{1,2,4,5}`'s irreducible `∂²η` from **frozen L² projections**, while the MMS forcing
+  computes them exactly — different operators, so the study measures the surrogate. `e_u` settles on
+  a constant (**5.988e-03** flat, **5.448e-03** sloping; the two agreeing within 10 % across
+  different beds is itself the evidence the floor belongs to the approximation, not the bathymetry).
+  ⚠ That is the *identical* fingerprint to the 2026-08-17 gravity **defect** — `e_u` pinned while
+  `e_η` holds its rate — and here it means the opposite. The MMS cannot distinguish a wrong operator
+  from a deliberately approximated one; only knowing what the solver implements can. **Do not "fix"
+  it.** The useful output is the number: at `nx=32` that floor is ~1.1e5× `:native`'s discretisation
+  error, so refine production runs with `:native`.
+
+  **Say "the `:none` and `:native` models are verified"** — never "the residual is verified", and
+  never "the `𝓝` tiers are verified" (which would wrongly include `:full`).
 
   ⚠ Model 4 needed **two solver fixes** to get there, and *neither was findable by any other test in
   the suite*: the `𝓐/𝓚` package was missing from `∂R/∂u̇` (an `O(1)` omission — Newton stalled), and
