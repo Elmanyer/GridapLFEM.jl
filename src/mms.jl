@@ -349,28 +349,32 @@ function strong_residual_model(cbs, vert, hfun, g::Float64,
     comps = lin ? () : _nl_components(nl_pressure)
     useN  = !isempty(comps)
 
-    #  ⚠ KNOWN LIMITATION — nl_pressure ≠ :none is NOT yet usable (2026-08-16).
-    #  The 𝓝 components {1,2,4,5} carry second derivatives of u*, and the leading
-    #  pressure differentiates the result once more, so the 𝓟 block is a THIRD
-    #  derivative — three nested ForwardDiff levels. ForwardDiff decides which
-    #  perturbation is outermost by TAG PRECEDENCE, which is a property of the tag
-    #  TYPES (a deterministic but arbitrary ordering), not of the order the calls
-    #  are written in. For this call tree the outer spatial tag orders BELOW the
-    #  inner ones, so `partials` returns a Dual instead of a scalar and the result
-    #  is silently mis-nested (perturbation confusion) rather than merely slow.
-    #  Reproduced with both `derivative`×2 and a single `gradient`.
-    #  The fix is to remove the nesting, not to work around the symptom: supply the
-    #  spatial derivatives of u* and h ANALYTICALLY (they are elementary for
-    #  MMSField and bathymetry_field) so the evaluator contains ONE AD level.
-    #  See building_files/MMS_NONLINEAR_PLAN.md §"Risks".
-    #  Refusing loudly here rather than returning a wrong forcing — a wrong forcing
-    #  would show up as a collapsed convergence rate and look like a solver defect.
-    useN && error(
-        "strong_residual_model: nl_pressure=:$nl_pressure is not yet available. " *
-        "The 𝓝 blocks need three nested ForwardDiff levels and hit a tag-precedence " *
-        "inversion (see the comment at this line). regime=:nonlinear with " *
-        "nl_pressure=:none IS available and verified. Refusing rather than " *
-        "returning a silently mis-nested forcing.")
+    #  𝓝 TIERS: AVAILABLE since 2026-08-18. They were refused here for two days on a
+    #  diagnosis that was WRONG, and the correction is worth keeping.
+    #
+    #  The recorded story was: components {1,2,4,5} carry second derivatives of u*, the
+    #  leading pressure differentiates once more, so the 𝓟 block needs three nested
+    #  ForwardDiff levels and hits a tag-precedence inversion. Every part of that is
+    #  false as an explanation of the failure. ForwardDiff nests these levels correctly
+    #  (inner tags are created later, so inner ≺ outer holds by construction), and the
+    #  refutation was cheap: components {7,8} are FIRST order — no deeper than the
+    #  :none path that always worked — and they failed identically. All eight failed
+    #  identically, which no derivative-depth argument can explain.
+    #
+    #  The actual cause was a Julia CLOSURE VARIABLE-CAPTURE COLLISION, not AD at all:
+    #  Nvec assigned `H`, `ukx`, `uky`, and Ψ assigned `L`, `Nc` — every one of which is
+    #  ALSO a local of this enclosing function. A nested function assigning a name that
+    #  is already local to its enclosing scope assigns the ENCLOSING variable. So the
+    #  first Nvec call from inside Ψ — under the outer ForwardDiff.gradient — wrote a
+    #  Dual into the outer `H`, and the advection block and the Lxv/Lyv stores then
+    #  inherited it. The MethodError therefore surfaced at a Float64 array store, far
+    #  from its cause, and named the gradient's tag — which is what made it read as a
+    #  nesting problem. The fix is the `local` keywords in Nvec/Ψ below.
+    #
+    #  Method lesson: the error named a ForwardDiff type, so the search stayed inside
+    #  ForwardDiff. What broke it open was bisecting the COMPONENTS and finding the
+    #  first-order ones failed too — i.e. testing the diagnosis against a case it could
+    #  not explain, rather than looking harder where it pointed.
 
     # --- scalar building blocks, generic in the number type (AD-able) ---------
     hv(ξ, υ)          = hfun(ξ, υ)
@@ -402,12 +406,20 @@ function strong_residual_model(cbs, vert, hfun, g::Float64,
     end
 
     #  𝓝ₖⱼ — the eight quadratic components (eq: def Nkj nh pressure derivative)
+    #  ⚠ `local` IS LOAD-BEARING ON EVERY LINE BELOW — do not drop it.
+    #  `H`, `ukx` and `uky` are ALSO locals of the enclosing strong_residual_model.
+    #  In Julia a nested function that assigns a name already local to its enclosing
+    #  function assigns THE ENCLOSING VARIABLE, it does not create a new one. Without
+    #  `local`, the first Nvec call made from inside Ψ — i.e. under the outer
+    #  ForwardDiff.gradient — overwrites the outer `H` with a Dual, and every later
+    #  use of `H` (the advection block, the Lxv/Lyv stores) inherits it. That, and
+    #  NOT any nested-AD tag-precedence limit, was blocker B1.
     function Nvec(ξ, υ, τ, k, j)
         Z   = zero(promote_type(typeof(ξ), typeof(υ), typeof(τ)))
-        H   = Hv(ξ, υ, τ)
+        local H   = Hv(ξ, υ, τ)
         sj  = sflux(ξ, υ, τ, j)
         sk  = sflux(ξ, υ, τ, k)
-        ukx = uv(ξ,υ,τ,k,1); uky = uv(ξ,υ,τ,k,2)
+        local ukx = uv(ξ,υ,τ,k,1); local uky = uv(ξ,υ,τ,k,2)
         ujx = uv(ξ,υ,τ,j,1); ujy = uv(ξ,υ,τ,j,2)
 
         c1 = (1 in comps) ?
@@ -440,12 +452,12 @@ function strong_residual_model(cbs, vert, hfun, g::Float64,
     function Ψ(ξ, υ, τ, i)
         s = zero(promote_type(typeof(ξ), typeof(υ), typeof(τ)))
         for j in 1:N
-            L = Lvec(ξ, υ, τ, j)
+            local L = Lvec(ξ, υ, τ, j)        # `local`: see the note on Nvec above
             s += P[i,j,1]*L[1] + P[i,j,2]*L[2] + P[i,j,3]*L[3]
         end
         if useN
             for k in 1:N, j in 1:N
-                Nc = Nvec(ξ, υ, τ, k, j)
+                local Nc = Nvec(ξ, υ, τ, k, j)
                 for c in comps
                     s += Nc[c]*Pc[i,k,j,c]
                 end

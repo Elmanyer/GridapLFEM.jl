@@ -84,9 +84,29 @@ fail=0
 for t in "${TESTS[@]}"; do
     log="$LOG_DIR/${t%.jl}.log"
     rc=0; wait "${PIDS[$t]}" || rc=$?
-    np=$(grep -cE '^[[:space:]]*PASS\b' "$log" 2>/dev/null || echo 0)
-    nf=$(grep -cE '^[[:space:]]*FAIL\b' "$log" 2>/dev/null || echo 0)
-    if [ "$np" -eq 0 ] && [ "$nf" -eq 0 ]; then
+    #  `grep -c` already prints 0 and exits 1 when there is no match, so the old
+    #  `|| echo 0` appended a SECOND zero and the count became the two-line string
+    #  "0\n0", which made every `[ "$np" -eq 0 ]` below abort with
+    #  "integer expression expected". Use the count grep prints, and default only
+    #  when the file is missing entirely.
+    raw_p=$(grep -cE '^[[:space:]]*PASS\b' "$log" 2>/dev/null); raw_p=${raw_p:-0}
+    raw_f=$(grep -cE '^[[:space:]]*FAIL\b' "$log" 2>/dev/null); raw_f=${raw_f:-0}
+
+    #  A file may print FAIL lines that are NOT failures. test_boundary_modes_1d
+    #  runs a NEGATIVE CONTROL whose gates are MEANT to fire, and scores them on a
+    #  separate counter — it reported "16 PASS, 0 FAIL" while this runner called it
+    #  a failure on 3 deliberate FAIL lines. So prefer the test's OWN verdict line
+    #  when it emits one, and fall back to raw counting when it does not. The BLANK
+    #  check below still keys off the RAW counts, so a file that asserts nothing is
+    #  caught exactly as before.
+    summary=$(grep -oE 'Results:[[:space:]]*[0-9]+ PASS,[[:space:]]*[0-9]+ FAIL' "$log" 2>/dev/null | tail -1)
+    if [ -n "$summary" ]; then
+        np=$(printf '%s' "$summary" | sed -E 's/.*Results:[[:space:]]*([0-9]+) PASS.*/\1/')
+        nf=$(printf '%s' "$summary" | sed -E 's/.*,[[:space:]]*([0-9]+) FAIL.*/\1/')
+    else
+        np=$raw_p; nf=$raw_f
+    fi
+    if [ "$raw_p" -eq 0 ] && [ "$raw_f" -eq 0 ] && [ -z "$summary" ]; then
         printf "  [BLANK] %-28s  NO GATE OUTPUT — it asserted nothing (see %s)\n" "$t" "$log"
         fail=$((fail+1))
     elif [ "$nf" -gt 0 ]; then

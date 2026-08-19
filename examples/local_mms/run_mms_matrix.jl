@@ -24,7 +24,7 @@
 #    LFEM_CONV_NLTOL   Newton tol                       1e-14
 #    LFEM_CONV_OUT     output dir                       output/local/mms_conv
 #    LFEM_CONV_REGIME  linear | nonlinear                linear
-#    LFEM_CONV_NLP     none | native | full              none  (≠none not yet available)
+#    LFEM_CONV_NLP     none | native | full              none  (≠none available since 2026-08-18)
 #    LFEM_CONV_FLATBED 1 flat bed | 0 variable bed       1
 #    LFEM_CONV_AB      bed amplitude when FLATBED=0      0.2
 #    LFEM_CONV_NLITER  Newton budget                     50 linear / 400 nonlinear

@@ -26,7 +26,7 @@
 #    LFEM_MMS_OUT      output directory            output/local/mms
 #    -- model selection (the four MMS models) --
 #    LFEM_MMS_REGIME   linear | nonlinear          linear
-#    LFEM_MMS_NLP      none | native | full        none   (≠none not yet available)
+#    LFEM_MMS_NLP      none | native | full        none   (≠none available since 2026-08-18)
 #    LFEM_MMS_FLATBED  1 flat | 0 variable bed     1
 #    LFEM_MMS_AB       bed amplitude if FLATBED=0  0.2
 #    LFEM_MMS_NLITER   Newton budget               50 linear / 400 nonlinear

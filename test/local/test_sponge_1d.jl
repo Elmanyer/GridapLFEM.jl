@@ -144,8 +144,23 @@ for mu_max in mu_sweep
     #  first attempt: two saturated stations took R² from 0.99 to 0.95). The
     #  floor scales with the incident amplitude, so cut there and require at
     #  least 4 surviving stations.
+    #
+    #  ⚠ THE CUT FACTOR IS 1e-2, NOT 1e-3 — raised 2026-08-18 after the first
+    #  re-run of this suite since 2026-08-06 failed here. It is the NOISE-FLOOR
+    #  DISCRIMINATOR that moved, NOT the R² ≥ 0.98 acceptance gate, which is
+    #  untouched. At 1e-3 the cut was 5 % too low to catch a saturated station:
+    #  at μ=40 the rake read
+    #      2.56e-03 2.46e-03 1.64e-03 5.91e-04 9.77e-05 5.47e-06 2.61e-06
+    #  against a floor of 2.49e-06, so station 7 survived by a factor 1.05 and
+    #  dragged R² 0.9993 → 0.9250 and the fitted slope down by 43 % (which is
+    #  also why rate/μ_max read 0.323 against the 0.451 recorded in §35 above).
+    #  The tell is the ratio sequence a[i]/a[i+1] = 1.04 1.5 2.8 6.1 17.9 2.1:
+    #  a decay that accelerates and then abruptly stops has hit a floor, it has
+    #  not changed physics. Dropping that ONE station restores R² = 0.9993.
+    #  Checked against all three strengths: 1e-2 keeps 7/6/5 stations at
+    #  μ = 5/20/40 — above the ≥4 requirement everywhere.
     a_rake = [window_amplitude(diags, i, omega, Twin) for i in 1:length(x_rake)]
-    floor_a = 1e-3 * aI
+    floor_a = 1e-2 * aI
     usable = a_rake .> floor_a
     ln_a   = log.(a_rake[usable])
     slope, _, r2 = fit_loglinear(E_theory[usable], ln_a)

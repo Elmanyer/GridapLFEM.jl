@@ -193,8 +193,33 @@ diags, _, _ = setup_and_run(
     regime=:nonlinear, nl_pressure=:full, flat_bed=false,   # tanh bar → variable bathymetry (∇h ON)
     gauges=[(26.0,1.0)], save_every=0)
 emax = maximum(d.eta_max for d in diags)
-@printf("  bar run: steps=%d  max η=%.5f m\n", length(diags), emax)
+@printf("  bar run: steps=%d  max η=%.7f m\n", length(diags), emax)
 check("G3: bounded over the bar (max η < 20A)", emax < 0.02)
+
+#  ⚠ G3 IS THE ONLY SEQUENTIAL CONFIGURATION THAT CAN SEE THE BED-SLOPE PHYSICS
+#  (:nonlinear + :full over a tanh bar with flat_bed=false), AND UNTIL 2026-08-19
+#  IT ASSERTED ONLY BOUNDEDNESS. That is why it passed 9/9 on 2026-08-17 while the
+#  quantity it computes moved by 58 % under the nonlinear-gravity fix: `emax < 20A`
+#  has ~7x headroom, so a wrong coefficient that leaves the run bounded sails
+#  straight through. The distributed twin (test_nlpressure_distributed) pinned a
+#  VALUE and caught it immediately — but the MPI tests are outside every runner,
+#  so the check lived only where nothing ran it.
+#
+#  A BOUNDS CHECK ON THE RIGHT CONFIGURATION IS NOT A VALUE CHECK.
+#
+#  REF_EMAX measured 2026-08-19 on this exact configuration (52x4 domain,
+#  sponge 6/8, mu_max=20 — NOT the distributed twin's 60x2/8/8/30; the two are
+#  different problems and comparing them once manufactured a phantom 2.5 %
+#  discrepancy). Tolerance is 1 %, limited by the 3 significant figures the old
+#  %.5f print gave; the print is now %.7f, so TIGHTEN THIS to ~1e-4 the next time
+#  the value is re-measured. Even at 1 % this would have caught the 58 % move.
+const REF_EMAX  = 0.00286
+const REF_RTOL  = 1e-2
+let rel = abs(emax - REF_EMAX) / REF_EMAX
+    @printf("  G3 reference: %.7f vs %.5f  (rel %.2e, tol %.0e)\n",
+            emax, REF_EMAX, rel, REF_RTOL)
+    check("G3: matches reference value (rel < 1%)", rel < REF_RTOL)
+end
 check("G3: no NaN", all(!isnan(d.eta_max) for d in diags))
 
 println()

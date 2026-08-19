@@ -36,7 +36,11 @@
 #  test_jacobians_ad.jl distinguishes the two directly, by measuring how the
 #  hand↔AD gap scales with state amplitude: vanishing ⇒ slow, flat ⇒ wrong.
 #
-#  RUNTIME. ~25–30 min per study (3 levels). Set MMS_NL_LEVELS to shorten.
+#  RUNTIME. ~25–30 min per :none study (3 levels). The :native study is
+#  SUBSTANTIALLY slower — the 𝓝 forcing costs ~4x a :none evaluation (measured
+#  ~25 vs ~100-150 µs/point), because Ψ carries an Nσ²x8 component sum that the
+#  outer gradient then differentiates. Budget ~1 h for it. Set MMS_NL_LEVELS to
+#  shorten.
 #
 #  RUN:  julia --project=. test/test_mms_convergence_nonlinear.jl
 # ==============================================================
@@ -76,14 +80,29 @@ studies = [
     #  test_jacobians_ad.jl tells them apart by amplitude scaling.
     (name = "Model 4  nonlinear / variable bed  / :none",
      regime = :nonlinear, flat_bed = false, nl_pressure = :none, nl_iter = 50),
-    #  :native and :full are specified in ValidationTests.tex but not yet
-    #  implementable — see the tag-precedence limitation recorded in src/mms.jl
-    #  and MMS_NONLINEAR_PLAN.md §6. They are listed here, commented, so the gap
-    #  is visible in the test file rather than only in a plan document.
-    # (name = "Model 3 / :native", regime=:nonlinear, flat_bed=true,  nl_pressure=:native),
-    # (name = "Model 3 / :full",   regime=:nonlinear, flat_bed=true,  nl_pressure=:full),
-    # (name = "Model 4 / :native", regime=:nonlinear, flat_bed=false, nl_pressure=:native),
-    # (name = "Model 4 / :full",   regime=:nonlinear, flat_bed=false, nl_pressure=:full),
+    #  ⛔ DO NOT SIMPLY UNCOMMENT ALL FOUR. The 𝓝 forcing became available on
+    #  2026-08-18 (B1 was a closure variable-capture bug, not the tag-precedence
+    #  limit recorded here before), but only `:native` is RATE-TESTABLE:
+    #
+    #    :native — components {3,6,7,8} are assembled NATIVELY, so the forcing and
+    #              the solver encode the same operator. Model 3 measured
+    #              p_η=2.996, p_u=3.997 and Model 4 p_η=2.996, p_u=3.998 —
+#              theoretical order in both. BOTH are enabled below.
+    #
+    #    :full   — adds {1,2,4,5}, whose irreducible ∂²η the SOLVER evaluates from
+    #              FROZEN L² PROJECTIONS lagged one step (src/nlpressure.jl) while
+    #              the MMS forcing computes them EXACTLY. Different operators, so
+    #              the study measures the surrogate and `e_u` STALLS AT A CONSTANT
+    #              (5.988e-03; p_u = −0.00 over a 16× refinement) while `e_η` keeps
+    #              its rate. ⚠ That is the IDENTICAL fingerprint to the 2026-08-17
+    #              gravity DEFECT and here it means the opposite — the MMS cannot
+    #              tell a wrong operator from a deliberately approximated one.
+    #              Enabling it as a RATE gate would assert something false.
+    #              If you want :full in the suite, pin the FLOOR (e_u ≈ 5.99e-3)
+    #              as a regression value instead — that detects a change in the
+    #              approximation, which a rate gate never could.
+    (name = "Model 3 / :native", regime=:nonlinear, flat_bed=true,  nl_pressure=:native, nl_iter=50),
+    (name = "Model 4 / :native", regime=:nonlinear, flat_bed=false, nl_pressure=:native, nl_iter=50),
 ]
 
 for s in studies

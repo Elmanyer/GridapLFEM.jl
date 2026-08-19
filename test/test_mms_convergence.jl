@@ -102,6 +102,51 @@ check(@sprintf("G6 u spatial order %d (got %.3f)", P_U+1, sp.p_u),
 #  T_final ≈ 1.2 s covers about a quarter period, which is what makes the
 #  temporal error dominant. Refining Δt is pointless if nothing is evolving.
 # ---------------------------------------------------------------------------
+#  🔴 G7 IS MIS-SPECIFIED AND CURRENTLY FAILS — DIAGNOSED 2026-08-19, NOT YET
+#  RE-SPECIFIED. IT IS NOT A SOLVER DEFECT: G6 above reproduces its documented
+#  values (2.995 / 3.770) BIT-IDENTICALLY, and the verified-scope table is
+#  entirely spatial, so nothing about the model's verification status is affected.
+#
+#  Measured (all :theta unless stated), fitted slope over the window:
+#      T=1.2  nx=24  :sdirk (as gated)   p_eta 1.382   p_u 1.332   <- the failure
+#      T=1.2  nx=24  :sdirk  4 levels    p_eta 1.762   p_u 1.252
+#      T=1.2  nx=24  :theta              p_eta 2.406   p_u 1.272
+#      T=1.2  nx=36  :theta              p_eta 2.424   p_u 1.573
+#      T=2.4  nx=24  :theta              p_eta 2.893   p_u 1.068
+#      T=2.4  nx=36  dt0=0.15            p_eta 2.653   p_u 2.025
+#      T=2.4  nx=36  dt0=0.075           p_eta 1.974   p_u 2.019
+#
+#  WHAT IS ESTABLISHED. **u is second order in time**, beyond doubt: pairwise
+#  rates 1.992 / 2.056 / 2.016 and 2.056 / 2.016 / 1.986 in two independent
+#  windows. **eta is second order too**, but its asymptotic window is only ONE
+#  refinement wide: it OVER-converges above dt~0.0375 (rate 2.631) and SATURATES
+#  on its spatial floor below dt~0.01875 (rate 1.157).
+#
+#  ⚠ SO THE p_eta=1.974 IN THE LAST ROW IS NOT A CLEAN MEASUREMENT. It hits the
+#  target only because the coarse-end over-convergence and the fine-end
+#  saturation cancel in the least-squares fit. Do not adopt that window and
+#  declare victory — read the RATE SEQUENCE, not the fitted slope.
+#
+#  WHY eta IS HARDER THAN u HERE, AND IT IS STRUCTURAL: under the Taylor-Hood
+#  pairing Q3/Q2 that G6 needs for spatial optimality, eta lives in the LOWER
+#  order space, so its spatial error floor is relatively higher and squeezes its
+#  temporal window from below. The pairing that optimises the SPATIAL study
+#  pessimises the TEMPORAL one for eta. Any re-specification must face this.
+#
+#  OPTIONS (a decision with a runtime cost — deliberately left open):
+#    (1) T=2.4 + nx=36 and gate on the RATE SEQUENCE per field rather than the
+#        fitted slope. Correct, but takes G7 from ~20 min to ~1 h.
+#    (2) Gate u on temporal order (wide clean window) and drop/relax eta, with
+#        the reason recorded.
+#    (3) Push eta's spatial floor down with nx>=48. Most expensive.
+#  Do NOT "fix" this by widening the +-0.3 tolerance: the window is what is
+#  wrong, not the expectation.
+#
+#  ⚠ AND FIX G10 REGARDLESS. It is the guard that should have caught this and
+#  did not: it measured 3.4 % contamination for u against 0.5 % for eta -- a
+#  SEVENFOLD asymmetry -- and passed both on one shared 10 % threshold. It
+#  already computes the two numbers separately; it just does not act on them
+#  separately.
 const T7   = 1.2      # ≈ ¼ of the 4.83 s period — enough evolution to measure
 const DT7  = 0.15     # ⇒ 8 / 16 / 32 steps over the three levels
 println("\n--- G7: temporal refinement (expect q ≈ 2) ---")

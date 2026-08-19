@@ -127,16 +127,71 @@ let src = read(joinpath(@__DIR__, "..", "src", "mms.jl"), String)
           isempty(hits) ? "" : "(found: " * join(hits, ", ") * ")")
 end
 
-# ---- KNOWN LIMITATION: the 𝓝 tiers must refuse, not guess ------------------
-println("\nG   nl_pressure ≠ :none is not yet available and must say so")
-for np in (:native, :full)
+# ---- N8..N11: the 𝓝 TIERS (available since 2026-08-18) ---------------------
+#  These four gates replaced a gate that asserted the tiers REFUSE. They refused
+#  because of a Julia closure variable-capture collision inside strong_residual_model
+#  (Nvec's `H`/`ukx`/`uky` aliased the enclosing function's locals), NOT because of
+#  the nested-ForwardDiff limit that was recorded for two days. See the note at the
+#  𝓝 block in src/mms.jl. The refutation was that components {7,8} are FIRST order
+#  and failed identically to {1,2,4,5} — a fact no derivative-depth story explains.
+println("\nN8  the 𝓝 tiers evaluate and are finite")
+for (fb, hf, nm) in ((true, h_flat, "flat"), (false, h_slope, "slope")), np in (:native, :full)
     ok = false
     try
-        SR(:nonlinear, true, np, h_flat)
-    catch e
-        ok = occursin("not yet available", sprint(showerror, e))
+        r = SR(:nonlinear, fb, np, hf)
+        ok = all(isfinite, vcat(r[1], r[2], r[3])) && mx(r) > 0
+    catch
+        ok = false
     end
-    check("G   :$np refuses loudly (see MMS_NONLINEAR_PLAN.md)", ok)
+    check("N8  :$np over a $nm bed evaluates finitely", ok)
+end
+
+# ---- N9: the flat_bed control point still holds under 𝓝 --------------------
+#  Components {3,6} are ∇h-gated INSIDE Nvec, and flat_bed zeroes ∇h at one control
+#  point. Over a constant bed the two routes must agree BITWISE, exactly as N1 does
+#  for :none. This is what would catch a 𝓝 component that forgot its ∇h guard.
+println("\nN9  flat-bed limit under 𝓝  (flat_bed=true ≡ flat_bed=false @ const h)")
+for np in (:native, :full)
+    a = SR(:nonlinear, true, np, h_flat); b = SR(:nonlinear, false, np, h_flat)
+    rel = df(a, b) / mx(a)
+    check("N9  :$np", rel < 1e-12, @sprintf("(rel %.2e)", rel))
+end
+
+# ---- N10: non-triviality — each tier must actually add something ------------
+println("\nN10 tier ordering  (each tier changes the forcing)")
+let n = SR(:nonlinear, false, :none,   h_slope),
+    v = SR(:nonlinear, false, :native, h_slope),
+    f = SR(:nonlinear, false, :full,   h_slope)
+    r1 = df(v, n) / mx(n);  r2 = df(f, v) / mx(v)
+    check("N10  :native ≠ :none", r1 > 1e-3, @sprintf("(rel %.2e)", r1))
+    check("N10b :full ≠ :native", r2 > 1e-3, @sprintf("(rel %.2e)", r2))
+end
+
+# ---- N11: the 𝓝 excess is QUADRATIC in the state amplitude -----------------
+#  MEASURED 2026-08-18, all four models: 1.927 / 1.998 / 1.968 / 1.967 at the
+#  smallest amplitude pair — i.e. O(A²), NOT the O(A³) once claimed for the whole
+#  package. That matches the standing correction that the 𝓟 block is O(A²) and
+#  dominates. This is the gate that would catch a 𝓝 term added at the wrong order.
+println("\nN11 the 𝓝 excess scales as A²")
+function n_excess(scale, np, fb, hf)
+    ff = MMSField(vert.N_dof; Lx = 1.7, Ly = 1.1, omega = 1.3, a_eta = AE*scale,
+                  alpha = [(1.0 + 0.25j)*scale for j in 1:vert.N_dof],
+                  beta  = [(0.7 - 0.16j)*scale for j in 1:vert.N_dof])
+    cb = field_callables(ff)
+    df(strong_residual_model(cb, vert, hf, G, x0, y0, t0;
+                             regime = :nonlinear, flat_bed = fb, nl_pressure = np),
+       strong_residual_model(cb, vert, hf, G, x0, y0, t0;
+                             regime = :nonlinear, flat_bed = fb, nl_pressure = :none))
+end
+for (np, fb, hf, nm) in ((:native, true,  h_flat,  "flat"),
+                         (:native, false, h_slope, "slope"),
+                         (:full,   true,  h_flat,  "flat"),
+                         (:full,   false, h_slope, "slope"))
+    #  small amplitudes only: at a_eta/h ≈ 0.3 the higher-order terms are still visible
+    e1 = n_excess(0.125, np, fb, hf);  e2 = n_excess(0.0625, np, fb, hf)
+    ord = log2(e1 / e2)
+    check("N11 :$np over a $nm bed is O(A²)", abs(ord - 2) < 0.2,
+          @sprintf("(order %.3f, expect 2)", ord))
 end
 
 println()
@@ -144,4 +199,4 @@ println("=" ^ 76)
 @printf("  Results: %d PASS,  %d FAIL\n", n_pass, n_fail)
 println("=" ^ 76)
 n_fail > 0 ? error("test_mms_forcing_nonlinear: $n_fail failed!") :
-             println("  Nonlinear MMS forcing gates OK (:none tier).")
+             println("  Nonlinear MMS forcing gates OK (:none, :native and :full tiers).")
