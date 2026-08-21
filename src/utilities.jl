@@ -133,13 +133,46 @@ function make_wavemaker_point(x_wm::Float64, y_wm::Float64,
     return wm_fn
 end
 
-# Optimised vertical node positions (Yang & Liu 2024, Table 1)
+# Optimised vertical ELEMENT-BOUNDARY positions (Yang & Liu 2024, Table 1).
+# NOTE these are element boundaries (M+1 of them), not σ-NODES: for p ≥ 2 each
+# element carries p+1 nodes, so the same table still gives a valid mesh — but the
+# optimisation that produced it was derived for piecewise-linear elements, and no
+# published optimum exists for p ≥ 2. See building_files/PENDING_TASKS.md §1 B.
 const DEFAULT_CBDY = Dict(
     1 => [0.0, 1.0],
     2 => [0.0, 0.728, 1.0],
     3 => [0.0, 0.726, 0.925, 1.0],
     4 => [0.0, 0.745, 0.923, 0.977, 1.0],
 )
+
+"""
+    resolve_cbdy(M, c_bdy) → Vector{Float64}
+
+The ONE place the σ-element boundaries are chosen: `c_bdy === nothing` picks the
+optimised set for this `M` when one is tabulated and a uniform split of `[0,1]`
+otherwise; anything else is passed through after a length/endpoint check.
+
+Every entry point that builds vertical tensors (`setup_and_run`,
+`setup_and_run_distributed`, and the MMS drivers) resolves through here, so a
+default that is valid for one `M` cannot be hard-wired into a signature that
+advertises `M` as a degree of freedom. That defect was live in
+`run_conv_study`, where `c_bdy` was pinned to the **M=2** node set and any
+`M ≠ 2` threw the `length(c_bdy) == M+1` assertion in `assemble_vertical_tensors`.
+"""
+function resolve_cbdy(M::Int, c_bdy::Union{Nothing,AbstractVector{<:Real}} = nothing)
+    M ≥ 1 || error("resolve_cbdy: M must be ≥ 1 (got $M)")
+    cb = c_bdy === nothing ?
+         get(DEFAULT_CBDY, M, collect(LinRange(0.0, 1.0, M + 1))) :
+         collect(Float64, c_bdy)
+    length(cb) == M + 1 || error(
+        "resolve_cbdy: c_bdy has $(length(cb)) entries but M=$M needs M+1 = $(M+1) " *
+        "element boundaries (they are boundaries, not σ-nodes — for p ≥ 2 the extra " *
+        "nodes are interior to each element).")
+    (cb[1] ≈ 0.0 && cb[end] ≈ 1.0) ||
+        error("resolve_cbdy: c_bdy must start at 0 and end at 1 (got $(cb[1]) … $(cb[end])).")
+    issorted(cb) || error("resolve_cbdy: c_bdy must be increasing (got $cb).")
+    return cb
+end
 
 """
     setup_and_run(; kwargs...) → (diags, vert, prob)
@@ -323,11 +356,9 @@ function setup_and_run(;
     write_pressure :: Bool    = false,    # also write total-pressure fields p_s<σ> to VTK
     rho            :: Float64 = rho,      # water density [kg/m³] (used for the pressure output)
 )
-    # Choose the σ-node positions: the paper's optimised set for this M when
-    # available, otherwise a uniform split of [0,1] into M+1 nodes.
-    if isnothing(c_bdy)
-        c_bdy = get(DEFAULT_CBDY, M, collect(LinRange(0.0, 1.0, M + 1)))
-    end
+    # Choose the σ-element boundaries: the paper's optimised set for this M when
+    # available, otherwise a uniform split of [0,1]. One resolver, one definition.
+    c_bdy = resolve_cbdy(M, c_bdy)
 
     # --- STAGE 1: VERTICAL PRE-COMPUTATION (MESH INDEPENDENT, DONE ONCE) -------
     # Build the σ-basis and integrate every vertical tensor the residual needs.

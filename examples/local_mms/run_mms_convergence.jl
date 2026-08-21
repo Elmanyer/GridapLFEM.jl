@@ -17,7 +17,8 @@
 #    BALFEM_MMS_DT0      time step                   2e-4 (space) / 8e-3 (time)
 #    BALFEM_MMS_NXF/NYF  fixed fine mesh (time)      24 / 16
 #    BALFEM_MMS_TFINAL   final time                  0.02 (space) / 0.08 (time)
-#    BALFEM_MMS_M        vertical elements           2
+#    BALFEM_MMS_M        vertical elements M         2
+#    BALFEM_MMS_PVERT    vertical FE order p          1   (Nσ = M·p+1 ⇒ P{p}LFE-{M})
 #    BALFEM_MMS_ORDER    VELOCITY FE order p_u       3   (optimal u rate = p_u+1)
 #    BALFEM_MMS_PETA     SURFACE  FE order p_eta     p_u−1 (optimal eta rate = p_eta+1)
 #    BALFEM_MMS_LX/LY    domain                      1.7 / 1.1
@@ -64,7 +65,12 @@ mode    = Symbol(genv("BALFEM_MMS_MODE", "both"))
 levels  = genv_i("BALFEM_MMS_LEVELS", 4)
 nx0     = genv_i("BALFEM_MMS_NX0", 6);   ny0  = genv_i("BALFEM_MMS_NY0", 4)
 nxf     = genv_i("BALFEM_MMS_NXF", 24);  nyf  = genv_i("BALFEM_MMS_NYF", 16)
+#  VERTICAL basis: (M, p_vert). c_bdy is left to resolve_cbdy — the optimised
+#  Yang & Liu boundaries where they exist for this M, a uniform split otherwise.
+#  The node positions change the error CONSTANT, never the ORDER, so a rate study
+#  may use any reasonable set; the optimised ones are a DISPERSION question.
 Mvert   = genv_i("BALFEM_MMS_M", 2)
+p_vert  = genv_i("BALFEM_MMS_PVERT", 1)
 order   = genv_i("BALFEM_MMS_ORDER", 3)          # velocity order p_u (Q3 by default)
 #  Surface order. Default = order−1 (Taylor-Hood-like), the ONLY pairing measured
 #  optimal in BOTH fields. Set equal to `order` to reproduce the old equal-order
@@ -86,7 +92,7 @@ nl_iter     = genv_i("BALFEM_MMS_NLITER", regime === :linear ? 50 : 400)
 #  Variable bed ⇒ hand run_mms_case the same bathymetry object it gives the forcing.
 hfun    = flat_bed ? nothing : bathymetry_field(; d0=dval, a_b=a_b, kbx=1.3, kby=0.0)
 
-CASE = (Lx=Lx, Ly=Ly, d=dval, M=Mvert, p_horizontal=order, p_eta=p_eta,
+CASE = (Lx=Lx, Ly=Ly, d=dval, M=Mvert, p_vert=p_vert, p_horizontal=order, p_eta=p_eta,
         solver_type=solver, regime=regime, nl_pressure=nlp, flat_bed=flat_bed,
         hfun=hfun, nl_iter=nl_iter)
 
@@ -96,7 +102,7 @@ model_no = regime === :linear ? (flat_bed ? 1 : 2) : (flat_bed ? 3 : 4)
 
 println("#"^70)
 println("#  ANALYTIC MMS — Model $model_no  ($(regime) / $(flat_bed ? "flat" : "variable") bed / :$(nlp))")
-println("#    domain $(Lx)×$(Ly) m | d=$(dval) | M=$(Mvert) | Q$(order)/Q$(p_eta) | $(solver)")
+println("#    domain $(Lx)×$(Ly) m | d=$(dval) | P$(p_vert)LFE-$(Mvert) (Nσ=$(Mvert*p_vert+1)) | Q$(order)/Q$(p_eta) | $(solver)")
 println("#    expected: space  eta→$(opt_eta)  u→$(opt_u)   |   time 2")
 if order == p_eta
     println("#    ⚠ EQUAL ORDER: eta enters momentum undifferentiated (∇·v after IBP), so")

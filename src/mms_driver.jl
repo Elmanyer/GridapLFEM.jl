@@ -32,7 +32,7 @@ function run_mms_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                         Lx::Float64 = 1.0, Ly::Float64 = 1.0,
                         d::Float64 = 1.0, g::Float64 = g,
                         M::Int = 2, p_vert::Int = 1,
-                        c_bdy::Vector{Float64} = [0.0, 0.728, 1.0],
+                        c_bdy = nothing,           # σ-element boundaries; nothing ⇒ resolve_cbdy(M)
                         p_horizontal::Int = 2,
                         p_eta::Int = 0,            # 0 ⇒ equal order. Set < p_horizontal for a
                                                    #   Taylor-Hood-like pairing (see build_fe_spaces).
@@ -56,7 +56,7 @@ function run_mms_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                         use_ad::Bool = false,   # AD Jacobians (3-arg TransientFEOperator)
                         output_dir::String = mktempdir())
     vert = vert_override === nothing ?
-           assemble_vertical_tensors(M, p_vert, c_bdy) : vert_override
+           assemble_vertical_tensors(M, p_vert, resolve_cbdy(M, c_bdy)) : vert_override
     f    = field === nothing ?
            MMSField(vert.N_dof; Lx=Lx, Ly=Ly) : field
 
@@ -189,23 +189,44 @@ term already does with a `DistributedTriangulation`. The L² error likewise uses
 (`LUSolver`), so nothing caps the error; the distributed path is GMRES+Jacobi, and a loose `ls_rtol`
 would cap `‖e‖` and manufacture a fake rate. Defaults are therefore `ls_rtol=1e-13`, `nl_tol=1e-13`,
 and the campaign verifies non-capping explicitly (Gate T).
+
+⚠ **This function used to hard-code Model 1** — `regime=:linear, nl_pressure=:none, flat_bed=true`
+as LITERALS, plus the Model-1 closed form `mms_forcing_stage1` — while accepting no model switches
+at all. `run_conv_study` still built its printed tag from the *requested* switches, so a distributed
+campaign over eight models returned **eight identical Model-1 studies under eight different labels,
+all passing**. Fixed 2026-08-21: the switches are now parameters, the forcing comes from the general
+`mms_forcing` (which itself re-selects the Model-1 closed form when the switches ask for it), and the
+SAME three variables feed the forcing and the solver — never two literals. `test_mms_distributed_
+parity.jl` gates the two branches against each other on a NON-Model-1 configuration so the defect
+cannot recur silently.
 """
 function run_mms_case_distributed(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                                     cpu_grid::Tuple{Int,Int} = (2,2),
                                     Lx::Float64 = 1.7, Ly::Float64 = 1.1,
                                     d::Float64 = 1.0, g::Float64 = g,
                                     M::Int = 2, p_vert::Int = 1,
-                                    c_bdy::Vector{Float64} = [0.0, 0.728, 1.0],
+                                    c_bdy = nothing,  # σ-element boundaries; nothing ⇒ resolve_cbdy(M)
                                     p_horizontal::Int = 2, p_eta::Int = 0,
                                     field = nothing, t0::Float64 = 0.0,
+                                    hfun = nothing,            # bathymetry h(x,y); nothing ⇒ constant `d`
+                                    flat_bed::Bool = true,     # ) the same three symbols select BOTH
+                                    regime::Symbol = :linear,  # ) the forcing and the solver, exactly
+                                    nl_pressure::Symbol = :none, # ) as in run_mms_case above
+                                    vert_override = nothing,   # substitute vertical tensors (see run_mms_case)
                                     solver_type::Symbol = :sdirk, tableau::Symbol = :SDIRK_2_2,
                                     nl_tol::Float64 = 1e-13, nl_iter::Int = 50,
                                     ls_rtol::Float64 = 1e-13, ls_maxiter::Int = 5000,
                                     krylov_m::Int = 200, verbose::Bool = true,
                                     output_dir::String = mktempdir())
-    vert = assemble_vertical_tensors(M, p_vert, c_bdy)
+    vert = vert_override === nothing ?
+           assemble_vertical_tensors(M, p_vert, resolve_cbdy(M, c_bdy)) : vert_override
     f    = field === nothing ? MMSField(vert.N_dof; Lx=Lx, Ly=Ly) : field
     pe   = p_eta == 0 ? p_horizontal : p_eta
+    #  ONE bathymetry object and ONE set of switches for the forcing and the solver,
+    #  built OUTSIDE the MPI block so every rank derives them from identical inputs.
+    hf   = hfun === nothing ? ((xx, yy) -> d) : hfun
+    src  = mms_forcing(f, vert, hf, g; regime = regime, flat_bed = flat_bed,
+                                       nl_pressure = nl_pressure)
     with_mpi() do distribute
         ranks = distribute(LinearIndices((prod(cpu_grid),)))
         model, trian = build_horizontal_model_distributed(ranks, cpu_grid,
@@ -213,10 +234,13 @@ function run_mms_case_distributed(; nx::Int, ny::Int, dt::Float64, T_final::Floa
         U, V = build_fe_spaces(model, p_horizontal, vert.N_dof;
                                y_wall_bc=:wall, x_wall_bc=true, p_eta=pe)
         dΩh  = Measure(trian, 2*max(p_horizontal, pe) + 2)
-        prob = build_problem(vert; g=g, h_bathy=(x -> d), regime=:linear,
-                             nl_pressure=:none, flat_bed=true,
+        prob = build_problem(vert; g=g,
+                             h_bathy     = (x -> hf(x[1], x[2])),
+                             regime      = regime,       # SAME variables as `src` above —
+                             nl_pressure = nl_pressure,  # never two literals, or the two can drift
+                             flat_bed    = flat_bed,
                              mu_sponge=(x -> 0.0), wm_src=((x,t) -> 0.0),
-                             mms_src=mms_forcing_stage1(f, vert, d, g))
+                             mms_src=src)
         op     = build_ode_operator(prob, U, V, trian, dΩh)
         solver = build_ode_solver_distributed(dt; solver_type=solver_type, tableau=tableau,
                         nl_iter=nl_iter, nl_tol=nl_tol, ls_rtol=ls_rtol,
@@ -236,7 +260,8 @@ function run_mms_case_distributed(; nx::Int, ny::Int, dt::Float64, T_final::Floa
         e_u   = sqrt(l2_error(uh[2], mms_exact_ux(f, tF), trian, dΩe)^2 +
                      l2_error(uh[3], mms_exact_uy(f, tF), trian, dΩe)^2)
         verbose && i_am_main(ranks) &&
-            @printf("  [dist] nx=%-4d e_eta=%.6e  e_u=%.6e\n", nx, e_eta, e_u)
+            @printf("  [dist] nx=%-4d %s/%s/%s  e_eta=%.6e  e_u=%.6e\n",
+                    nx, regime, flat_bed ? "flat" : "varbed", nl_pressure, e_eta, e_u)
         return (h=Lx/nx, dt=dt, e_eta=e_eta, e_u=e_u,
                 ndofs=num_free_dofs(U), steps=length(diags), t_final=tF)
     end
@@ -262,11 +287,28 @@ integrates `nsteps` at a small `dt`.
 
 Sequential runs need no tolerance study: `LUSolver` is direct (no linear tolerance at all) and the
 linear regime makes the residual linear in `u`, so Newton hits round-off in one step.
+
+**The VERTICAL basis is a parameter, `(M, p_vert, c_bdy)`.** It used to be hard-wired
+(`assemble_vertical_tensors(M, 1, [0.0, 0.728, 1.0])`): `p_vert` was not a parameter at all and
+`c_bdy` was pinned to the **M=2** node set, so `run_conv_study(M=3)` threw the
+`length(c_bdy) == M+1` assertion in `assemble_vertical_tensors` — while the signature advertised
+`M` as a degree of freedom. Fixed 2026-08-21; `c_bdy === nothing` now resolves through
+[`resolve_cbdy`](@ref). This is what makes the vertical-basis convergence study
+(`building_files/PENDING_TASKS.md` §1) runnable.
+
+⚠ **`c_bdy` changes the error CONSTANT, never the ORDER.** A rate study may use any reasonable node
+set (uniform is fine for `p ≥ 2`, where no published optimum exists); the optimised positions are a
+DISPERSION-accuracy question, measured by applicable `kd`, not by a rate. Do not report one as
+evidence for the other.
+
+The returned `tag` carries the vertical configuration (`P{p_vert}LFE-{M}`) as well as the pairing
+and the model, so a sweep over `(M, p)` cannot produce two studies under the same label.
 """
 function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static,
                           levels::Int = 4, nx0::Int = 8, ny0::Int = 8, ny_1d::Int = 3,
                           Lx::Float64 = 1.7, Ly::Float64 = 1.1, d::Float64 = 1.0,
-                          M::Int = 2, dt::Float64 = 1e-4, nsteps::Int = 100,
+                          M::Int = 2, p_vert::Int = 1, c_bdy = nothing,
+                          dt::Float64 = 1e-4, nsteps::Int = 100,
                           nl_tol::Float64 = 1e-14,
                           #  The NONLINEAR Jacobians are quasi-Newton by design (the
                           #  pressure blocks' η-dependence is frozen — see problem.jl),
@@ -287,7 +329,14 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
     p_e ≥ 1 || error("run_conv_study: p_u must be ≥ 2 (surface order p_u−1 ≥ 1)")
     ω     = mode == :static ? 0.0 : 1.3
     T_fin = mode == :static ? dt*nsteps : dt*nsteps
-    vert  = assemble_vertical_tensors(M, 1, [0.0, 0.728, 1.0])
+    #  The vertical basis is a PARAMETER (see the docstring): (M, p_vert, c_bdy),
+    #  resolved once here so every refinement level shares one tensor set and the
+    #  rate cannot be contaminated by a changing vertical discretisation.
+    cb    = resolve_cbdy(M, c_bdy)
+    vert  = assemble_vertical_tensors(M, p_vert, cb)
+    #  ONE bathymetry object for both branches — the sequential path used to build
+    #  this inline and the distributed path had none at all (it hard-coded a flat bed).
+    hfun  = flat_bed ? nothing : bathymetry_field(; d0=d, a_b=a_b, kbx=kbx, kby=kby)
 
     hs = Float64[]; ee = Float64[]; eu = Float64[]; nd = Int[]
     for l in 0:levels-1
@@ -295,24 +344,29 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
         ny = domain == :d1 ? ny_1d : ny0*2^l
         f  = MMSField(vert.N_dof; Lx=Lx, Ly=Ly, omega=ω,
                       ky = domain == :d1 ? 0.0 : nothing)
+        #  The two branches take the SAME vertical basis, the SAME bathymetry and the
+        #  SAME three model switches. Every one of them was previously either absent
+        #  from the distributed call or a literal inside it — the defect that made a
+        #  distributed 8-model campaign return 8 copies of Model 1 (see A2 above).
+        common = (; nx=nx, ny=ny, dt=dt, T_final=T_fin, Lx=Lx, Ly=Ly, d=d,
+                    M=M, p_vert=p_vert, c_bdy=cb, vert_override=vert,
+                    p_horizontal=p_u, p_eta=p_e, field=f,
+                    regime=regime, nl_pressure=nl_pressure, flat_bed=flat_bed,
+                    hfun=hfun, nl_tol=nl_tol, nl_iter=nl_iter, verbose=false)
         r = distributed ?
-            run_mms_case_distributed(; nx=nx, ny=ny, dt=dt, T_final=T_fin, Lx=Lx, Ly=Ly,
-                                       d=d, M=M, p_horizontal=p_u, p_eta=p_e, field=f,
-                                       cpu_grid=cpu_grid, nl_tol=nl_tol, ls_rtol=ls_rtol,
-                                       ls_maxiter=ls_maxiter, verbose=false) :
-            run_mms_case(; nx=nx, ny=ny, dt=dt, T_final=T_fin, Lx=Lx, Ly=Ly,
-                           d=d, M=M, p_horizontal=p_u, p_eta=p_e, field=f,
-                           nl_tol=nl_tol, nl_iter=nl_iter, verbose=false, flat_bed=flat_bed,
-                           regime=regime, nl_pressure=nl_pressure,
-                           hfun = flat_bed ? nothing :
-                                  bathymetry_field(; d0=d, a_b=a_b, kbx=kbx, kby=kby))
+            run_mms_case_distributed(; common..., cpu_grid=cpu_grid,
+                                       ls_rtol=ls_rtol, ls_maxiter=ls_maxiter) :
+            run_mms_case(; common...)
         push!(hs, Lx/nx); push!(ee, r.e_eta); push!(eu, r.e_u); push!(nd, r.ndofs)
         verbose && @printf("    nx=%-4d ndofs=%-8d e_eta=%.6e  e_u=%.6e\n",
                            nx, r.ndofs, r.e_eta, r.e_u)
     end
     p_eta_fit, pw_eta = convergence_rate(hs, ee)
     p_u_fit,   pw_u   = convergence_rate(hs, eu)
-    tag = "Q$(p_u)/Q$(p_e) $(domain == :d1 ? "1D" : "2D") " *
+    #  The vertical configuration is PART OF THE LABEL. Without it an (M,p) sweep
+    #  reports every study under the same tag — which is precisely how the
+    #  hard-coded-Model-1 defect stayed invisible for a whole campaign.
+    tag = "P$(p_vert)LFE-$(M) Q$(p_u)/Q$(p_e) $(domain == :d1 ? "1D" : "2D") " *
           "$(distributed ? "dist" : "seq") $(mode) $(flat_bed ? "flat" : "varbed") " *
           "$(regime === :linear ? "lin" : "nl")" *
           "$(nl_pressure === :none ? "" : "/" * String(nl_pressure))"
@@ -327,6 +381,10 @@ function run_conv_study(; p_u::Int, domain::Symbol = :d2, mode::Symbol = :static
     return (tag=tag, p_u=p_u, p_e=p_e, h=hs, e_eta=ee, e_u=eu, ndofs=nd,
             pw_eta=pw_eta, pw_u=pw_u, fit_eta=p_eta_fit, fit_u=p_u_fit,
             opt_eta=Float64(p_e+1), opt_u=Float64(p_u+1),
+            #  Vertical configuration, carried out so an (M,p) sweep can tabulate
+            #  against Nσ directly (PENDING_TASKS.md §1 tier 3 asks exactly that).
+            M=M, p_vert=p_vert, c_bdy=cb, Nsigma=vert.N_dof,
+            regime=regime, nl_pressure=nl_pressure, flat_bed=flat_bed,
             domain=domain, mode=mode, distributed=distributed)
 end
 
@@ -350,7 +408,7 @@ function run_model_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                           Lx::Float64 = 1.7, Ly::Float64 = 1.1,
                           d::Float64 = 1.0, g::Float64 = g,
                           M::Int = 2, p_vert::Int = 1,
-                          c_bdy::Vector{Float64} = [0.0, 0.728, 1.0],
+                          c_bdy = nothing,         # σ-element boundaries; nothing ⇒ resolve_cbdy(M)
                           p_horizontal::Int = 2, n_mode::Int = 1,
                           p_eta::Int = 0,            # 0 ⇒ equal order. Set < p_horizontal for the
                                                      #   Taylor-Hood-like pairing — same meaning and
@@ -362,7 +420,7 @@ function run_model_case(; nx::Int, ny::Int, dt::Float64, T_final::Float64,
                           nl_tol::Float64 = 1e-12, nl_iter::Int = 50,
                           t0::Float64 = 0.0, verbose::Bool = true,
                           output_dir::String = mktempdir())
-    vert = assemble_vertical_tensors(M, p_vert, c_bdy)
+    vert = assemble_vertical_tensors(M, p_vert, resolve_cbdy(M, c_bdy))
     cbs, ω, û, k = standing_mode(vert, d, g; n=n_mode, Lx=Lx, eta_hat=eta_hat)
 
     domain       = ((0.0, Lx), (0.0, Ly))

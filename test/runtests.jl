@@ -83,6 +83,9 @@ const MPI_TESTS = [
     ("test_basic_distributed.jl",        4, "linear + nonlinear vs sequential refs"),
     ("test_nlpressure_distributed.jl",   4, "full nonlinear pressure vs sequential"),
     ("test_bc_generation_distributed.jl",4, "Dirichlet generation vs sequential"),
+    #  Guards the 2026-08-19 defect: run_mms_case_distributed hard-coded Model 1,
+    #  so a distributed 8-model campaign returned 8 copies of it, all passing.
+    ("test_mms_distributed_parity.jl",   4, "distributed MMS runs the REQUESTED model"),
 ]
 
 # --- tier selection ----------------------------------------------------------

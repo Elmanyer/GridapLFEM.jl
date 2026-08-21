@@ -138,6 +138,7 @@ export diag_csv_row, close_diagnostics
 export find_wavenumber
 export dispersion_ratio, applicable_kd
 export make_sponge, make_wavemaker_line, make_wavemaker_point
+export DEFAULT_CBDY, resolve_cbdy
 export setup_and_run
 
 # Dirichlet boundary wave generation (waveinput.jl) + WaveSpec re-export

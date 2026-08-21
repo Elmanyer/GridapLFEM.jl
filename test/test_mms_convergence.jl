@@ -70,7 +70,18 @@ const DEPTH  = 1.0
 #  the theoretical p+1 reachable in both fields.
 const P_U    = 3                     # velocity order  ⇒ optimal u rate P_U+1 = 4
 const P_ETA  = 2                     # surface  order  ⇒ optimal η rate P_ETA+1 = 3
-const CASE   = (Lx=LX, Ly=LY, d=DEPTH, M=2, p_horizontal=P_U, p_eta=P_ETA)
+#  VERTICAL basis (M, p_vert) — a PARAMETER, defaulting to the P1LFE-2 this gate
+#  has always run. The horizontal order of accuracy is a property of the
+#  HORIZONTAL discretisation, so every rate asserted below must hold for ANY
+#  vertical basis; overriding these is how that claim gets tested. `c_bdy` is left
+#  to `resolve_cbdy`, which is what makes M ≠ 2 legal at all (it used to throw).
+#  See building_files/PENDING_TASKS.md §1.
+const M_VERT = parse(Int, get(ENV, "MMS_M",     "2"))
+const P_VERT = parse(Int, get(ENV, "MMS_PVERT", "1"))
+const CASE   = (Lx=LX, Ly=LY, d=DEPTH, M=M_VERT, p_vert=P_VERT,
+                p_horizontal=P_U, p_eta=P_ETA)
+@printf("  vertical basis: P%dLFE-%d  (Nσ = %d)   [MMS_M / MMS_PVERT to override]\n",
+        P_VERT, M_VERT, M_VERT*P_VERT + 1)
 
 # ---------------------------------------------------------------------------
 #  G6 — SPATIAL order. Q3/Q2 ⇒ expect 3 for η and 4 for u in L².
@@ -197,7 +208,7 @@ check(@sprintf("G8 halving dt changes e_eta by <5%% (got %.2f%%)", 100rel), rel 
 # ---------------------------------------------------------------------------
 println("\n--- G9: forcing off ⇒ exact rest state ---")
 vert = assemble_vertical_tensors(2, 1, [0.0, 0.728, 1.0])
-diags, _, _ = setup_and_run(M=2, h_val=DEPTH, T_wave=1.6, A_wave=0.0,
+diags, _, _ = setup_and_run(M=M_VERT, p_vertical=P_VERT, h_val=DEPTH, T_wave=1.6, A_wave=0.0,
                             domain=((0.0,LX),(0.0,LY)), partition=(6,4),
                             p_horizontal=2, x_wm=0.5*LX, y_wm=nothing,
                             sponge_wL=0.0, sponge_wR=0.0, mu_max=0.0,

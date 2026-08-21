@@ -17,13 +17,20 @@
 > | [`OPEN_ITEMS.md`](building_files/OPEN_ITEMS.md) | open work, each with its decisive next step |
 > | [`PENDING_TASKS.md`](building_files/PENDING_TASKS.md) | studies designed but not begun, with their blocking prerequisites |
 >
-> **One-line status (2026-08-19).** The solver is feature-complete in serial and distributed. The
+> **One-line status (2026-08-21).** The solver is feature-complete in serial and distributed. The
 > analytic MMS verifies **six of the eight models** — all four `:none` and both `:native` — at
 > theoretical order. The remaining two, the **`:full` pair, are permanently outside MMS's reach by
 > construction** (frozen L² projections vs an exact forcing); their error floor is quantified
 > instead. Suite: sequential 20/20 files, distributed 13/13, Jacobian-vs-AD 17/17 over 8 models,
 > nonlinear MMS 8/8, `test/local/` 50/50 — one failure in the whole campaign, and it is a
 > gate-window specification defect, not a solver defect.
+>
+> **All of that is measured at ONE vertical basis, P1LFE-2.** As of 2026-08-21 the MMS drivers and
+> every MMS test/example take `(M, p_vert)` as parameters, so the eight model configurations can be
+> swept over the vertical basis — the direct evidence for the basis-agnosticism the model is named
+> for. The sweep itself has not been run yet: `examples/local_mms/run_vertical_basis_study.jl`,
+> designed in `PENDING_TASKS.md` §1, still blocked only on prerequisite B (optimised σ-meshes for
+> `p ≥ 2` — which affects the error CONSTANT, not the order, so tier 1 can proceed without it).
 
 ---
 
@@ -64,8 +71,8 @@ Tables comparing our numbers against theirs must not label both sides the same w
 |---|---|
 | `Project.toml` / `Manifest.toml` | the Julia package manifest — `name = "GridapBALFEM"`, `uuid = 43e94d05-4d7d-4679-96a4-d46e2615da34`. Loaded with **`using GridapBALFEM`, never `include()`** (§5). This directory is **both the package and the working environment**, so `Test`, `BlockArrays`, `MPIPreferences`, `Preferences` are in `[deps]`, not `[extras]`. `[compat]` admits two Gridap minors **on measured evidence** — see `CONFIGURATION.md` §1 |
 | `src/` | the solver package — 16 files, mapped in `ARCHITECTURE.md` §2 |
-| `test/` | 27 test files + `runtests.jl` + `test/cluster/` + `test/local/` — inventory and scores in `TEST_SUITE.md` |
-| `examples/` | 7 sequential + `distributed/` (7 cluster scripts + `_dist_common.jl`), `distributed_small/` (5 parametric), `validation/` (7), `local_1d/`, `local_2d/`, `local_mms/`, `inspect_run.jl` — `RUNNING.md` §2 |
+| `test/` | 28 test files + `runtests.jl` + `test/cluster/` + `test/local/` — inventory and scores in `TEST_SUITE.md` |
+| `examples/` | 7 sequential + `distributed/` (7 cluster scripts + `_dist_common.jl`), `distributed_small/` (5 parametric), `validation/` (7), `local_1d/`, `local_2d/`, `local_mms/` (4, incl. the vertical-basis sweep), `inspect_run.jl` — `RUNNING.md` §2 |
 | `run/` | 9 production SLURM launchers + `run/dist_small/` (20 small-domain 2-D cases + 7 superseded 1-D, see §5) + `run/local/` (28 case launchers + helper + benchmark + sweep), all through `run/balfem_env.sh` — `RUNNING.md` §3–4 |
 | `compile/` | the cluster sysimage build chain — `RUNNING.md` §5 |
 | `postprocessing/` | `GridapBALFEMPost` — self-contained, own environment, **no dependency on the solver** |
@@ -218,13 +225,21 @@ supported path; the seven `run/dist_small/run_1d_*.sh` are superseded and should
 performance, and follow-through. Full list with decisive next steps: `OPEN_ITEMS.md`; studies
 designed but not begun: `PENDING_TASKS.md`.
 
-* 🔴 **two design-level defects in `src/mms_driver.jl`** (found 2026-08-19, *not yet fixed*):
-  `run_conv_study` hard-codes the vertical basis (`assemble_vertical_tensors(M, 1, [0,0.728,1])`),
-  so `M`/`p` cannot be varied and `M≠2` throws; and `run_mms_case_distributed` hard-codes **Model 1**
-  (`regime=:linear, nl_pressure=:none, flat_bed=true` + `mms_forcing_stage1`) while
-  `run_conv_study` still builds its tag from the *requested* switches — so a distributed campaign
-  over 8 models returns 8 identical Model-1 studies under 8 different labels, **and all of them
-  pass**. Do not use the distributed MMS path for model studies until this is fixed.
+* ✅ **the two `src/mms_driver.jl` defects are FIXED** (found 2026-08-19, fixed 2026-08-21).
+  **A1** — `run_conv_study` hard-coded `assemble_vertical_tensors(M, 1, [0,0.728,1])`, so `p_vert`
+  was not a parameter and any `M≠2` threw. It now takes `p_vert` and `c_bdy`, resolving through the
+  single shared `resolve_cbdy` that `setup_and_run` and its distributed twin also use; the tag
+  carries `P{p}LFE-{M}` so an `(M,p)` sweep cannot produce two studies under one label. Verified:
+  `M=3` runs and reaches optimal order (P1LFE-3, Q2/Q1: `p_η` 1.994/2, `p_u` 2.997/3).
+  **A2** — `run_mms_case_distributed` hard-coded **Model 1** (`regime=:linear, nl_pressure=:none,
+  flat_bed=true` + `mms_forcing_stage1`) while `run_conv_study` built its tag from the *requested*
+  switches, so a distributed 8-model campaign returned 8 identical Model-1 studies under 8 different
+  labels, **all passing**. The switches and `hfun` are now parameters feeding the general
+  `mms_forcing`, from the same variables that feed the solver. `test/test_mms_distributed_parity.jl`
+  (4 ranks) gates the two branches against each other on two non-Model-1 configurations — with a
+  **separation negative control first**, because a bare parity check would pass with the defect
+  present. This unblocks the vertical-basis convergence study (`PENDING_TASKS.md` §1 prerequisite A);
+  the study driver is `examples/local_mms/run_vertical_basis_study.jl`.
 * 🔴 cluster memory attribution (4 GB/core is required; *why* is open — H4 leads)
 * 🔴 `test_mms_convergence` G7 — a gate-window specification decision, not a fix
 * 🟠 no MPI tier in `runtests.jl` (cost three stale reference constants)

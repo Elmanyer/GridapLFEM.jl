@@ -154,13 +154,9 @@ function setup_and_run_distributed(;
         end
 
         # ----- STAGE 1: VERTICAL PRE-COMPUTATION (IDENTICAL WORK ON EVERY RANK) -
-        # Choose the σ-node positions: the paper's optimised set for this M when
-        # available, otherwise a uniform split of [0,1] into M+1 nodes.
-        if isnothing(c_bdy)
-            c_bdy_used = get(DEFAULT_CBDY, M, collect(LinRange(0.0, 1.0, M+1)))
-        else
-            c_bdy_used = c_bdy
-        end
+        # Choose the σ-element boundaries: the paper's optimised set for this M
+        # when available, otherwise a uniform split of [0,1] (see resolve_cbdy).
+        c_bdy_used = resolve_cbdy(M, c_bdy)
         vert = assemble_vertical_tensors(M, p_vertical, c_bdy_used)
         if i_am_main(ranks)
             @printf("  Nσ=%d   ΣΦ=%.6f\n", vert.N_dof, sum(vert.Phi))

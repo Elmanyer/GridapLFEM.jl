@@ -28,6 +28,8 @@
 #    BALFEM_CONV_FLATBED 1 flat bed | 0 variable bed       1
 #    BALFEM_CONV_AB      bed amplitude when FLATBED=0      0.2
 #    BALFEM_CONV_NLITER  Newton budget                     50 linear / 400 nonlinear
+#    BALFEM_CONV_M       vertical elements M               2
+#    BALFEM_CONV_PVERT   vertical FE order p               1   (Nσ = M·p+1)
 # ==============================================================
 using GridapBALFEM, Printf
 genv(k,d)=get(ENV,k,d); genv_i(k,d)=parse(Int,get(ENV,k,string(d)))
@@ -56,10 +58,16 @@ a_b     = genv_f("BALFEM_CONV_AB",0.2)          # bed amplitude when FLATBED=0
 #  tolerance. Loosening nl_tol would bury the algebraic error inside the
 #  discretisation error the rate is measuring.
 nliter  = genv_i("BALFEM_CONV_NLITER", regime === :linear ? 50 : 400)
+#  VERTICAL basis. Until 2026-08-21 this was hard-wired to P1LFE-2 inside
+#  run_conv_study (p_vert absent, c_bdy pinned to the M=2 node set), so the whole
+#  campaign only ever measured one member of the family the model is named for.
+Mvert   = genv_i("BALFEM_CONV_M", 2)
+p_vert  = genv_i("BALFEM_CONV_PVERT", 1)
 model   = regime === :linear ? (flatbed ? 1 : 2) : (flatbed ? 3 : 4)
 
 println("#"^76)
 println("#  MMS CONVERGENCE CAMPAIGN — Model $model ($(regime) / $(flatbed ? "flat" : "variable") bed / :$(nlp))")
+println("#    vertical basis P$(p_vert)LFE-$(Mvert)  (Nσ = $(Mvert*p_vert+1))")
 println("#    pairings Q_p/Q_{p-1} for p = $(pus) | domain=$domain | modes=$modes")
 println("#    levels=$levels nx0=$nx0 dt=$dt nsteps=$nsteps | $(dist ? "MPI $(px)x$(py)" : "sequential (direct LU)")")
 println("#    gates:  u → p+1     eta → p      (different optima, by design)")
@@ -70,6 +78,7 @@ for p_u in pus, mode in modes
     println("\n>>> Q$(p_u)/Q$(p_u-1)  $(domain)  $(mode)")
     r = run_conv_study(; p_u=p_u, domain=domain, mode=mode, levels=levels,
                          nx0=nx0, ny0=ny0, dt=dt, nsteps=nsteps,
+                         M=Mvert, p_vert=p_vert,
                          distributed=dist, cpu_grid=(px,py),
                          regime=regime, nl_pressure=nlp,
                          flat_bed=flatbed, a_b=flatbed ? 0.0 : a_b,
@@ -83,7 +92,7 @@ for p_u in pus, mode in modes
                 r.pw_eta[end],r.pw_u[end], okη&&oku))
 end
 
-csv=joinpath(outdir,"mms_conv_$(domain)_$(dist ? "dist" : "seq").csv")
+csv=joinpath(outdir,"mms_conv_$(domain)_M$(Mvert)p$(p_vert)_$(dist ? "dist" : "seq").csv")
 open(csv,"w") do io
     println(io,"study,h,ndofs,e_eta,e_u")
     for r in rows; @printf(io,"%s,%.8g,%d,%.10e,%.10e\n",r...); end
@@ -91,9 +100,9 @@ end
 println("\n","="^76)
 println("  CAMPAIGN SUMMARY   (last pairwise rate is the asymptotic one)")
 println("="^76)
-@printf("  %-30s %-14s %-14s %s\n","study","eta fit/opt","u fit/opt","verdict")
+@printf("  %-42s %-14s %-14s %s\n","study","eta fit/opt","u fit/opt","verdict")
 for s in summ
-    @printf("  %-30s %5.2f/%-8.0f %5.2f/%-8.0f %s\n",
+    @printf("  %-42s %5.2f/%-8.0f %5.2f/%-8.0f %s\n",
             s[1],s[2],s[3],s[4],s[5], s[8] ? "PASS" : "CHECK")
 end
 println("\n  wrote $csv")
